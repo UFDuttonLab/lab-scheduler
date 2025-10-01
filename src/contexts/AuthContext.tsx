@@ -101,8 +101,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    navigate("/auth");
+    try {
+      // Clear local state first
+      setSession(null);
+      setUser(null);
+      setUserRole(null);
+      setPermissions(getRolePermissions(null));
+      setIsManager(false);
+      
+      // Attempt server logout (may fail if session is invalid)
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.warn("Server logout failed, but local state cleared:", error.message);
+        // Clear any remaining localStorage auth data
+        localStorage.removeItem('sb-ypaobygipbnkvnismhyy-auth-token');
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+      // Force clear local storage on any error
+      localStorage.removeItem('sb-ypaobygipbnkvnismhyy-auth-token');
+    } finally {
+      // Always navigate to auth page regardless of outcome
+      navigate("/auth");
+    }
   };
 
   return (
