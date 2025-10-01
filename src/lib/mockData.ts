@@ -1,3 +1,4 @@
+// Mock data for Dutton Lab Equipment Scheduler
 import { Equipment, Booking, Project } from "./types";
 
 export const mockProjects: Project[] = [
