@@ -3,7 +3,7 @@ import { Navigation } from "@/components/Navigation";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { Clock, TrendingUp, Users, FolderKanban, Loader2 } from "lucide-react";
+import { Clock, TrendingUp, Users, FolderKanban, Loader2, Wrench } from "lucide-react";
 import { StatsCard } from "@/components/StatsCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -14,6 +14,7 @@ const Analytics = () => {
   const [bookings, setBookings] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [equipment, setEquipment] = useState<any[]>([]);
 
   useEffect(() => {
     fetchData();
@@ -64,6 +65,7 @@ const Analytics = () => {
       setBookings(allRecords);
       setProjects(projectsRes.data || []);
       setUsers(profilesRes.data || []);
+      setEquipment(equipmentRes.data || []);
     } catch (error: any) {
       toast({
         title: "Error fetching analytics data",
@@ -135,6 +137,76 @@ const Analytics = () => {
   const activeStudents = uniqueStudents.size;
   const avgBookingDuration = totalBookings > 0 ? Math.round(totalMinutes / totalBookings) : 0;
 
+  // Calculate equipment analytics
+  const equipmentTimeData = equipment.map(eq => {
+    const equipmentRecords = bookings.filter(b => b.equipment_id === eq.id);
+    const totalMinutes = equipmentRecords.reduce((sum, record) => {
+      const start = new Date(record.start_time);
+      const end = new Date(record.end_time);
+      return sum + (end.getTime() - start.getTime()) / (1000 * 60);
+    }, 0);
+    const totalHours = Math.round(totalMinutes / 60 * 10) / 10;
+    
+    // Calculate CPU/GPU stats for HiPerGator
+    const cpuUsage = equipmentRecords.reduce((sum, r) => sum + (r.cpu_count || 0), 0);
+    const gpuUsage = equipmentRecords.reduce((sum, r) => sum + (r.gpu_count || 0), 0);
+    const samplesProcessed = equipmentRecords.reduce((sum, r) => sum + (r.samples_processed || 0), 0);
+    
+    return {
+      id: eq.id,
+      name: eq.name,
+      type: eq.type,
+      location: eq.location,
+      icon: eq.icon,
+      hours: totalHours,
+      bookings: equipmentRecords.length,
+      cpuUsage: cpuUsage,
+      gpuUsage: gpuUsage,
+      avgCpuPerSession: equipmentRecords.length > 0 ? Math.round(cpuUsage / equipmentRecords.length * 10) / 10 : 0,
+      avgGpuPerSession: equipmentRecords.length > 0 ? Math.round(gpuUsage / equipmentRecords.length * 10) / 10 : 0,
+      samplesProcessed: samplesProcessed,
+    };
+  }).filter(e => e.hours > 0).sort((a, b) => b.hours - a.hours);
+
+  // Equipment type distribution
+  const typeDistribution = equipment.reduce((acc, eq) => {
+    const records = bookings.filter(b => b.equipment_id === eq.id);
+    const minutes = records.reduce((sum, record) => {
+      const start = new Date(record.start_time);
+      const end = new Date(record.end_time);
+      return sum + (end.getTime() - start.getTime()) / (1000 * 60);
+    }, 0);
+    const hours = Math.round(minutes / 60 * 10) / 10;
+    
+    acc[eq.type] = (acc[eq.type] || 0) + hours;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const typeDistributionData = Object.entries(typeDistribution)
+    .map(([type, hours]) => ({ name: type, hours: hours as number }))
+    .sort((a, b) => b.hours - a.hours);
+
+  // Location distribution
+  const locationDistribution = equipment.reduce((acc, eq) => {
+    const records = bookings.filter(b => b.equipment_id === eq.id);
+    const minutes = records.reduce((sum, record) => {
+      const start = new Date(record.start_time);
+      const end = new Date(record.end_time);
+      return sum + (end.getTime() - start.getTime()) / (1000 * 60);
+    }, 0);
+    const hours = Math.round(minutes / 60 * 10) / 10;
+    
+    acc[eq.location] = (acc[eq.location] || 0) + hours;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const locationDistributionData = Object.entries(locationDistribution)
+    .map(([location, hours]) => ({ name: location, hours: hours as number }))
+    .sort((a, b) => b.hours - a.hours);
+
+  const mostUsedEquipment = equipmentTimeData.length > 0 ? equipmentTimeData[0].name : "N/A";
+  const totalEquipmentPieces = equipment.length;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -189,6 +261,7 @@ const Analytics = () => {
           <TabsList>
             <TabsTrigger value="projects">By Project</TabsTrigger>
             <TabsTrigger value="students">By Student</TabsTrigger>
+            <TabsTrigger value="equipment">By Equipment</TabsTrigger>
           </TabsList>
 
           <TabsContent value="projects">
@@ -377,6 +450,202 @@ const Analytics = () => {
                 </div>
               </Card>
             </div>
+          </TabsContent>
+
+          <TabsContent value="equipment">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <Card className="p-6">
+                <h3 className="font-semibold text-xl mb-4">Usage Hours by Equipment</h3>
+                {equipmentTimeData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={equipmentTimeData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                      <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} />
+                      <Tooltip />
+                      <Bar dataKey="hours" fill="hsl(var(--accent))" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    No equipment usage data available
+                  </div>
+                )}
+              </Card>
+
+              <Card className="p-6">
+                <h3 className="font-semibold text-xl mb-4">Usage by Equipment Type</h3>
+                {typeDistributionData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={typeDistributionData}
+                        dataKey="hours"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        label={(entry) => `${entry.name}: ${entry.hours}h`}
+                      >
+                        {typeDistributionData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={`hsl(var(--chart-${(index % 5) + 1}))`} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    No type distribution data available
+                  </div>
+                )}
+              </Card>
+
+              <Card className="p-6">
+                <h3 className="font-semibold text-xl mb-4">Usage by Location</h3>
+                {locationDistributionData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={locationDistributionData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                      <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} />
+                      <Tooltip />
+                      <Bar dataKey="hours" fill="hsl(var(--primary))" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    No location data available
+                  </div>
+                )}
+              </Card>
+
+              <Card className="p-6">
+                <h3 className="font-semibold text-xl mb-4">Top Equipment</h3>
+                {equipmentTimeData.length > 0 ? (
+                  <div className="space-y-3">
+                    {equipmentTimeData.slice(0, 5).map((eq, index) => (
+                      <div key={eq.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-accent text-accent-foreground flex items-center justify-center font-bold">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <p className="font-medium flex items-center gap-2">
+                              <span>{eq.icon}</span>
+                              {eq.name}
+                            </p>
+                            <p className="text-sm text-muted-foreground">{eq.type}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-lg">{eq.hours}h</p>
+                          <p className="text-sm text-muted-foreground">{eq.bookings} sessions</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+                    No equipment data available
+                  </div>
+                )}
+              </Card>
+            </div>
+
+            <Card className="p-6 mb-6">
+              <h3 className="font-semibold text-xl mb-4">Equipment Details</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-3 px-4">Equipment</th>
+                      <th className="text-left py-3 px-4">Type</th>
+                      <th className="text-left py-3 px-4">Location</th>
+                      <th className="text-right py-3 px-4">Total Hours</th>
+                      <th className="text-right py-3 px-4">Sessions</th>
+                      <th className="text-right py-3 px-4">Avg Duration</th>
+                      <th className="text-right py-3 px-4">Samples</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {equipmentTimeData.length > 0 ? (
+                      equipmentTimeData.map((eq) => (
+                        <tr key={eq.id} className="border-b hover:bg-muted/50">
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <span>{eq.icon}</span>
+                              {eq.name}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="px-2 py-1 bg-muted rounded text-xs">{eq.type}</span>
+                          </td>
+                          <td className="py-3 px-4 text-muted-foreground">{eq.location}</td>
+                          <td className="text-right py-3 px-4 font-medium">{eq.hours}h</td>
+                          <td className="text-right py-3 px-4">{eq.bookings}</td>
+                          <td className="text-right py-3 px-4">
+                            {eq.bookings > 0 
+                              ? Math.round(eq.hours / eq.bookings * 60) + 'm'
+                              : '-'
+                            }
+                          </td>
+                          <td className="text-right py-3 px-4">
+                            {eq.samplesProcessed > 0 ? eq.samplesProcessed : '-'}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="py-4 text-center text-muted-foreground">
+                          No equipment data available
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+
+            {equipmentTimeData.some(eq => eq.type === 'HiPerGator' && (eq.cpuUsage > 0 || eq.gpuUsage > 0)) && (
+              <Card className="p-6">
+                <h3 className="font-semibold text-xl mb-4">HiPerGator Resource Usage</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-3 px-4">Equipment</th>
+                        <th className="text-right py-3 px-4">Total CPU</th>
+                        <th className="text-right py-3 px-4">Total GPU</th>
+                        <th className="text-right py-3 px-4">Avg CPU/Session</th>
+                        <th className="text-right py-3 px-4">Avg GPU/Session</th>
+                        <th className="text-right py-3 px-4">Sessions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {equipmentTimeData
+                        .filter(eq => eq.type === 'HiPerGator')
+                        .map((eq) => (
+                          <tr key={eq.id} className="border-b hover:bg-muted/50">
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <span>{eq.icon}</span>
+                                {eq.name}
+                              </div>
+                            </td>
+                            <td className="text-right py-3 px-4 font-medium">{eq.cpuUsage}</td>
+                            <td className="text-right py-3 px-4 font-medium">{eq.gpuUsage}</td>
+                            <td className="text-right py-3 px-4">{eq.avgCpuPerSession}</td>
+                            <td className="text-right py-3 px-4">{eq.avgGpuPerSession}</td>
+                            <td className="text-right py-3 px-4">{eq.bookings}</td>
+                          </tr>
+                        ))
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
           </TabsContent>
         </Tabs>
       </main>
