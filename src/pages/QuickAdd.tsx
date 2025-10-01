@@ -7,10 +7,19 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Equipment, Project } from "@/lib/types";
-import { Clock, FlaskConical } from "lucide-react";
+import { Clock, FlaskConical, Users, X } from "lucide-react";
+
+interface UserProfile {
+  id: string;
+  email: string;
+  full_name?: string;
+  spirit_animal?: string;
+}
 
 export default function QuickAdd() {
   const navigate = useNavigate();
@@ -18,6 +27,9 @@ export default function QuickAdd() {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
+  const [availableUsers, setAvailableUsers] = useState<UserProfile[]>([]);
+  const [collaboratorSearch, setCollaboratorSearch] = useState<string>("");
+  const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
 
   const [formData, setFormData] = useState({
     equipmentId: "",
@@ -30,6 +42,7 @@ export default function QuickAdd() {
   useEffect(() => {
     fetchEquipment();
     fetchProjects();
+    fetchUsers();
   }, []);
 
   const fetchEquipment = async () => {
@@ -67,6 +80,20 @@ export default function QuickAdd() {
     }
   };
 
+  const fetchUsers = async () => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, full_name, spirit_animal')
+      .order('full_name');
+    
+    if (error) {
+      console.error("Failed to load users:", error);
+      return;
+    }
+    
+    setAvailableUsers(data || []);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -93,6 +120,7 @@ export default function QuickAdd() {
       end_time: endTime.toISOString(),
       samples_processed: formData.samplesProcessed,
       notes: formData.notes || null,
+      collaborators: selectedCollaborators,
     });
 
     if (error) {
@@ -115,6 +143,8 @@ export default function QuickAdd() {
         samplesProcessed: 1,
         notes: "",
       });
+      setSelectedCollaborators([]);
+      setCollaboratorSearch("");
     }
 
     setLoading(false);
@@ -252,6 +282,75 @@ export default function QuickAdd() {
                   placeholder="Add any additional notes..."
                   rows={3}
                 />
+              </div>
+
+              {/* Collaborators */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Collaborators (Optional)
+                </Label>
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Search by name or email..."
+                    value={collaboratorSearch}
+                    onChange={(e) => setCollaboratorSearch(e.target.value)}
+                  />
+                  {collaboratorSearch && (
+                    <div className="max-h-32 overflow-y-auto border rounded-md p-2 space-y-1 bg-popover z-50">
+                      {availableUsers
+                        .filter(u => 
+                          !selectedCollaborators.includes(u.id) &&
+                          (u.full_name?.toLowerCase().includes(collaboratorSearch.toLowerCase()) ||
+                           u.email.toLowerCase().includes(collaboratorSearch.toLowerCase()))
+                        )
+                        .slice(0, 5)
+                        .map(u => (
+                          <Button
+                            key={u.id}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start text-left"
+                            onClick={() => {
+                              setSelectedCollaborators([...selectedCollaborators, u.id]);
+                              setCollaboratorSearch("");
+                            }}
+                          >
+                            {u.spirit_animal && <span className="mr-2">{u.spirit_animal}</span>}
+                            <span className="truncate">{u.full_name || u.email}</span>
+                          </Button>
+                        ))}
+                      {availableUsers.filter(u => 
+                        !selectedCollaborators.includes(u.id) &&
+                        (u.full_name?.toLowerCase().includes(collaboratorSearch.toLowerCase()) ||
+                         u.email.toLowerCase().includes(collaboratorSearch.toLowerCase()))
+                      ).length === 0 && (
+                        <p className="text-sm text-muted-foreground p-2">No users found</p>
+                      )}
+                    </div>
+                  )}
+                  {selectedCollaborators.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedCollaborators.map(collab => {
+                        const collaboratorUser = availableUsers.find(u => u.id === collab);
+                        return collaboratorUser ? (
+                          <Badge key={collab} variant="secondary" className="gap-1">
+                            {collaboratorUser.spirit_animal && <span>{collaboratorUser.spirit_animal}</span>}
+                            <span>{collaboratorUser.full_name || collaboratorUser.email}</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCollaborators(selectedCollaborators.filter(c => c !== collab))}
+                              className="ml-1 hover:text-destructive"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </Badge>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex gap-3">

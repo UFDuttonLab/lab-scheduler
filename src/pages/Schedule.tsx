@@ -746,7 +746,7 @@ const Schedule = () => {
         </div>
 
         <Dialog open={isBookingDialogOpen} onOpenChange={setIsBookingDialogOpen}>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="max-w-[95vw] sm:max-w-[600px] lg:max-w-[700px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Book Equipment</DialogTitle>
               <DialogDescription>
@@ -1038,7 +1038,7 @@ const Schedule = () => {
 
         {/* Edit Booking Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-[95vw] sm:max-w-[600px] lg:max-w-[700px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit Booking</DialogTitle>
               <DialogDescription>
@@ -1101,6 +1101,16 @@ const Schedule = () => {
               </div>
 
               <div className="space-y-2">
+                <Label>Purpose (Optional)</Label>
+                <Textarea 
+                  placeholder="Brief description of what you'll be doing" 
+                  rows={2}
+                  value={purpose}
+                  onChange={(e) => setPurpose(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label className="flex items-center gap-2">
                     <FlaskConical className="w-4 h-4" />
@@ -1114,6 +1124,68 @@ const Schedule = () => {
                   max={100}
                   step={1}
                 />
+              </div>
+
+              {/* Collaborators */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Collaborators (Optional)
+                </Label>
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Search by name or email..."
+                    value={collaboratorSearch}
+                    onChange={(e) => setCollaboratorSearch(e.target.value)}
+                  />
+                  {collaboratorSearch && (
+                    <div className="max-h-32 overflow-y-auto border rounded-md p-2 space-y-1">
+                      {availableUsers
+                        .filter(u => 
+                          u.id !== user?.id &&
+                          !selectedCollaborators.includes(u.id) &&
+                          (u.full_name?.toLowerCase().includes(collaboratorSearch.toLowerCase()) ||
+                           u.email.toLowerCase().includes(collaboratorSearch.toLowerCase()))
+                        )
+                        .slice(0, 5)
+                        .map(u => (
+                          <Button
+                            key={u.id}
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start text-left"
+                            onClick={() => {
+                              setSelectedCollaborators([...selectedCollaborators, u.id]);
+                              setCollaboratorSearch("");
+                            }}
+                          >
+                            {u.spirit_animal && <span className="mr-2">{u.spirit_animal}</span>}
+                            <span className="truncate">{u.full_name || u.email}</span>
+                          </Button>
+                        ))}
+                    </div>
+                  )}
+                  {selectedCollaborators.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedCollaborators.map(collab => {
+                        const collaboratorUser = availableUsers.find(u => u.id === collab);
+                        return collaboratorUser ? (
+                          <Badge key={collab} variant="secondary" className="gap-1">
+                            {collaboratorUser.spirit_animal && <span>{collaboratorUser.spirit_animal}</span>}
+                            <span>{collaboratorUser.full_name || collaboratorUser.email}</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCollaborators(selectedCollaborators.filter(c => c !== collab))}
+                              className="ml-1 hover:text-destructive"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </Badge>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {isHiPerGator && (
