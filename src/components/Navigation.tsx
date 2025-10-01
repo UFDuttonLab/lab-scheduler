@@ -1,9 +1,13 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Calendar, Settings, History, Wrench, BarChart3 } from "lucide-react";
+import { Home, Calendar, Settings, History, Wrench, BarChart3, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 export const Navigation = () => {
   const location = useLocation();
+  const { user, isManager, signOut } = useAuth();
 
   const navItems = [
     { path: "/", label: "Dashboard", icon: Home },
@@ -11,7 +15,7 @@ export const Navigation = () => {
     { path: "/equipment", label: "Equipment", icon: Wrench },
     { path: "/analytics", label: "Analytics", icon: BarChart3 },
     { path: "/history", label: "History", icon: History },
-    { path: "/settings", label: "Settings", icon: Settings },
+    { path: "/settings", label: "Settings", icon: Settings, requireManager: true },
   ];
 
   return (
@@ -28,27 +32,48 @@ export const Navigation = () => {
             </div>
           </div>
           
-          <div className="flex gap-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.path;
-              
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-lg transition-all",
-                    isActive
-                      ? "bg-primary text-primary-foreground font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                  )}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
+          <div className="flex items-center gap-4">
+            <div className="flex gap-1">
+              {navItems.map((item) => {
+                if (item.requireManager && !isManager) return null;
+                
+                const Icon = item.icon;
+                const isActive = location.pathname === item.path;
+                
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={cn(
+                      "flex items-center gap-2 px-4 py-2 rounded-lg transition-all",
+                      isActive
+                        ? "bg-primary text-primary-foreground font-medium"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    )}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-3 pl-4 border-l">
+              <div className="text-right">
+                <div className="text-sm font-medium">{user?.email}</div>
+                {isManager && (
+                  <Badge variant="secondary" className="text-xs">Manager</Badge>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={signOut}
+                title="Sign out"
+              >
+                <LogOut className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
