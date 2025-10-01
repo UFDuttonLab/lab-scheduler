@@ -43,7 +43,7 @@ export function EquipmentIconPicker({ value, onChange }: EquipmentIconPickerProp
       
       {Object.entries(equipmentCategories).map(([category, icons]) => (
         <TabsContent key={category} value={category}>
-          <ScrollArea className="h-[200px] w-full rounded-md border p-4">
+          <ScrollArea className="h-[150px] w-full rounded-md border p-4">
             <div className="grid grid-cols-8 gap-2">
               {icons.map((icon) => (
                 <Button

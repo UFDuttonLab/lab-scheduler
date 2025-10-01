@@ -224,7 +224,7 @@ const Equipment = () => {
                 Add Equipment
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
+            <DialogContent className="max-w-[95vw] sm:max-w-[700px] lg:max-w-[800px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingEquipment ? "Edit Equipment" : "Add New Equipment"}</DialogTitle>
                 <DialogDescription>
@@ -281,14 +281,14 @@ const Equipment = () => {
                       <Slider
                         id="cpuCount"
                         min={1}
-                        max={64}
+                        max={128}
                         step={1}
                         value={[cpuCount]}
                         onValueChange={(value) => setCpuCount(value[0])}
                         className="w-full"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Maximum number of CPUs available (1-64)
+                        Maximum number of CPUs available (1-128)
                       </p>
                     </div>
 
@@ -299,14 +299,14 @@ const Equipment = () => {
                       <Slider
                         id="gpuCount"
                         min={0}
-                        max={8}
+                        max={16}
                         step={1}
                         value={[gpuCount]}
                         onValueChange={(value) => setGpuCount(value[0])}
                         className="w-full"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Maximum number of GPUs available (0-8)
+                        Maximum number of GPUs available (0-16)
                       </p>
                     </div>
                   </>

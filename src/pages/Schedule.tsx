@@ -10,7 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Equipment, Project, Booking } from "@/lib/types";
 import { format, isSameDay, parse, addMinutes, addDays } from "date-fns";
-import { Plus, Clock, Loader2, List, Grid3x3, Cpu, Server, FlaskConical, Users, X } from "lucide-react";
+import { Plus, Clock, Loader2, List, Grid3x3, Cpu, Server, FlaskConical, Users, X, CalendarIcon } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,6 +33,7 @@ const Schedule = () => {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [bookingDate, setBookingDate] = useState<Date | undefined>(new Date());
   const [isBookingDialogOpen, setIsBookingDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
@@ -209,7 +212,7 @@ const Schedule = () => {
       return;
     }
 
-    if (!selectedDate || !selectedTime) {
+    if (!bookingDate || !selectedTime) {
       toast.error("Please select a date and time");
       return;
     }
@@ -220,9 +223,9 @@ const Schedule = () => {
     setLoading(true);
 
     try {
-      // Parse the time and combine with selected date
+      // Parse the time and combine with booking dialog's selected date
       const [hours, minutes] = selectedTime.split(':').map(Number);
-      const startTime = new Date(selectedDate);
+      const startTime = new Date(bookingDate);
       startTime.setHours(hours, minutes, 0, 0);
       
       const endTime = addMinutes(startTime, parseInt(duration));
@@ -287,6 +290,7 @@ const Schedule = () => {
         ? `HiPerGator booked: ${cpuCount} CPUs, ${gpuCount} GPUs` 
         : "Equipment booked successfully!");
       setIsBookingDialogOpen(false);
+      setBookingDate(new Date());
       setSelectedProject("");
       setSelectedEquipment("");
       setSelectedTime("");
@@ -314,7 +318,7 @@ const Schedule = () => {
       return;
     }
 
-    if (!selectedDate || !selectedTime) {
+    if (!bookingDate || !selectedTime) {
       toast.error("Please select a date and time");
       return;
     }
@@ -326,7 +330,7 @@ const Schedule = () => {
 
     try {
       const [hours, minutes] = selectedTime.split(':').map(Number);
-      const startTime = new Date(selectedDate);
+      const startTime = new Date(bookingDate);
       startTime.setHours(hours, minutes, 0, 0);
       
       const endTime = addMinutes(startTime, parseInt(duration));
@@ -431,14 +435,14 @@ const Schedule = () => {
 
   // Calculate available HiPerGator resources if applicable
   const getAvailableResources = () => {
-    if (!isHiPerGator || !selectedDate || !selectedTime) {
+    if (!isHiPerGator || !bookingDate || !selectedTime) {
       const maxCpus = selectedEq?.maxCpuCount || 32;
       const maxGpus = selectedEq?.maxGpuCount || 4;
       return { availableCpus: maxCpus, availableGpus: maxGpus };
     }
 
     const [hours, minutes] = selectedTime.split(':').map(Number);
-    const startTime = new Date(selectedDate);
+    const startTime = new Date(bookingDate);
     startTime.setHours(hours, minutes, 0, 0);
     const endTime = addMinutes(startTime, parseInt(duration));
 
@@ -492,7 +496,10 @@ const Schedule = () => {
               <Button 
                 className="w-full" 
                 size="lg"
-                onClick={() => setIsBookingDialogOpen(true)}
+                onClick={() => {
+                  setBookingDate(selectedDate || new Date());
+                  setIsBookingDialogOpen(true);
+                }}
               >
                 <Plus className="w-4 h-4 mr-2" />
                 New Booking
@@ -756,6 +763,33 @@ const Schedule = () => {
             
             <form onSubmit={handleBooking} className="space-y-4">
               <div className="space-y-2">
+                <Label>Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !bookingDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {bookingDate ? format(bookingDate, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={bookingDate}
+                      onSelect={setBookingDate}
+                      initialFocus
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-2">
                 <Label>Select Project</Label>
                 <Select value={selectedProject} onValueChange={setSelectedProject}>
                   <SelectTrigger>
@@ -946,7 +980,7 @@ const Schedule = () => {
                         value={[cpuCount]}
                         onValueChange={(value) => setCpuCount(value[0])}
                         min={1}
-                        max={Math.min(32, availableCpus)}
+                        max={Math.min(selectedEq?.maxCpuCount || 32, availableCpus)}
                         step={1}
                         className="w-full"
                       />
@@ -966,7 +1000,7 @@ const Schedule = () => {
                         value={[gpuCount]}
                         onValueChange={(value) => setGpuCount(value[0])}
                         min={0}
-                        max={Math.min(2, availableGpus)}
+                        max={Math.min(selectedEq?.maxGpuCount || 4, availableGpus)}
                         step={1}
                         className="w-full"
                       />
@@ -1022,7 +1056,7 @@ const Schedule = () => {
                   // Pre-fill form
                   setSelectedProject(booking.projectId || "");
                   setSelectedEquipment(booking.equipmentId);
-                  setSelectedDate(booking.startTime);
+                  setBookingDate(booking.startTime);
                   setSelectedTime(format(booking.startTime, "HH:mm"));
                   setDuration(booking.duration.toString());
                   setPurpose(booking.purpose || "");
@@ -1047,6 +1081,33 @@ const Schedule = () => {
             </DialogHeader>
             
             <form onSubmit={handleEditBooking} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !bookingDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {bookingDate ? format(bookingDate, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={bookingDate}
+                      onSelect={setBookingDate}
+                      initialFocus
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
               <div className="space-y-2">
                 <Label>Project</Label>
                 <Select value={selectedProject} onValueChange={setSelectedProject}>
@@ -1191,28 +1252,38 @@ const Schedule = () => {
               {isHiPerGator && (
                 <div className="space-y-3 p-3 border rounded-lg bg-muted/50">
                   <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Cpu className="w-4 h-4" />
-                      CPUs: {cpuCount}
-                    </Label>
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-2">
+                        <Cpu className="w-4 h-4" />
+                        CPUs: {cpuCount}
+                      </Label>
+                      <span className="text-xs text-muted-foreground">
+                        {availableCpus} available
+                      </span>
+                    </div>
                     <Slider
                       value={[cpuCount]}
                       onValueChange={(value) => setCpuCount(value[0])}
                       min={1}
-                      max={32}
+                      max={Math.min(selectedEq?.maxCpuCount || 32, availableCpus)}
                       step={1}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Server className="w-4 h-4" />
-                      GPUs: {gpuCount}
-                    </Label>
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-2">
+                        <Server className="w-4 h-4" />
+                        GPUs: {gpuCount}
+                      </Label>
+                      <span className="text-xs text-muted-foreground">
+                        {availableGpus} available
+                      </span>
+                    </div>
                     <Slider
                       value={[gpuCount]}
                       onValueChange={(value) => setGpuCount(value[0])}
                       min={0}
-                      max={2}
+                      max={Math.min(selectedEq?.maxGpuCount || 4, availableGpus)}
                       step={1}
                     />
                   </div>

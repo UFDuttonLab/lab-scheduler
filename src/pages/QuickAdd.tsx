@@ -9,10 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Equipment, Project } from "@/lib/types";
-import { Clock, FlaskConical, Users, X } from "lucide-react";
+import { Clock, FlaskConical, Users, X, CalendarIcon } from "lucide-react";
+import { format, addMinutes } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface UserProfile {
   id: string;
@@ -30,6 +34,8 @@ export default function QuickAdd() {
   const [availableUsers, setAvailableUsers] = useState<UserProfile[]>([]);
   const [collaboratorSearch, setCollaboratorSearch] = useState<string>("");
   const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedTime, setSelectedTime] = useState<string>("");
 
   const [formData, setFormData] = useState({
     equipmentId: "",
@@ -109,8 +115,22 @@ export default function QuickAdd() {
       return;
     }
 
-    const endTime = new Date();
-    const startTime = new Date(endTime.getTime() - parseInt(formData.duration) * 60000);
+    if (!selectedDate || !selectedTime) {
+      toast({
+        title: "Error",
+        description: "Please select a date and time",
+        variant: "destructive",
+      });
+      setLoading(false);
+      return;
+    }
+
+    // Parse the time and combine with selected date
+    const [hours, minutes] = selectedTime.split(':').map(Number);
+    const startTime = new Date(selectedDate);
+    startTime.setHours(hours, minutes, 0, 0);
+    
+    const endTime = addMinutes(startTime, parseInt(formData.duration));
 
     const { error } = await supabase.from("usage_records").insert({
       user_id: user.id,
@@ -145,6 +165,8 @@ export default function QuickAdd() {
       });
       setSelectedCollaborators([]);
       setCollaboratorSearch("");
+      setSelectedDate(new Date());
+      setSelectedTime("");
     }
 
     setLoading(false);
@@ -166,6 +188,11 @@ export default function QuickAdd() {
     { value: "10080", label: "7 days" },
   ];
 
+  const timeSlots = Array.from({ length: 12 }, (_, i) => {
+    const hour = i + 8;
+    return `${hour.toString().padStart(2, '0')}:00`;
+  });
+
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
@@ -182,6 +209,49 @@ export default function QuickAdd() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="space-y-2">
+                <Label>Date *</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !selectedDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={setSelectedDate}
+                      initialFocus
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Start Time *</Label>
+                <Select value={selectedTime} onValueChange={setSelectedTime} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select time" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {timeSlots.map(slot => (
+                      <SelectItem key={slot} value={slot}>
+                        {slot}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="equipment">Equipment *</Label>
                 <Select
