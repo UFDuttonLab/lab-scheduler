@@ -627,12 +627,12 @@ const Settings = () => {
         {/* Add User Dialog */}
         <Dialog open={isAddUserDialogOpen} onOpenChange={setIsAddUserDialogOpen}>
           <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add New User</DialogTitle>
-              <DialogDescription>
-                Send an email invitation to a new user. They will set their own password.
-              </DialogDescription>
-            </DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Add New User</DialogTitle>
+            <DialogDescription>
+              Create a new user account. A temporary password will be generated that you can provide to them.
+            </DialogDescription>
+          </DialogHeader>
             <form onSubmit={handleAddUser} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="add-email">Email *</Label>
@@ -644,7 +644,7 @@ const Settings = () => {
                   required
                 />
                 <p className="text-xs text-muted-foreground">
-                  An invitation email will be sent to this address
+                  The user's login email address
                 </p>
               </div>
               <div className="space-y-2">
