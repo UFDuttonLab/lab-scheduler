@@ -4,19 +4,20 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ROLE_LABELS } from "@/lib/permissions";
 
 export const Navigation = () => {
   const location = useLocation();
-  const { user, isManager, signOut } = useAuth();
+  const { user, userRole, permissions, signOut } = useAuth();
 
   const navItems = [
     { path: "/", label: "Dashboard", icon: Home },
     { path: "/schedule", label: "Schedule", icon: Calendar },
     { path: "/quick-add", label: "Quick Add", icon: Clock },
-    { path: "/equipment", label: "Equipment", icon: Wrench, requireManager: true },
-    { path: "/analytics", label: "Analytics", icon: BarChart3 },
+    { path: "/equipment", label: "Equipment", icon: Wrench, requirePermission: 'canManageEquipment' },
+    { path: "/analytics", label: "Analytics", icon: BarChart3, requirePermission: 'canViewAnalytics' },
     { path: "/history", label: "History", icon: History },
-    { path: "/settings", label: "Settings", icon: Settings, requireManager: true },
+    { path: "/settings", label: "Settings", icon: Settings, requirePermission: 'canManageUsers' },
   ];
 
   return (
@@ -36,7 +37,9 @@ export const Navigation = () => {
           <div className="flex items-center gap-4">
             <div className="flex gap-1">
               {navItems.map((item) => {
-                if (item.requireManager && !isManager) return null;
+                if (item.requirePermission && !permissions[item.requirePermission as keyof typeof permissions]) {
+                  return null;
+                }
                 
                 const Icon = item.icon;
                 const isActive = location.pathname === item.path;
@@ -62,8 +65,8 @@ export const Navigation = () => {
             <div className="flex items-center gap-3 pl-4 border-l">
               <div className="text-right">
                 <div className="text-sm font-medium">{user?.email}</div>
-                {isManager && (
-                  <Badge variant="secondary" className="text-xs">Manager</Badge>
+                {userRole && userRole !== 'user' && (
+                  <Badge variant="secondary" className="text-xs">{ROLE_LABELS[userRole]}</Badge>
                 )}
               </div>
               <Button

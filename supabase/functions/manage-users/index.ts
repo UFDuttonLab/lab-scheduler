@@ -47,6 +47,24 @@ Deno.serve(async (req) => {
 
     const { action, email, fullName, role, spiritAnimal, userId } = await req.json()
 
+    if (action === 'delete') {
+      // Delete user from auth.users (will cascade to all other tables)
+      const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
+
+      if (deleteError) {
+        console.error('User deletion error:', deleteError)
+        return new Response(JSON.stringify({ error: deleteError.message }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      console.log('User deleted successfully:', userId)
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
     if (action === 'create') {
       // Send invitation email - user will set their own password
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {

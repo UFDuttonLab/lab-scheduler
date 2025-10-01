@@ -2,11 +2,14 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { AppRole, getRolePermissions, RolePermissions } from "@/lib/permissions";
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
-  isManager: boolean;
+  userRole: AppRole | null;
+  permissions: RolePermissions;
+  isManager: boolean; // Deprecated: use permissions instead
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -16,9 +19,35 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [isManager, setIsManager] = useState(false);
+  const [userRole, setUserRole] = useState<AppRole | null>(null);
+  const [permissions, setPermissions] = useState<RolePermissions>(getRolePermissions(null));
+  const [isManager, setIsManager] = useState(false); // Deprecated
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+
+  const checkUserRole = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      const role = (data?.role as AppRole) || 'user';
+      setUserRole(role);
+      setPermissions(getRolePermissions(role));
+      setIsManager(role === 'manager' || role === 'pi'); // For backward compatibility
+    } catch (error) {
+      console.error("Error checking user role:", error);
+      setUserRole(null);
+      setPermissions(getRolePermissions(null));
+      setIsManager(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     // Set up auth state listener
@@ -27,12 +56,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setSession(session);
         setUser(session?.user ?? null);
         
-        // Check if user is manager
+        // Check user role
         if (session?.user) {
           setTimeout(() => {
-            checkManagerRole(session.user.id);
+            checkUserRole(session.user.id);
           }, 0);
         } else {
+          setUserRole(null);
+          setPermissions(getRolePermissions(null));
           setIsManager(false);
         }
       }
@@ -44,7 +75,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(session?.user ?? null);
       
       if (session?.user) {
-        checkManagerRole(session.user.id);
+        checkUserRole(session.user.id);
       } else {
         setLoading(false);
       }
@@ -53,31 +84,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const checkManagerRole = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", userId)
-        .eq("role", "manager")
-        .maybeSingle();
-
-      setIsManager(!!data);
-    } catch (error) {
-      console.error("Error checking manager role:", error);
-      setIsManager(false);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const signOut = async () => {
     await supabase.auth.signOut();
     navigate("/auth");
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, isManager, loading, signOut }}>
+    <AuthContext.Provider value={{ user, session, userRole, permissions, isManager, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );

@@ -17,6 +17,7 @@ import { DialogFooter } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { ROLE_LABELS, ROLE_DESCRIPTIONS, AppRole } from "@/lib/permissions";
 
 interface UserProfile {
   id: string;
@@ -328,18 +329,31 @@ const Settings = () => {
   };
 
   const handleDeleteUser = async (userId: string) => {
-    if (!confirm("Are you sure you want to remove this user?")) return;
+    if (!confirm("Are you sure you want to remove this user? This action cannot be undone.")) return;
 
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .delete()
-        .eq("id", userId);
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session) {
+        toast.error("You must be logged in");
+        return;
+      }
 
-      if (error) throw error;
+      const { data, error } = await supabase.functions.invoke('manage-users', {
+        body: {
+          action: 'delete',
+          userId
+        }
+      });
+
+      if (error || data?.error) {
+        toast.error(data?.error || "Failed to delete user");
+        console.error(error || data?.error);
+        return;
+      }
 
       setUsers(prev => prev.filter(u => u.id !== userId));
-      toast.success("User removed");
+      toast.success("User removed successfully");
+      fetchUsers();
     } catch (error) {
       console.error("Error deleting user:", error);
       toast.error("Failed to remove user");
@@ -642,8 +656,36 @@ const Settings = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="manager">Manager</SelectItem>
+                    <SelectItem value="pi">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">{ROLE_LABELS.pi}</span>
+                        <span className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS.pi}</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="postdoc">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">{ROLE_LABELS.postdoc}</span>
+                        <span className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS.postdoc}</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="grad_student">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">{ROLE_LABELS.grad_student}</span>
+                        <span className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS.grad_student}</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="undergrad_student">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">{ROLE_LABELS.undergrad_student}</span>
+                        <span className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS.undergrad_student}</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="user">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">{ROLE_LABELS.user}</span>
+                        <span className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS.user}</span>
+                      </div>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -709,8 +751,36 @@ const Settings = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="manager">Manager</SelectItem>
+                    <SelectItem value="pi">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">{ROLE_LABELS.pi}</span>
+                        <span className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS.pi}</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="postdoc">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">{ROLE_LABELS.postdoc}</span>
+                        <span className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS.postdoc}</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="grad_student">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">{ROLE_LABELS.grad_student}</span>
+                        <span className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS.grad_student}</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="undergrad_student">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">{ROLE_LABELS.undergrad_student}</span>
+                        <span className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS.undergrad_student}</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="user">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">{ROLE_LABELS.user}</span>
+                        <span className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS.user}</span>
+                      </div>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>

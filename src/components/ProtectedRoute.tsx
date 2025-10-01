@@ -4,22 +4,22 @@ import { useAuth } from "@/contexts/AuthContext";
 
 interface ProtectedRouteProps {
   children: ReactNode;
-  requireManager?: boolean;
+  requirePermission?: 'canManageUsers' | 'canManageProjects' | 'canManageEquipment' | 'canViewAnalytics';
 }
 
-export const ProtectedRoute = ({ children, requireManager = false }: ProtectedRouteProps) => {
-  const { user, isManager, loading } = useAuth();
+export const ProtectedRoute = ({ children, requirePermission }: ProtectedRouteProps) => {
+  const { user, permissions, loading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (!loading) {
       if (!user) {
         navigate("/auth");
-      } else if (requireManager && !isManager) {
+      } else if (requirePermission && !permissions[requirePermission]) {
         navigate("/");
       }
     }
-  }, [user, isManager, loading, navigate, requireManager]);
+  }, [user, permissions, loading, navigate, requirePermission]);
 
   if (loading) {
     return (
@@ -29,7 +29,7 @@ export const ProtectedRoute = ({ children, requireManager = false }: ProtectedRo
     );
   }
 
-  if (!user || (requireManager && !isManager)) {
+  if (!user || (requirePermission && !permissions[requirePermission])) {
     return null;
   }
 
