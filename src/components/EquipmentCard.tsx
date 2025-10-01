@@ -31,8 +31,8 @@ export const EquipmentCard = ({ equipment, onSelect, onEdit, onDelete }: Equipme
     >
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-lg bg-gradient-primary flex items-center justify-center">
-            <Settings className="w-6 h-6 text-primary-foreground" />
+          <div className="w-12 h-12 rounded-lg bg-gradient-primary flex items-center justify-center text-2xl">
+            {equipment.icon || "🛠️"}
           </div>
           <div>
             <h3 className="font-semibold text-lg">{equipment.name}</h3>
@@ -40,6 +40,12 @@ export const EquipmentCard = ({ equipment, onSelect, onEdit, onDelete }: Equipme
               <MapPin className="w-3 h-3" />
               <span>{equipment.location}</span>
             </div>
+            {equipment.type === "HiPerGator" && (equipment.maxCpuCount || equipment.maxGpuCount) && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                {equipment.maxCpuCount && <span>CPUs: {equipment.maxCpuCount}</span>}
+                {equipment.maxGpuCount && <span>GPUs: {equipment.maxGpuCount}</span>}
+              </div>
+            )}
           </div>
         </div>
         <Badge className={status.className}>{status.label}</Badge>

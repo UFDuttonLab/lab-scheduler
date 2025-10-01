@@ -8,11 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Slider } from "@/components/ui/slider";
 import { Equipment as EquipmentType } from "@/lib/types";
 import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useForm } from "react-hook-form";
+import { EquipmentIconPicker } from "@/components/EquipmentIconPicker";
 
 interface EquipmentFormData {
   name: string;
@@ -20,6 +22,9 @@ interface EquipmentFormData {
   location: string;
   status: "available" | "maintenance";
   description?: string;
+  icon?: string;
+  maxCpuCount?: number;
+  maxGpuCount?: number;
 }
 
 const Equipment = () => {
@@ -28,30 +33,51 @@ const Equipment = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingEquipment, setEditingEquipment] = useState<EquipmentType | null>(null);
+  const [selectedIcon, setSelectedIcon] = useState<string>("🤖");
+  const [selectedType, setSelectedType] = useState<string>("robot");
+  const [cpuCount, setCpuCount] = useState<number>(32);
+  const [gpuCount, setGpuCount] = useState<number>(4);
   
-  const { register, handleSubmit, reset, setValue } = useForm<EquipmentFormData>({
+  const { register, handleSubmit, reset, setValue, watch } = useForm<EquipmentFormData>({
     defaultValues: {
       status: "available",
-      type: "robot"
+      type: "robot",
+      icon: "🤖",
+      maxCpuCount: 32,
+      maxGpuCount: 4
     }
   });
 
   useEffect(() => {
     if (editingEquipment) {
+      setSelectedIcon(editingEquipment.icon || "🤖");
+      setSelectedType(editingEquipment.type);
+      setCpuCount(editingEquipment.maxCpuCount || 32);
+      setGpuCount(editingEquipment.maxGpuCount || 4);
       reset({
         name: editingEquipment.name,
         type: editingEquipment.type,
         location: editingEquipment.location,
         status: editingEquipment.status as "available" | "maintenance",
-        description: editingEquipment.description || ""
+        description: editingEquipment.description || "",
+        icon: editingEquipment.icon,
+        maxCpuCount: editingEquipment.maxCpuCount,
+        maxGpuCount: editingEquipment.maxGpuCount
       });
     } else {
+      setSelectedIcon("🤖");
+      setSelectedType("robot");
+      setCpuCount(32);
+      setGpuCount(4);
       reset({
         name: "",
         type: "robot",
         location: "",
         status: "available",
-        description: ""
+        description: "",
+        icon: "🤖",
+        maxCpuCount: 32,
+        maxGpuCount: 4
       });
     }
   }, [editingEquipment, reset]);
@@ -68,7 +94,20 @@ const Equipment = () => {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setEquipment((data || []) as EquipmentType[]);
+      
+      const transformedEquipment: EquipmentType[] = (data || []).map(eq => ({
+        id: eq.id,
+        name: eq.name,
+        type: eq.type as "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator",
+        status: eq.status as "available" | "in-use" | "maintenance",
+        location: eq.location,
+        description: eq.description || undefined,
+        icon: eq.icon || undefined,
+        maxCpuCount: eq.max_cpu_count || undefined,
+        maxGpuCount: eq.max_gpu_count || undefined,
+      }));
+      
+      setEquipment(transformedEquipment);
     } catch (error) {
       console.error("Error fetching equipment:", error);
       toast.error("Failed to load equipment");
@@ -80,45 +119,42 @@ const Equipment = () => {
   const handleAddEquipment = async (formData: EquipmentFormData) => {
     setIsSubmitting(true);
     try {
+      const equipmentData: any = {
+        name: formData.name,
+        type: formData.type,
+        location: formData.location,
+        status: formData.status,
+        description: formData.description || null,
+        icon: selectedIcon
+      };
+
+      // Add HiPerGator resource limits if applicable
+      if (formData.type === "HiPerGator") {
+        equipmentData.max_cpu_count = cpuCount;
+        equipmentData.max_gpu_count = gpuCount;
+      }
+
       if (editingEquipment) {
         // Update equipment
         const { error: equipmentError } = await supabase
           .from("equipment")
-          .update({
-            name: formData.name,
-            type: formData.type,
-            location: formData.location,
-            status: formData.status,
-            description: formData.description || null
-          })
+          .update(equipmentData)
           .eq("id", editingEquipment.id);
 
         if (equipmentError) throw equipmentError;
 
         toast.success("Equipment updated successfully!");
-        setEquipment(prev => prev.map(eq => 
-          eq.id === editingEquipment.id 
-            ? { ...eq, ...formData } as EquipmentType
-            : eq
-        ));
+        await fetchEquipment();
       } else {
         // Insert equipment
-        const { data: newEquipment, error: equipmentError } = await supabase
+        const { error: equipmentError } = await supabase
           .from("equipment")
-          .insert({
-            name: formData.name,
-            type: formData.type,
-            location: formData.location,
-            status: formData.status,
-            description: formData.description || null
-          })
-          .select()
-          .single();
+          .insert(equipmentData);
 
         if (equipmentError) throw equipmentError;
 
         toast.success("Equipment added successfully!");
-        setEquipment(prev => [newEquipment as EquipmentType, ...prev]);
+        await fetchEquipment();
       }
       
       setIsAddDialogOpen(false);
@@ -198,6 +234,14 @@ const Equipment = () => {
               
               <form onSubmit={handleSubmit(handleAddEquipment)} className="space-y-4">
                 <div className="space-y-2">
+                  <Label htmlFor="icon">Icon</Label>
+                  <EquipmentIconPicker 
+                    value={selectedIcon}
+                    onChange={setSelectedIcon}
+                  />
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="name">Equipment Name</Label>
                   <Input 
                     id="name"
@@ -209,8 +253,11 @@ const Equipment = () => {
                 <div className="space-y-2">
                   <Label htmlFor="type">Type</Label>
                   <Select 
-                    onValueChange={(value) => setValue("type", value as "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator")}
-                    defaultValue="robot"
+                    value={selectedType}
+                    onValueChange={(value) => {
+                      setSelectedType(value);
+                      setValue("type", value as "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator");
+                    }}
                   >
                     <SelectTrigger id="type">
                       <SelectValue placeholder="Select type" />
@@ -224,6 +271,46 @@ const Equipment = () => {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {selectedType === "HiPerGator" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="cpuCount">
+                        Max CPU Count: {cpuCount}
+                      </Label>
+                      <Slider
+                        id="cpuCount"
+                        min={1}
+                        max={64}
+                        step={1}
+                        value={[cpuCount]}
+                        onValueChange={(value) => setCpuCount(value[0])}
+                        className="w-full"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Maximum number of CPUs available (1-64)
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="gpuCount">
+                        Max GPU Count: {gpuCount}
+                      </Label>
+                      <Slider
+                        id="gpuCount"
+                        min={0}
+                        max={8}
+                        step={1}
+                        value={[gpuCount]}
+                        onValueChange={(value) => setGpuCount(value[0])}
+                        className="w-full"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Maximum number of GPUs available (0-8)
+                      </p>
+                    </div>
+                  </>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="location">Location</Label>

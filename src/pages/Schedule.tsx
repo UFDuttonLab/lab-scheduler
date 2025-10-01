@@ -128,6 +128,9 @@ const Schedule = () => {
       status: eq.status as "available" | "in-use" | "maintenance",
       location: eq.location,
       description: eq.description || undefined,
+      icon: eq.icon || undefined,
+      maxCpuCount: eq.max_cpu_count || undefined,
+      maxGpuCount: eq.max_gpu_count || undefined,
     }));
     
     setEquipment(transformedEquipment);
@@ -239,14 +242,17 @@ const Schedule = () => {
         const totalCpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.cpuCount || 0), 0);
         const totalGpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.gpuCount || 0), 0);
 
-        if (totalCpuUsed + cpuCount > 32) {
-          toast.error(`Not enough CPUs available. Currently ${32 - totalCpuUsed} CPUs free during this time.`);
+        const maxCpus = selectedEq.maxCpuCount || 32;
+        const maxGpus = selectedEq.maxGpuCount || 4;
+
+        if (totalCpuUsed + cpuCount > maxCpus) {
+          toast.error(`Not enough CPUs available. Currently ${maxCpus - totalCpuUsed} CPUs free during this time.`);
           setLoading(false);
           return;
         }
 
-        if (totalGpuUsed + gpuCount > 2) {
-          toast.error(`Not enough GPUs available. Currently ${2 - totalGpuUsed} GPUs free during this time.`);
+        if (totalGpuUsed + gpuCount > maxGpus) {
+          toast.error(`Not enough GPUs available. Currently ${maxGpus - totalGpuUsed} GPUs free during this time.`);
           setLoading(false);
           return;
         }
@@ -341,14 +347,17 @@ const Schedule = () => {
         const totalCpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.cpuCount || 0), 0);
         const totalGpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.gpuCount || 0), 0);
 
-        if (totalCpuUsed + cpuCount > 32) {
-          toast.error(`Not enough CPUs available. Currently ${32 - totalCpuUsed} CPUs free during this time.`);
+        const maxCpus = selectedEq.maxCpuCount || 32;
+        const maxGpus = selectedEq.maxGpuCount || 4;
+
+        if (totalCpuUsed + cpuCount > maxCpus) {
+          toast.error(`Not enough CPUs available. Currently ${maxCpus - totalCpuUsed} CPUs free during this time.`);
           setLoading(false);
           return;
         }
 
-        if (totalGpuUsed + gpuCount > 2) {
-          toast.error(`Not enough GPUs available. Currently ${2 - totalGpuUsed} GPUs free during this time.`);
+        if (totalGpuUsed + gpuCount > maxGpus) {
+          toast.error(`Not enough GPUs available. Currently ${maxGpus - totalGpuUsed} GPUs free during this time.`);
           setLoading(false);
           return;
         }
@@ -423,7 +432,9 @@ const Schedule = () => {
   // Calculate available HiPerGator resources if applicable
   const getAvailableResources = () => {
     if (!isHiPerGator || !selectedDate || !selectedTime) {
-      return { availableCpus: 32, availableGpus: 2 };
+      const maxCpus = selectedEq?.maxCpuCount || 32;
+      const maxGpus = selectedEq?.maxGpuCount || 4;
+      return { availableCpus: maxCpus, availableGpus: maxGpus };
     }
 
     const [hours, minutes] = selectedTime.split(':').map(Number);
@@ -444,9 +455,12 @@ const Schedule = () => {
     const usedCpus = overlappingBookings.reduce((sum, b) => sum + (b.cpuCount || 0), 0);
     const usedGpus = overlappingBookings.reduce((sum, b) => sum + (b.gpuCount || 0), 0);
 
+    const maxCpus = selectedEq?.maxCpuCount || 32;
+    const maxGpus = selectedEq?.maxGpuCount || 4;
+
     return {
-      availableCpus: 32 - usedCpus,
-      availableGpus: 2 - usedGpus
+      availableCpus: maxCpus - usedCpus,
+      availableGpus: maxGpus - usedGpus
     };
   };
 

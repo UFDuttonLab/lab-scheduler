@@ -5,6 +5,9 @@ export interface Equipment {
   status: "available" | "in-use" | "maintenance";
   location: string;
   description?: string;
+  icon?: string;
+  maxCpuCount?: number;
+  maxGpuCount?: number;
 }
 
 export interface Project {

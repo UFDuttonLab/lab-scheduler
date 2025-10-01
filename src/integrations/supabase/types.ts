@@ -81,8 +81,11 @@ export type Database = {
         Row: {
           created_at: string
           description: string | null
+          icon: string | null
           id: string
           location: string
+          max_cpu_count: number | null
+          max_gpu_count: number | null
           name: string
           status: string
           type: string
@@ -90,8 +93,11 @@ export type Database = {
         Insert: {
           created_at?: string
           description?: string | null
+          icon?: string | null
           id?: string
           location: string
+          max_cpu_count?: number | null
+          max_gpu_count?: number | null
           name: string
           status?: string
           type: string
@@ -99,8 +105,11 @@ export type Database = {
         Update: {
           created_at?: string
           description?: string | null
+          icon?: string | null
           id?: string
           location?: string
+          max_cpu_count?: number | null
+          max_gpu_count?: number | null
           name?: string
           status?: string
           type?: string

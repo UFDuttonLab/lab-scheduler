@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
 
 interface IconPickerProps {
   value?: string;
@@ -9,56 +8,85 @@ interface IconPickerProps {
 }
 
 const emojiCategories = {
-  Science: [
-    "🧪", "🔬", "🧬", "⚗️", "🔭", "🧫", "💉", "🩺", "⚡", "🔋"
+  // Animals - Farm
+  "Farm Animals": [
+    "🐄", "🐷", "🐖", "🐗", "🐏", "🐑", "🐐", "🐪", "🐫", "🦙", "🦒", "🐘",
+    "🦏", "🦛", "🐎", "🐴", "🦓", "🦬", "🐃", "🐂", "🐮", "🦆", "🐓", "🐔"
   ],
-  Technology: [
-    "💻", "🖥️", "⚙️", "🔧", "🛠️", "🤖", "📡", "🔌", "💾", "📱"
+  // Animals - Wild
+  "Wild Animals": [
+    "🦁", "🐯", "🐅", "🐆", "🦌", "🦏", "🦍", "🦧", "🐒", "🦊", "🦝", "🐻",
+    "🐻‍❄️", "🐼", "🦘", "🦡", "🦫", "🦦", "🦨", "🦔", "🐾", "🦥", "🦦", "🦇"
   ],
-  Nature: [
-    "🌱", "🌿", "🌳", "🌲", "🌾", "🍃", "🌺", "🌸", "🌻", "🌼"
+  // Animals - Marine
+  "Marine Life": [
+    "🐟", "🐠", "🐡", "🦈", "🐙", "🦑", "🦐", "🦞", "🦀", "🐚", "🐳", "🐋",
+    "🐬", "🦭", "🦈", "🐢", "🦦", "🐊", "🦈", "🐸", "🦎", "🐍", "🦕", "🦖"
   ],
-  Environment: [
-    "🌍", "🌎", "🌏", "🌊", "🔥", "💧", "🌬️", "⛰️", "🏔️", "☀️"
+  // Animals - Birds
+  "Birds": [
+    "🦅", "🦆", "🦢", "🦉", "🦚", "🦜", "🦩", "🦤", "🐦", "🐧", "🕊️", "🦃",
+    "🦆", "🦅", "🦇", "🐓", "🐔", "🐣", "🐤", "🐥", "🦆", "🦢", "🦉", "🦚"
   ],
-  Medical: [
-    "🩺", "💊", "💉", "🏥", "⚕️", "🧬", "🦠", "🧠", "🫀", "🫁"
+  // Animals - Insects & Small
+  "Insects & Small": [
+    "🐛", "🦋", "🐌", "🐞", "🐜", "🦗", "🕷️", "🕸️", "🦂", "🦟", "🦠", "🐝",
+    "🐿️", "🦔", "🐀", "🐁", "🐭", "🐹", "🐰", "🐇", "🦫", "🦨", "🦡", "🦦"
   ],
-  Research: [
-    "🎯", "📊", "📈", "📉", "🔍", "🔎", "📝", "📋", "📌", "🏆"
+  // Animals - Reptiles
+  "Reptiles": [
+    "🐊", "🐢", "🦎", "🐍", "🦕", "🦖", "🐲", "🐉", "🦴", "🐸", "🦗", "🦂"
   ],
+  // Science - Expanded
+  "Science": [
+    "🧪", "🔬", "🧬", "🦠", "🧫", "⚗️", "🔭", "⚛️", "🧲", "🌡️", "📊", "📈",
+    "📉", "🧮", "🔍", "📐", "📏", "⚙️", "🛠️", "🔧", "🔩", "⚡", "💡", "🔋"
+  ],
+  // Medical - Expanded
+  "Medical": [
+    "💊", "💉", "🩺", "🩹", "🩼", "🦷", "🫀", "🫁", "🧠", "👁️", "🦴", "🩸",
+    "🏥", "⚕️", "🔬", "🧬", "🧫", "🦠", "🌡️", "💊", "🩺", "🔬", "🧪", "⚗️"
+  ],
+  // Nature - Expanded
+  "Nature": [
+    "🌱", "🌿", "🍀", "🌾", "🌵", "🌲", "🌳", "🌴", "🌻", "🌺", "🌸", "🌼",
+    "🌷", "🍎", "🥕", "🌽", "🥦", "🍅", "🫑", "🥬", "🥒", "🫐", "🌰", "🌾"
+  ],
+  // Technology
+  "Technology": [
+    "💻", "🖥️", "⌨️", "🖱️", "🖨️", "📱", "📲", "☎️", "📞", "📟", "📠", "🔋",
+    "🔌", "💾", "💿", "📀", "🎮", "🕹️", "🎯", "🎲", "🎰", "🎪", "🎨", "🎭"
+  ]
 };
 
 export function IconPicker({ value, onChange }: IconPickerProps) {
   return (
-    <Tabs defaultValue="Science" className="w-full">
-      <TabsList className="grid w-full grid-cols-6">
-        {Object.keys(emojiCategories).map((category) => (
-          <TabsTrigger key={category} value={category} className="text-xs">
-            {category}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-      {Object.entries(emojiCategories).map(([category, emojis]) => (
+    <Tabs defaultValue="Farm Animals" className="w-full">
+      <ScrollArea className="w-full">
+        <TabsList className="w-full flex-wrap h-auto justify-start">
+          {Object.keys(emojiCategories).map((category) => (
+            <TabsTrigger key={category} value={category} className="text-xs">
+              {category}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </ScrollArea>
+      
+      {Object.entries(emojiCategories).map(([category, icons]) => (
         <TabsContent key={category} value={category}>
           <ScrollArea className="h-[200px] w-full rounded-md border p-4">
-            <div className="grid grid-cols-6 gap-2">
-              {emojis.map((emoji) => {
-                return (
-                  <Button
-                    key={emoji}
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onChange(emoji)}
-                    className={cn(
-                      "h-10 w-10 text-2xl",
-                      value === emoji && "bg-accent ring-2 ring-primary"
-                    )}
-                  >
-                    {emoji}
-                  </Button>
-                );
-              })}
+            <div className="grid grid-cols-8 gap-2">
+              {icons.map((icon) => (
+                <Button
+                  key={icon}
+                  type="button"
+                  variant={value === icon ? "default" : "outline"}
+                  className="h-10 w-10 p-0 text-xl"
+                  onClick={() => onChange(icon)}
+                >
+                  {icon}
+                </Button>
+              ))}
             </div>
           </ScrollArea>
         </TabsContent>
