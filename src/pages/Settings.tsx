@@ -92,16 +92,28 @@ const Settings = () => {
 
   const fetchUsers = async () => {
     try {
-      const { data, error } = await supabase
+      // Fetch profiles
+      const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
-        .select(`
-          *,
-          user_roles(role)
-        `)
+        .select("*")
         .order("email");
 
-      if (error) throw error;
-      setUsers(data || []);
+      if (profilesError) throw profilesError;
+
+      // Fetch user roles
+      const { data: roles, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id, role");
+
+      if (rolesError) throw rolesError;
+
+      // Merge profiles with their roles
+      const usersWithRoles = profiles?.map(profile => ({
+        ...profile,
+        user_roles: roles?.filter(r => r.user_id === profile.id) || []
+      })) || [];
+
+      setUsers(usersWithRoles);
     } catch (error) {
       console.error("Error fetching users:", error);
       toast.error("Failed to load users");
@@ -222,7 +234,6 @@ const Settings = () => {
     const formData = new FormData(e.currentTarget);
     
     const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
     const fullName = formData.get("fullName") as string;
     const role = formData.get("role") as string;
     const spiritAnimal = formData.get("spiritAnimal") as string;
@@ -237,7 +248,6 @@ const Settings = () => {
       body: {
         action: 'create',
         email,
-        password,
         fullName,
         role,
         spiritAnimal
@@ -245,12 +255,12 @@ const Settings = () => {
     });
 
     if (error || data?.error) {
-      toast.error(data?.error || "Failed to create user");
+      toast.error(data?.error || "Failed to send invitation");
       console.error(error || data?.error);
       return;
     }
 
-    toast.success("User created successfully");
+    toast.success("Invitation email sent successfully!");
     setIsAddUserDialogOpen(false);
     fetchUsers();
   };
@@ -599,7 +609,7 @@ const Settings = () => {
             <DialogHeader>
               <DialogTitle>Add New User</DialogTitle>
               <DialogDescription>
-                Create a new user account with role assignment
+                Send an email invitation to a new user. They will set their own password.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleAddUser} className="space-y-4">
@@ -612,17 +622,9 @@ const Settings = () => {
                   placeholder="user@example.com"
                   required
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="add-password">Password *</Label>
-                <Input
-                  id="add-password"
-                  name="password"
-                  type="password"
-                  placeholder="Minimum 6 characters"
-                  required
-                  minLength={6}
-                />
+                <p className="text-xs text-muted-foreground">
+                  An invitation email will be sent to this address
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="add-fullName">Full Name *</Label>
