@@ -57,8 +57,15 @@ const Auth = () => {
     setLoading(true);
 
     try {
+      // Construct the redirect URL to work with GitHub Pages deployment
+      const baseUrl = window.location.origin;
+      const pathname = window.location.pathname.replace(/\/$/, ''); // Remove trailing slash
+      const redirectUrl = `${baseUrl}${pathname}/#/reset-password`;
+      
+      console.log("Sending password reset email with redirect URL:", redirectUrl);
+      
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}${window.location.pathname}#/reset-password`,
+        redirectTo: redirectUrl,
       });
 
       if (error) throw error;
