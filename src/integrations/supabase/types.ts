@@ -157,6 +157,7 @@ export type Database = {
           color: string | null
           created_at: string
           description: string | null
+          icon: string | null
           id: string
           name: string
         }
@@ -164,6 +165,7 @@ export type Database = {
           color?: string | null
           created_at?: string
           description?: string | null
+          icon?: string | null
           id?: string
           name: string
         }
@@ -171,10 +173,62 @@ export type Database = {
           color?: string | null
           created_at?: string
           description?: string | null
+          icon?: string | null
           id?: string
           name?: string
         }
         Relationships: []
+      }
+      usage_records: {
+        Row: {
+          created_at: string
+          end_time: string
+          equipment_id: string
+          id: string
+          notes: string | null
+          project_id: string | null
+          samples_processed: number | null
+          start_time: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          end_time: string
+          equipment_id: string
+          id?: string
+          notes?: string | null
+          project_id?: string | null
+          samples_processed?: number | null
+          start_time: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          end_time?: string
+          equipment_id?: string
+          id?: string
+          notes?: string | null
+          project_id?: string | null
+          samples_processed?: number | null
+          start_time?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usage_records_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "usage_records_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {

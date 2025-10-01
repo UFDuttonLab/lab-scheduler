@@ -11,6 +11,7 @@ import Equipment from "./pages/Equipment";
 import Analytics from "./pages/Analytics";
 import History from "./pages/History";
 import Settings from "./pages/Settings";
+import QuickAdd from "./pages/QuickAdd";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
             <Route path="/schedule" element={<ProtectedRoute><Schedule /></ProtectedRoute>} />
             <Route path="/equipment" element={<ProtectedRoute requireManager><Equipment /></ProtectedRoute>} />
+            <Route path="/quick-add" element={<ProtectedRoute><QuickAdd /></ProtectedRoute>} />
             <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
             <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute requireManager><Settings /></ProtectedRoute>} />

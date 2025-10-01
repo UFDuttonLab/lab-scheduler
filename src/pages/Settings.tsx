@@ -8,7 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Project } from "@/lib/types";
 import { Plus, Trash2, Edit, Loader2, Pencil, User, Mail, Smile } from "lucide-react";
+import * as Icons from "lucide-react";
+import { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
+import { IconPicker } from "@/components/IconPicker";
 import { supabase } from "@/integrations/supabase/client";
 import { DialogFooter } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
@@ -53,7 +56,7 @@ const Settings = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [projectName, setProjectName] = useState("");
   const [projectDescription, setProjectDescription] = useState("");
-  const [projectColor, setProjectColor] = useState("#fb6502");
+  const [projectIcon, setProjectIcon] = useState("Beaker");
 
   useEffect(() => {
     fetchProjects();
@@ -65,11 +68,11 @@ const Settings = () => {
     if (editingProject) {
       setProjectName(editingProject.name);
       setProjectDescription(editingProject.description || "");
-      setProjectColor(editingProject.color || "#fb6502");
+      setProjectIcon(editingProject.icon || "Beaker");
     } else {
       setProjectName("");
       setProjectDescription("");
-      setProjectColor("#fb6502");
+      setProjectIcon("Beaker");
     }
   }, [editingProject]);
 
@@ -170,7 +173,7 @@ const Settings = () => {
           .update({
             name: projectName,
             description: projectDescription,
-            color: projectColor
+            icon: projectIcon
           })
           .eq("id", editingProject.id);
 
@@ -178,7 +181,7 @@ const Settings = () => {
 
         setProjects(prev => prev.map(p =>
           p.id === editingProject.id
-            ? { ...p, name: projectName, description: projectDescription, color: projectColor }
+            ? { ...p, name: projectName, description: projectDescription, icon: projectIcon }
             : p
         ));
         toast.success("Project updated successfully!");
@@ -188,7 +191,7 @@ const Settings = () => {
           .insert({
             name: projectName,
             description: projectDescription,
-            color: projectColor
+            icon: projectIcon
           })
           .select()
           .single();
@@ -203,7 +206,7 @@ const Settings = () => {
       setEditingProject(null);
       setProjectName("");
       setProjectDescription("");
-      setProjectColor("#fb6502");
+      setProjectIcon("Beaker");
     } catch (error) {
       console.error("Error saving project:", error);
       toast.error(`Failed to ${editingProject ? "update" : "add"} project`);
@@ -425,7 +428,7 @@ const Settings = () => {
                   setEditingProject(null);
                   setProjectName("");
                   setProjectDescription("");
-                  setProjectColor("#fb6502");
+                  setProjectIcon("Beaker");
                 }
               }}>
                 <DialogTrigger asChild>
@@ -464,12 +467,8 @@ const Settings = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Calendar Color</Label>
-                    <Input 
-                      type="color" 
-                      value={projectColor}
-                      onChange={(e) => setProjectColor(e.target.value)}
-                    />
+                    <Label>Project Icon</Label>
+                    <IconPicker value={projectIcon} onChange={setProjectIcon} />
                   </div>
 
                   <Button type="submit" className="w-full">
@@ -487,23 +486,27 @@ const Settings = () => {
                   No projects yet. Add your first project to get started.
                 </p>
               ) : (
-                projects.map(project => (
-                  <Card key={project.id} className="p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-3 flex-1">
-                        <div 
-                          className="w-4 h-4 rounded-full mt-1 flex-shrink-0"
-                          style={{ backgroundColor: project.color }}
-                        />
-                        <div className="flex-1">
-                          <h3 className="font-semibold mb-1">{project.name}</h3>
-                          {project.description && (
-                            <p className="text-sm text-muted-foreground">
-                              {project.description}
-                            </p>
-                          )}
+                projects.map(project => {
+                  const ProjectIcon = project.icon
+                    ? (Icons[project.icon as keyof typeof Icons] as LucideIcon)
+                    : Icons.Beaker;
+                  
+                  return (
+                    <Card key={project.id} className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3 flex-1">
+                          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center mt-1 flex-shrink-0">
+                            <ProjectIcon className="w-5 h-5 text-primary" />
+                          </div>
+                          <div className="flex-1">
+                            <h3 className="font-semibold mb-1">{project.name}</h3>
+                            {project.description && (
+                              <p className="text-sm text-muted-foreground">
+                                {project.description}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
                       <div className="flex gap-2">
                         <Button
                           variant="ghost"
@@ -527,7 +530,8 @@ const Settings = () => {
                       </div>
                     </div>
                   </Card>
-                ))
+                  );
+                })
               )}
             </div>
           </Card>

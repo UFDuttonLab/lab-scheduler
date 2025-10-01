@@ -11,7 +11,22 @@ export interface Project {
   id: string;
   name: string;
   description?: string;
-  color?: string; // For calendar color coding
+  icon?: string; // Icon name from Lucide
+  color?: string; // Deprecated, kept for backwards compatibility
+}
+
+export interface UsageRecord {
+  id: string;
+  userId: string;
+  equipmentId: string;
+  equipmentName?: string;
+  projectId?: string;
+  projectName?: string;
+  startTime: Date;
+  endTime: Date;
+  samplesProcessed?: number;
+  notes?: string;
+  createdAt: Date;
 }
 
 export interface Student {
