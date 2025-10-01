@@ -327,9 +327,16 @@ const Schedule = () => {
                     <div className="space-y-2">
                       {Array.from({ length: 13 }, (_, i) => {
                         const hour = i + 8;
+                        // Find bookings that span through this hour (not just start at this hour)
                         const hourBookings = dayBookings.filter(b => {
-                          const bookingHour = b.startTime.getHours();
-                          return bookingHour === hour;
+                          const bookingStartHour = b.startTime.getHours();
+                          const bookingEndHour = b.endTime.getHours();
+                          const bookingEndMinutes = b.endTime.getMinutes();
+                          
+                          // Include booking if it starts before/at this hour and ends after this hour
+                          // or if it starts at this hour
+                          return (bookingStartHour <= hour && 
+                                 (bookingEndHour > hour || (bookingEndHour === hour && bookingEndMinutes > 0)));
                         });
 
                         return (
@@ -342,6 +349,10 @@ const Schedule = () => {
                                 <div className="space-y-2">
                                   {hourBookings.map(booking => {
                                     const project = projects.find(p => p.id === booking.projectId);
+                                    const isStartHour = booking.startTime.getHours() === hour;
+                                    const isEndHour = booking.endTime.getHours() === hour || 
+                                                     (booking.endTime.getHours() === hour + 1 && booking.endTime.getMinutes() === 0);
+                                    
                                     return (
                                       <Card 
                                         key={booking.id} 
@@ -349,11 +360,31 @@ const Schedule = () => {
                                         style={{ borderLeftColor: project?.color || '#ccc' }}
                                       >
                                         <div className="flex items-center justify-between">
-                                          <div>
+                                          <div className="flex-1">
                                             <p className="font-semibold text-sm">{booking.equipmentName}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                              {format(booking.startTime, "h:mm a")} - {format(booking.endTime, "h:mm a")} • {booking.studentName}
-                                            </p>
+                                            <div className="text-xs text-muted-foreground mt-1">
+                                              <div className="flex items-center gap-2">
+                                                {isStartHour && (
+                                                  <span className="font-medium">
+                                                    Starts: {format(booking.startTime, "h:mm a")}
+                                                  </span>
+                                                )}
+                                                {isEndHour && (
+                                                  <span className="font-medium">
+                                                    Ends: {format(booking.endTime, "h:mm a")}
+                                                  </span>
+                                                )}
+                                                {!isStartHour && !isEndHour && (
+                                                  <span className="italic">In progress</span>
+                                                )}
+                                              </div>
+                                              <div className="flex items-center gap-1 mt-0.5">
+                                                {booking.studentSpiritAnimal && (
+                                                  <span>{booking.studentSpiritAnimal}</span>
+                                                )}
+                                                <span>{booking.studentName}</span>
+                                              </div>
+                                            </div>
                                           </div>
                                           <Badge variant="secondary" className="text-xs">
                                             {booking.duration}m
