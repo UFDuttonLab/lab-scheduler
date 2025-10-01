@@ -16,7 +16,7 @@ import { useForm } from "react-hook-form";
 
 interface EquipmentFormData {
   name: string;
-  type: "robot" | "equipment" | "quantification" | "PCR";
+  type: "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator";
   location: string;
   status: "available" | "maintenance";
   description?: string;
@@ -160,6 +160,7 @@ const Equipment = () => {
   const otherEquipment = equipment.filter(e => e.type === "equipment");
   const quantification = equipment.filter(e => e.type === "quantification");
   const pcr = equipment.filter(e => e.type === "PCR");
+  const hipergator = equipment.filter(e => e.type === "HiPerGator");
 
   return (
     <div className="min-h-screen bg-background">
@@ -208,7 +209,7 @@ const Equipment = () => {
                 <div className="space-y-2">
                   <Label htmlFor="type">Type</Label>
                   <Select 
-                    onValueChange={(value) => setValue("type", value as "robot" | "equipment" | "quantification" | "PCR")}
+                    onValueChange={(value) => setValue("type", value as "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator")}
                     defaultValue="robot"
                   >
                     <SelectTrigger id="type">
@@ -219,6 +220,7 @@ const Equipment = () => {
                       <SelectItem value="equipment">Equipment</SelectItem>
                       <SelectItem value="quantification">Quantification</SelectItem>
                       <SelectItem value="PCR">PCR</SelectItem>
+                      <SelectItem value="HiPerGator">HiPerGator</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -292,6 +294,9 @@ const Equipment = () => {
             </TabsTrigger>
             <TabsTrigger value="pcr">
               PCR ({pcr.length})
+            </TabsTrigger>
+            <TabsTrigger value="hipergator">
+              HiPerGator ({hipergator.length})
             </TabsTrigger>
           </TabsList>
 
@@ -399,6 +404,29 @@ const Equipment = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {pcr.map(item => (
+                  <EquipmentCard 
+                    key={item.id} 
+                    equipment={item}
+                    onEdit={handleEditEquipment}
+                    onDelete={handleDeleteEquipment}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="hipergator" className="space-y-4">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : hipergator.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                No HiPerGator resources added yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {hipergator.map(item => (
                   <EquipmentCard 
                     key={item.id} 
                     equipment={item}

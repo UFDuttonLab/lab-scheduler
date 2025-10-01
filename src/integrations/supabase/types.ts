@@ -16,9 +16,11 @@ export type Database = {
     Tables: {
       bookings: {
         Row: {
+          cpu_count: number | null
           created_at: string
           end_time: string
           equipment_id: string
+          gpu_count: number | null
           id: string
           project_id: string | null
           purpose: string | null
@@ -27,9 +29,11 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          cpu_count?: number | null
           created_at?: string
           end_time: string
           equipment_id: string
+          gpu_count?: number | null
           id?: string
           project_id?: string | null
           purpose?: string | null
@@ -38,9 +42,11 @@ export type Database = {
           user_id: string
         }
         Update: {
+          cpu_count?: number | null
           created_at?: string
           end_time?: string
           equipment_id?: string
+          gpu_count?: number | null
           id?: string
           project_id?: string | null
           purpose?: string | null

@@ -7,9 +7,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { Equipment, Project, Booking } from "@/lib/types";
-import { format, isSameDay, parse, addMinutes } from "date-fns";
-import { Plus, Clock, Loader2, List, Grid3x3 } from "lucide-react";
+import { format, isSameDay, parse, addMinutes, addDays } from "date-fns";
+import { Plus, Clock, Loader2, List, Grid3x3, Cpu, Server } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,6 +31,8 @@ const Schedule = () => {
   const [selectedTime, setSelectedTime] = useState<string>("");
   const [duration, setDuration] = useState<string>("60");
   const [purpose, setPurpose] = useState<string>("");
+  const [cpuCount, setCpuCount] = useState<number>(1);
+  const [gpuCount, setGpuCount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   
   const [projects, setProjects] = useState<Project[]>([]);
@@ -50,6 +53,18 @@ const Schedule = () => {
       // Don't auto-open dialog - let user select date first
     }
   }, [searchParams, equipment]);
+
+  // Reset duration and resource counts when switching equipment types
+  useEffect(() => {
+    const selectedEq = equipment.find(e => e.id === selectedEquipment);
+    if (selectedEq?.type === "HiPerGator") {
+      setDuration("60"); // Reset to 1 hour for HiPerGator
+      setCpuCount(1);
+      setGpuCount(0);
+    } else if (selectedEquipment) {
+      setDuration("60"); // Reset to 1 hour for regular equipment
+    }
+  }, [selectedEquipment, equipment]);
 
   const fetchProjects = async () => {
     const { data, error } = await supabase
@@ -80,7 +95,7 @@ const Schedule = () => {
     const transformedEquipment: Equipment[] = (data || []).map(eq => ({
       id: eq.id,
       name: eq.name,
-      type: eq.type as "robot" | "equipment",
+      type: eq.type as "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator",
       status: eq.status as "available" | "in-use" | "maintenance",
       location: eq.location,
       description: eq.description || undefined,
@@ -125,7 +140,9 @@ const Schedule = () => {
           projectId: booking.project_id || undefined,
           projectName: project?.name || undefined,
           purpose: booking.purpose || undefined,
-          status: booking.status as "scheduled" | "in-progress" | "completed" | "cancelled"
+          status: booking.status as "scheduled" | "in-progress" | "completed" | "cancelled",
+          cpuCount: booking.cpu_count || undefined,
+          gpuCount: booking.gpu_count || undefined
         };
       });
 
@@ -162,6 +179,9 @@ const Schedule = () => {
       return;
     }
 
+    const selectedEq = equipment.find(e => e.id === selectedEquipment);
+    const isHiPerGator = selectedEq?.type === "HiPerGator";
+
     setLoading(true);
 
     try {
@@ -172,27 +192,67 @@ const Schedule = () => {
       
       const endTime = addMinutes(startTime, parseInt(duration));
 
+      // For HiPerGator, check resource availability
+      if (isHiPerGator) {
+        const overlappingBookings = bookings.filter(b => 
+          b.equipmentId === selectedEquipment &&
+          b.status !== 'cancelled' &&
+          (
+            (b.startTime <= startTime && b.endTime > startTime) ||
+            (b.startTime < endTime && b.endTime >= endTime) ||
+            (b.startTime >= startTime && b.endTime <= endTime)
+          )
+        );
+
+        const totalCpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.cpuCount || 0), 0);
+        const totalGpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.gpuCount || 0), 0);
+
+        if (totalCpuUsed + cpuCount > 32) {
+          toast.error(`Not enough CPUs available. Currently ${32 - totalCpuUsed} CPUs free during this time.`);
+          setLoading(false);
+          return;
+        }
+
+        if (totalGpuUsed + gpuCount > 2) {
+          toast.error(`Not enough GPUs available. Currently ${2 - totalGpuUsed} GPUs free during this time.`);
+          setLoading(false);
+          return;
+        }
+      }
+
       // Insert booking into database
+      const bookingData: any = {
+        equipment_id: selectedEquipment,
+        user_id: user.id,
+        project_id: selectedProject || null,
+        start_time: startTime.toISOString(),
+        end_time: endTime.toISOString(),
+        purpose: purpose || null,
+        status: 'scheduled'
+      };
+
+      // Add resource counts for HiPerGator
+      if (isHiPerGator) {
+        bookingData.cpu_count = cpuCount;
+        bookingData.gpu_count = gpuCount;
+      }
+
       const { error } = await supabase
         .from('bookings')
-        .insert({
-          equipment_id: selectedEquipment,
-          user_id: user.id,
-          project_id: selectedProject || null,
-          start_time: startTime.toISOString(),
-          end_time: endTime.toISOString(),
-          purpose: purpose || null,
-          status: 'scheduled'
-        });
+        .insert(bookingData);
 
       if (error) throw error;
 
-      toast.success("Equipment booked successfully!");
+      toast.success(isHiPerGator 
+        ? `HiPerGator booked: ${cpuCount} CPUs, ${gpuCount} GPUs` 
+        : "Equipment booked successfully!");
       setIsBookingDialogOpen(false);
       setSelectedProject("");
       setSelectedEquipment("");
       setSelectedTime("");
       setPurpose("");
+      setCpuCount(1);
+      setGpuCount(0);
       
       // Refresh bookings
       fetchBookings();
@@ -208,7 +268,19 @@ const Schedule = () => {
     return `${hour.toString().padStart(2, '0')}:00`;
   });
 
-  const durationOptions = [
+  const selectedEq = equipment.find(e => e.id === selectedEquipment);
+  const isHiPerGator = selectedEq?.type === "HiPerGator";
+
+  const durationOptions = isHiPerGator ? [
+    { value: "60", label: "1 hour" },
+    { value: "120", label: "2 hours" },
+    { value: "240", label: "4 hours" },
+    { value: "480", label: "8 hours" },
+    { value: "1440", label: "1 day" },
+    { value: "2880", label: "2 days" },
+    { value: "4320", label: "3 days" },
+    { value: "10080", label: "1 week" },
+  ] : [
     { value: "30", label: "30 minutes" },
     { value: "60", label: "1 hour" },
     { value: "90", label: "1.5 hours" },
@@ -216,6 +288,38 @@ const Schedule = () => {
     { value: "180", label: "3 hours" },
     { value: "240", label: "4 hours" },
   ];
+
+  // Calculate available HiPerGator resources if applicable
+  const getAvailableResources = () => {
+    if (!isHiPerGator || !selectedDate || !selectedTime) {
+      return { availableCpus: 32, availableGpus: 2 };
+    }
+
+    const [hours, minutes] = selectedTime.split(':').map(Number);
+    const startTime = new Date(selectedDate);
+    startTime.setHours(hours, minutes, 0, 0);
+    const endTime = addMinutes(startTime, parseInt(duration));
+
+    const overlappingBookings = bookings.filter(b => 
+      b.equipmentId === selectedEquipment &&
+      b.status !== 'cancelled' &&
+      (
+        (b.startTime <= startTime && b.endTime > startTime) ||
+        (b.startTime < endTime && b.endTime >= endTime) ||
+        (b.startTime >= startTime && b.endTime <= endTime)
+      )
+    );
+
+    const usedCpus = overlappingBookings.reduce((sum, b) => sum + (b.cpuCount || 0), 0);
+    const usedGpus = overlappingBookings.reduce((sum, b) => sum + (b.gpuCount || 0), 0);
+
+    return {
+      availableCpus: 32 - usedCpus,
+      availableGpus: 2 - usedGpus
+    };
+  };
+
+  const { availableCpus, availableGpus } = getAvailableResources();
 
   return (
     <div className="min-h-screen bg-background">
@@ -305,14 +409,26 @@ const Schedule = () => {
                                   <p className="font-medium">{booking.studentName}</p>
                                 </div>
                                 <p className="text-muted-foreground">{booking.studentEmail}</p>
-                                {booking.projectName && (
-                                  <p className="mt-2 text-sm">
-                                    <span className="font-medium">Project:</span> {booking.projectName}
-                                  </p>
-                                )}
-                                {booking.purpose && (
-                                  <p className="mt-1 text-muted-foreground">{booking.purpose}</p>
-                                )}
+                                 {booking.projectName && (
+                                   <p className="mt-2 text-sm">
+                                     <span className="font-medium">Project:</span> {booking.projectName}
+                                   </p>
+                                 )}
+                                 {booking.cpuCount !== undefined && (
+                                   <p className="mt-2 text-sm flex items-center gap-2">
+                                     <Cpu className="w-3 h-3" />
+                                     <span><span className="font-medium">CPUs:</span> {booking.cpuCount}</span>
+                                     {booking.gpuCount !== undefined && (
+                                       <>
+                                         <Server className="w-3 h-3 ml-2" />
+                                         <span><span className="font-medium">GPUs:</span> {booking.gpuCount}</span>
+                                       </>
+                                     )}
+                                   </p>
+                                 )}
+                                 {booking.purpose && (
+                                   <p className="mt-1 text-muted-foreground">{booking.purpose}</p>
+                                 )}
                               </div>
                             </Card>
                           );
@@ -585,7 +701,65 @@ const Schedule = () => {
                 />
               </div>
 
-              <Button 
+              {/* HiPerGator Resource Allocation */}
+              {isHiPerGator && (
+                <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Server className="w-4 h-4" />
+                    <span>Resource Allocation</span>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="flex items-center gap-2">
+                          <Cpu className="w-4 h-4" />
+                          CPUs: {cpuCount}
+                        </Label>
+                        <span className="text-xs text-muted-foreground">
+                          {availableCpus} available
+                        </span>
+                      </div>
+                      <Slider
+                        value={[cpuCount]}
+                        onValueChange={(value) => setCpuCount(value[0])}
+                        min={1}
+                        max={Math.min(32, availableCpus)}
+                        step={1}
+                        className="w-full"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="flex items-center gap-2">
+                          <Server className="w-4 h-4" />
+                          GPUs: {gpuCount}
+                        </Label>
+                        <span className="text-xs text-muted-foreground">
+                          {availableGpus} available
+                        </span>
+                      </div>
+                      <Slider
+                        value={[gpuCount]}
+                        onValueChange={(value) => setGpuCount(value[0])}
+                        min={0}
+                        max={Math.min(2, availableGpus)}
+                        step={1}
+                        className="w-full"
+                      />
+                    </div>
+
+                    {(availableCpus < 1 || availableGpus < 1) && (
+                      <p className="text-xs text-amber-600">
+                        Limited resources available during this time period
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <Button
                 type="submit" 
                 className="w-full" 
                 disabled={!selectedProject || !selectedEquipment || !selectedTime || loading}

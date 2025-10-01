@@ -1,7 +1,7 @@
 export interface Equipment {
   id: string;
   name: string;
-  type: "robot" | "equipment" | "quantification" | "PCR";
+  type: "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator";
   status: "available" | "in-use" | "maintenance";
   location: string;
   description?: string;
@@ -50,6 +50,8 @@ export interface Booking {
   projectName?: string;
   purpose?: string;
   status: "scheduled" | "in-progress" | "completed" | "cancelled";
+  cpuCount?: number; // For HiPerGator bookings
+  gpuCount?: number; // For HiPerGator bookings
 }
 
 export interface TimeSlot {
