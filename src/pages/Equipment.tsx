@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Navigation } from "@/components/Navigation";
 import { EquipmentCard } from "@/components/EquipmentCard";
 import { Button } from "@/components/ui/button";
@@ -9,22 +9,128 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { mockEquipment, mockProjects } from "@/lib/mockData";
-import { Equipment as EquipmentType } from "@/lib/types";
-import { Plus, Settings } from "lucide-react";
+import { Equipment as EquipmentType, Project } from "@/lib/types";
+import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useForm } from "react-hook-form";
+
+interface EquipmentFormData {
+  name: string;
+  type: "robot" | "equipment";
+  location: string;
+  status: "available" | "maintenance";
+  description?: string;
+  projectIds: string[];
+}
 
 const Equipment = () => {
-  const [equipment, setEquipment] = useState(mockEquipment);
+  const [equipment, setEquipment] = useState<EquipmentType[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const { register, handleSubmit, reset, watch, setValue } = useForm<EquipmentFormData>({
+    defaultValues: {
+      status: "available",
+      type: "robot",
+      projectIds: []
+    }
+  });
+
+  const selectedProjects = watch("projectIds") || [];
+
+  useEffect(() => {
+    fetchEquipment();
+    fetchProjects();
+  }, []);
+
+  const fetchEquipment = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("equipment")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setEquipment((data || []) as EquipmentType[]);
+    } catch (error) {
+      console.error("Error fetching equipment:", error);
+      toast.error("Failed to load equipment");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchProjects = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .order("name");
+
+      if (error) throw error;
+      setProjects(data || []);
+    } catch (error) {
+      console.error("Error fetching projects:", error);
+      toast.error("Failed to load projects");
+    }
+  };
+
+  const handleAddEquipment = async (formData: EquipmentFormData) => {
+    setIsSubmitting(true);
+    try {
+      // Insert equipment
+      const { data: newEquipment, error: equipmentError } = await supabase
+        .from("equipment")
+        .insert({
+          name: formData.name,
+          type: formData.type,
+          location: formData.location,
+          status: formData.status,
+          description: formData.description || null
+        })
+        .select()
+        .single();
+
+      if (equipmentError) throw equipmentError;
+
+      // Insert equipment-project relationships
+      if (formData.projectIds.length > 0) {
+        const relationships = formData.projectIds.map(projectId => ({
+          equipment_id: newEquipment.id,
+          project_id: projectId
+        }));
+
+        const { error: relationError } = await supabase
+          .from("equipment_projects")
+          .insert(relationships);
+
+        if (relationError) throw relationError;
+      }
+
+      toast.success("Equipment added successfully!");
+      setEquipment(prev => [newEquipment as EquipmentType, ...prev]);
+      setIsAddDialogOpen(false);
+      reset();
+    } catch (error) {
+      console.error("Error adding equipment:", error);
+      toast.error("Failed to add equipment");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const robots = equipment.filter(e => e.type === "robot");
   const otherEquipment = equipment.filter(e => e.type === "equipment");
 
-  const handleAddEquipment = (e: React.FormEvent) => {
-    e.preventDefault();
-    toast.success("Equipment added successfully!");
-    setIsAddDialogOpen(false);
+  const toggleProject = (projectId: string) => {
+    const current = selectedProjects;
+    const updated = current.includes(projectId)
+      ? current.filter(id => id !== projectId)
+      : [...current, projectId];
+    setValue("projectIds", updated);
   };
 
   return (
@@ -55,16 +161,23 @@ const Equipment = () => {
                 </DialogDescription>
               </DialogHeader>
               
-              <form onSubmit={handleAddEquipment} className="space-y-4">
+              <form onSubmit={handleSubmit(handleAddEquipment)} className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Equipment Name</Label>
-                  <Input placeholder="e.g., Robotic Arm Delta" required />
+                  <Label htmlFor="name">Equipment Name</Label>
+                  <Input 
+                    id="name"
+                    placeholder="e.g., Robotic Arm Delta" 
+                    {...register("name", { required: true })}
+                  />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Type</Label>
-                  <Select>
-                    <SelectTrigger>
+                  <Label htmlFor="type">Type</Label>
+                  <Select 
+                    onValueChange={(value) => setValue("type", value as "robot" | "equipment")}
+                    defaultValue="robot"
+                  >
+                    <SelectTrigger id="type">
                       <SelectValue placeholder="Select type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -75,14 +188,21 @@ const Equipment = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Location</Label>
-                  <Input placeholder="e.g., Lab Room A-101" required />
+                  <Label htmlFor="location">Location</Label>
+                  <Input 
+                    id="location"
+                    placeholder="e.g., Lab Room A-101" 
+                    {...register("location", { required: true })}
+                  />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select defaultValue="available">
-                    <SelectTrigger>
+                  <Label htmlFor="status">Status</Label>
+                  <Select 
+                    onValueChange={(value) => setValue("status", value as "available" | "maintenance")}
+                    defaultValue="available"
+                  >
+                    <SelectTrigger id="status">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -93,33 +213,50 @@ const Equipment = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Description (Optional)</Label>
+                  <Label htmlFor="description">Description (Optional)</Label>
                   <Textarea 
+                    id="description"
                     placeholder="Brief description of the equipment" 
                     rows={3}
+                    {...register("description")}
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Compatible Projects</Label>
-                  <div className="space-y-2 border rounded-md p-3">
-                    {mockProjects.map(project => (
-                      <div key={project.id} className="flex items-center space-x-2">
-                        <Checkbox id={`project-${project.id}`} />
-                        <label
-                          htmlFor={`project-${project.id}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          {project.name}
-                        </label>
-                      </div>
-                    ))}
+                {projects.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Compatible Projects</Label>
+                    <div className="space-y-2 border rounded-md p-3 max-h-40 overflow-y-auto">
+                      {projects.map(project => (
+                        <div key={project.id} className="flex items-center space-x-2">
+                          <Checkbox 
+                            id={`project-${project.id}`}
+                            checked={selectedProjects.includes(project.id)}
+                            onCheckedChange={() => toggleProject(project.id)}
+                          />
+                          <label
+                            htmlFor={`project-${project.id}`}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                          >
+                            {project.name}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <Button type="submit" className="w-full">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Equipment
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Equipment
+                    </>
+                  )}
                 </Button>
               </form>
             </DialogContent>
@@ -140,27 +277,57 @@ const Equipment = () => {
           </TabsList>
 
           <TabsContent value="all" className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {equipment.map(item => (
-                <EquipmentCard key={item.id} equipment={item} />
-              ))}
-            </div>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : equipment.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                No equipment added yet. Click "Add Equipment" to get started.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {equipment.map(item => (
+                  <EquipmentCard key={item.id} equipment={item} />
+                ))}
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="robots" className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {robots.map(item => (
-                <EquipmentCard key={item.id} equipment={item} />
-              ))}
-            </div>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : robots.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                No robots added yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {robots.map(item => (
+                  <EquipmentCard key={item.id} equipment={item} />
+                ))}
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="equipment" className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {otherEquipment.map(item => (
-                <EquipmentCard key={item.id} equipment={item} />
-              ))}
-            </div>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : otherEquipment.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                No equipment added yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {otherEquipment.map(item => (
+                  <EquipmentCard key={item.id} equipment={item} />
+                ))}
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </main>
