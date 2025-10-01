@@ -28,6 +28,7 @@ export interface Booking {
   equipmentName: string;
   studentName: string;
   studentEmail: string;
+  studentSpiritAnimal?: string;
   startTime: Date;
   endTime: Date;
   duration: number; // Duration in minutes

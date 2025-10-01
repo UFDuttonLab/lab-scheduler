@@ -7,20 +7,43 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Project } from "@/lib/types";
-import { Plus, Trash2, Edit, Loader2, Pencil } from "lucide-react";
+import { Plus, Trash2, Edit, Loader2, Pencil, User } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { DialogFooter } from "@/components/ui/dialog";
+import { useAuth } from "@/contexts/AuthContext";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface UserProfile {
   id: string;
   email: string;
   full_name?: string;
+  spirit_animal?: string;
 }
 
+const SPIRIT_ANIMALS = [
+  { value: "🦁", label: "🦁 Lion" },
+  { value: "🐯", label: "🐯 Tiger" },
+  { value: "🐻", label: "🐻 Bear" },
+  { value: "🦊", label: "🦊 Fox" },
+  { value: "🐺", label: "🐺 Wolf" },
+  { value: "🦅", label: "🦅 Eagle" },
+  { value: "🦉", label: "🦉 Owl" },
+  { value: "🐬", label: "🐬 Dolphin" },
+  { value: "🦈", label: "🦈 Shark" },
+  { value: "🐉", label: "🐉 Dragon" },
+  { value: "🦄", label: "🦄 Unicorn" },
+  { value: "🐼", label: "🐼 Panda" },
+  { value: "🦘", label: "🦘 Kangaroo" },
+  { value: "🦒", label: "🦒 Giraffe" },
+  { value: "🐘", label: "🐘 Elephant" },
+];
+
 const Settings = () => {
+  const { user: currentUser } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
   const [isAddProjectDialogOpen, setIsAddProjectDialogOpen] = useState(false);
   const [isEditUserDialogOpen, setIsEditUserDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -33,7 +56,8 @@ const Settings = () => {
   useEffect(() => {
     fetchProjects();
     fetchUsers();
-  }, []);
+    fetchCurrentUserProfile();
+  }, [currentUser]);
 
   useEffect(() => {
     if (editingProject) {
@@ -76,6 +100,42 @@ const Settings = () => {
     } catch (error) {
       console.error("Error fetching users:", error);
       toast.error("Failed to load users");
+    }
+  };
+
+  const fetchCurrentUserProfile = async () => {
+    if (!currentUser) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", currentUser.id)
+        .single();
+
+      if (error) throw error;
+      setCurrentUserProfile(data);
+    } catch (error) {
+      console.error("Error fetching current user profile:", error);
+    }
+  };
+
+  const handleUpdateSpiritAnimal = async (spiritAnimal: string) => {
+    if (!currentUser) return;
+
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ spirit_animal: spiritAnimal })
+        .eq("id", currentUser.id);
+
+      if (error) throw error;
+
+      setCurrentUserProfile(prev => prev ? { ...prev, spirit_animal: spiritAnimal } : null);
+      toast.success("Spirit animal updated!");
+    } catch (error) {
+      console.error("Error updating spirit animal:", error);
+      toast.error("Failed to update spirit animal");
     }
   };
 
@@ -156,19 +216,23 @@ const Settings = () => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const fullName = formData.get("fullName") as string;
+    const spiritAnimal = formData.get("spiritAnimal") as string;
 
     if (!editingUser) return;
 
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ full_name: fullName })
+        .update({ 
+          full_name: fullName,
+          spirit_animal: spiritAnimal || null
+        })
         .eq("id", editingUser.id);
 
       if (error) throw error;
 
       setUsers(prev => prev.map(u => 
-        u.id === editingUser.id ? { ...u, full_name: fullName } : u
+        u.id === editingUser.id ? { ...u, full_name: fullName, spirit_animal: spiritAnimal } : u
       ));
       
       setIsEditUserDialogOpen(false);
@@ -219,6 +283,54 @@ const Settings = () => {
           </div>
         ) : (
           <div className="space-y-8">
+          {/* My Profile Section */}
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-bold mb-1">My Profile</h2>
+                <p className="text-sm text-muted-foreground">
+                  Personalize your profile with a spirit animal
+                </p>
+              </div>
+            </div>
+            
+            {currentUserProfile && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-4xl">
+                    {currentUserProfile.spirit_animal || <User className="w-8 h-8" />}
+                  </div>
+                  <div>
+                    <p className="font-semibold">{currentUserProfile.full_name || "No name set"}</p>
+                    <p className="text-sm text-muted-foreground">{currentUserProfile.email}</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>Your Spirit Animal</Label>
+                  <Select 
+                    value={currentUserProfile.spirit_animal || ""} 
+                    onValueChange={handleUpdateSpiritAnimal}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose your spirit animal" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SPIRIT_ANIMALS.map(animal => (
+                        <SelectItem key={animal.value} value={animal.value}>
+                          {animal.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Your spirit animal will appear next to your name throughout the app
+                  </p>
+                </div>
+              </div>
+            )}
+          </Card>
+
           <Card className="p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -359,11 +471,16 @@ const Settings = () => {
                 users.map(user => (
                   <Card key={user.id} className="p-4">
                     <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h3 className="font-semibold mb-1">
-                          {user.full_name || "No name set"}
-                        </h3>
-                        <p className="text-sm text-muted-foreground">{user.email}</p>
+                      <div className="flex items-center gap-2 flex-1">
+                        {user.spirit_animal && (
+                          <span className="text-2xl">{user.spirit_animal}</span>
+                        )}
+                        <div>
+                          <h3 className="font-semibold mb-1">
+                            {user.full_name || "No name set"}
+                          </h3>
+                          <p className="text-sm text-muted-foreground">{user.email}</p>
+                        </div>
                       </div>
                       <div className="flex gap-2">
                         <Button
@@ -424,6 +541,21 @@ const Settings = () => {
                   placeholder="Enter full name"
                   required
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="spiritAnimal">Spirit Animal</Label>
+                <Select name="spiritAnimal" defaultValue={editingUser?.spirit_animal || ""}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose spirit animal" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SPIRIT_ANIMALS.map(animal => (
+                      <SelectItem key={animal.value} value={animal.value}>
+                        {animal.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <DialogFooter>
                 <Button type="submit">Save Changes</Button>

@@ -32,7 +32,7 @@ const Analytics = () => {
 
       const { data: equipmentData } = await supabase.from('equipment').select('*');
       const { data: projectsData } = await supabase.from('projects').select('*');
-      const { data: profilesData } = await supabase.from('profiles').select('*');
+      const { data: profilesData } = await supabase.from('profiles').select('id, email, full_name, spirit_animal');
 
       // Create lookup maps
       const equipmentMap = new Map(equipmentData?.map(e => [e.id, e]) || []);

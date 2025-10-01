@@ -91,7 +91,11 @@ export const BookingCard = ({ booking, onDelete }: BookingCardProps) => {
 
       <div className="space-y-1">
         <div className="flex items-center gap-2 text-sm">
-          <User className="w-3 h-3 text-muted-foreground" />
+          {booking.studentSpiritAnimal ? (
+            <span className="text-lg">{booking.studentSpiritAnimal}</span>
+          ) : (
+            <User className="w-3 h-3 text-muted-foreground" />
+          )}
           <span>{booking.studentName}</span>
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">

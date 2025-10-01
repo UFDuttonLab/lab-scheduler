@@ -32,7 +32,7 @@ const History = () => {
 
       const { data: equipmentData } = await supabase.from('equipment').select('*');
       const { data: projectsData } = await supabase.from('projects').select('*');
-      const { data: profilesData } = await supabase.from('profiles').select('*');
+      const { data: profilesData } = await supabase.from('profiles').select('id, email, full_name, spirit_animal');
 
       // Create lookup maps
       const equipmentMap = new Map(equipmentData?.map(e => [e.id, e]) || []);
@@ -51,6 +51,7 @@ const History = () => {
           equipmentName: equipment?.name || 'Unknown',
           studentName: profile?.full_name || profile?.email?.split('@')[0] || 'Unknown',
           studentEmail: profile?.email || 'Unknown',
+          studentSpiritAnimal: profile?.spirit_animal || undefined,
           startTime: new Date(booking.start_time),
           endTime: new Date(booking.end_time),
           duration: Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000),
