@@ -63,7 +63,6 @@ export const mockEquipment: Equipment[] = [
     status: "available",
     location: "Dutton Lab - Room 101",
     description: "High-precision quantum state measurement",
-    compatibleProjects: ["p1", "p2"],
   },
   {
     id: "2",
@@ -72,7 +71,6 @@ export const mockEquipment: Equipment[] = [
     status: "in-use",
     location: "Dutton Lab - Room 102",
     description: "Optical characterization and testing",
-    compatibleProjects: ["p2", "p4"],
   },
   {
     id: "3",
@@ -81,7 +79,6 @@ export const mockEquipment: Equipment[] = [
     status: "available",
     location: "Dutton Lab - Room 103",
     description: "6-axis precision robotic arm for sample handling",
-    compatibleProjects: ["p1", "p3", "p4"],
   },
   {
     id: "4",
@@ -90,7 +87,6 @@ export const mockEquipment: Equipment[] = [
     status: "available",
     location: "Dutton Lab - Room 104",
     description: "Ultra-low temperature testing environment",
-    compatibleProjects: ["p1"],
   },
   {
     id: "5",
@@ -99,7 +95,6 @@ export const mockEquipment: Equipment[] = [
     status: "maintenance",
     location: "Dutton Lab - Room 103",
     description: "High-speed automated testing robot",
-    compatibleProjects: ["p2", "p3"],
   },
   {
     id: "6",
@@ -108,7 +103,6 @@ export const mockEquipment: Equipment[] = [
     status: "available",
     location: "Dutton Lab - Room 105",
     description: "Advanced laser spectrum analysis",
-    compatibleProjects: ["p2", "p4"],
   },
 ];
 

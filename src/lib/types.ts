@@ -5,7 +5,6 @@ export interface Equipment {
   status: "available" | "in-use" | "maintenance";
   location: string;
   description?: string;
-  compatibleProjects?: string[]; // Array of project IDs
 }
 
 export interface Project {

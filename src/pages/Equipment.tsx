@@ -8,8 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Equipment as EquipmentType, Project } from "@/lib/types";
+import { Equipment as EquipmentType } from "@/lib/types";
 import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,22 +20,19 @@ interface EquipmentFormData {
   location: string;
   status: "available" | "maintenance";
   description?: string;
-  projectIds: string[];
 }
 
 const Equipment = () => {
   const [equipment, setEquipment] = useState<EquipmentType[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingEquipment, setEditingEquipment] = useState<EquipmentType | null>(null);
   
-  const { register, handleSubmit, reset, watch, setValue } = useForm<EquipmentFormData>({
+  const { register, handleSubmit, reset, setValue } = useForm<EquipmentFormData>({
     defaultValues: {
       status: "available",
-      type: "robot",
-      projectIds: []
+      type: "robot"
     }
   });
 
@@ -47,8 +43,7 @@ const Equipment = () => {
         type: editingEquipment.type,
         location: editingEquipment.location,
         status: editingEquipment.status as "available" | "maintenance",
-        description: editingEquipment.description || "",
-        projectIds: editingEquipment.compatibleProjects || []
+        description: editingEquipment.description || ""
       });
     } else {
       reset({
@@ -56,17 +51,13 @@ const Equipment = () => {
         type: "robot",
         location: "",
         status: "available",
-        description: "",
-        projectIds: []
+        description: ""
       });
     }
   }, [editingEquipment, reset]);
 
-  const selectedProjects = watch("projectIds") || [];
-
   useEffect(() => {
     fetchEquipment();
-    fetchProjects();
   }, []);
 
   const fetchEquipment = async () => {
@@ -83,21 +74,6 @@ const Equipment = () => {
       toast.error("Failed to load equipment");
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const fetchProjects = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("projects")
-        .select("*")
-        .order("name");
-
-      if (error) throw error;
-      setProjects(data || []);
-    } catch (error) {
-      console.error("Error fetching projects:", error);
-      toast.error("Failed to load projects");
     }
   };
 
@@ -119,30 +95,10 @@ const Equipment = () => {
 
         if (equipmentError) throw equipmentError;
 
-        // Delete old relationships
-        await supabase
-          .from("equipment_projects")
-          .delete()
-          .eq("equipment_id", editingEquipment.id);
-
-        // Insert new relationships
-        if (formData.projectIds.length > 0) {
-          const relationships = formData.projectIds.map(projectId => ({
-            equipment_id: editingEquipment.id,
-            project_id: projectId
-          }));
-
-          const { error: relationError } = await supabase
-            .from("equipment_projects")
-            .insert(relationships);
-
-          if (relationError) throw relationError;
-        }
-
         toast.success("Equipment updated successfully!");
         setEquipment(prev => prev.map(eq => 
           eq.id === editingEquipment.id 
-            ? { ...eq, ...formData, compatibleProjects: formData.projectIds } as EquipmentType
+            ? { ...eq, ...formData } as EquipmentType
             : eq
         ));
       } else {
@@ -160,20 +116,6 @@ const Equipment = () => {
           .single();
 
         if (equipmentError) throw equipmentError;
-
-        // Insert equipment-project relationships
-        if (formData.projectIds.length > 0) {
-          const relationships = formData.projectIds.map(projectId => ({
-            equipment_id: newEquipment.id,
-            project_id: projectId
-          }));
-
-          const { error: relationError } = await supabase
-            .from("equipment_projects")
-            .insert(relationships);
-
-          if (relationError) throw relationError;
-        }
 
         toast.success("Equipment added successfully!");
         setEquipment(prev => [newEquipment as EquipmentType, ...prev]);
@@ -216,14 +158,6 @@ const Equipment = () => {
 
   const robots = equipment.filter(e => e.type === "robot");
   const otherEquipment = equipment.filter(e => e.type === "equipment");
-
-  const toggleProject = (projectId: string) => {
-    const current = selectedProjects;
-    const updated = current.includes(projectId)
-      ? current.filter(id => id !== projectId)
-      : [...current, projectId];
-    setValue("projectIds", updated);
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -319,29 +253,6 @@ const Equipment = () => {
                     {...register("description")}
                   />
                 </div>
-
-                {projects.length > 0 && (
-                  <div className="space-y-2">
-                    <Label>Compatible Projects</Label>
-                    <div className="space-y-2 border rounded-md p-3 max-h-40 overflow-y-auto">
-                      {projects.map(project => (
-                        <div key={project.id} className="flex items-center space-x-2">
-                          <Checkbox 
-                            id={`project-${project.id}`}
-                            checked={selectedProjects.includes(project.id)}
-                            onCheckedChange={() => toggleProject(project.id)}
-                          />
-                          <label
-                            htmlFor={`project-${project.id}`}
-                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                          >
-                            {project.name}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 <Button type="submit" className="w-full" disabled={isSubmitting}>
                   {isSubmitting ? (
