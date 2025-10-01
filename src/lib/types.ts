@@ -1,7 +1,7 @@
 export interface Equipment {
   id: string;
   name: string;
-  type: "robot" | "equipment";
+  type: "robot" | "equipment" | "quantification" | "PCR";
   status: "available" | "in-use" | "maintenance";
   location: string;
   description?: string;

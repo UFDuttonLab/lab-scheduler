@@ -16,7 +16,7 @@ import { useForm } from "react-hook-form";
 
 interface EquipmentFormData {
   name: string;
-  type: "robot" | "equipment";
+  type: "robot" | "equipment" | "quantification" | "PCR";
   location: string;
   status: "available" | "maintenance";
   description?: string;
@@ -158,6 +158,8 @@ const Equipment = () => {
 
   const robots = equipment.filter(e => e.type === "robot");
   const otherEquipment = equipment.filter(e => e.type === "equipment");
+  const quantification = equipment.filter(e => e.type === "quantification");
+  const pcr = equipment.filter(e => e.type === "PCR");
 
   return (
     <div className="min-h-screen bg-background">
@@ -206,7 +208,7 @@ const Equipment = () => {
                 <div className="space-y-2">
                   <Label htmlFor="type">Type</Label>
                   <Select 
-                    onValueChange={(value) => setValue("type", value as "robot" | "equipment")}
+                    onValueChange={(value) => setValue("type", value as "robot" | "equipment" | "quantification" | "PCR")}
                     defaultValue="robot"
                   >
                     <SelectTrigger id="type">
@@ -215,6 +217,8 @@ const Equipment = () => {
                     <SelectContent>
                       <SelectItem value="robot">Robot</SelectItem>
                       <SelectItem value="equipment">Equipment</SelectItem>
+                      <SelectItem value="quantification">Quantification</SelectItem>
+                      <SelectItem value="PCR">PCR</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -283,6 +287,12 @@ const Equipment = () => {
             <TabsTrigger value="equipment">
               Equipment ({otherEquipment.length})
             </TabsTrigger>
+            <TabsTrigger value="quantification">
+              Quantification ({quantification.length})
+            </TabsTrigger>
+            <TabsTrigger value="pcr">
+              PCR ({pcr.length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="all" className="space-y-4">
@@ -343,6 +353,52 @@ const Equipment = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {otherEquipment.map(item => (
+                  <EquipmentCard 
+                    key={item.id} 
+                    equipment={item}
+                    onEdit={handleEditEquipment}
+                    onDelete={handleDeleteEquipment}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="quantification" className="space-y-4">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : quantification.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                No quantification equipment added yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {quantification.map(item => (
+                  <EquipmentCard 
+                    key={item.id} 
+                    equipment={item}
+                    onEdit={handleEditEquipment}
+                    onDelete={handleDeleteEquipment}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="pcr" className="space-y-4">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : pcr.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                No PCR equipment added yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {pcr.map(item => (
                   <EquipmentCard 
                     key={item.id} 
                     equipment={item}
