@@ -438,7 +438,7 @@ const Schedule = () => {
     if (!isHiPerGator || !bookingDate || !selectedTime) {
       const maxCpus = selectedEq?.maxCpuCount || 32;
       const maxGpus = selectedEq?.maxGpuCount || 4;
-      return { availableCpus: maxCpus, availableGpus: maxGpus };
+      return { availableCpu: maxCpus, availableGpu: maxGpus };
     }
 
     const [hours, minutes] = selectedTime.split(':').map(Number);
@@ -463,12 +463,12 @@ const Schedule = () => {
     const maxGpus = selectedEq?.maxGpuCount || 4;
 
     return {
-      availableCpus: maxCpus - usedCpus,
-      availableGpus: maxGpus - usedGpus
+      availableCpu: maxCpus - usedCpus,
+      availableGpu: maxGpus - usedGpus
     };
   };
 
-  const { availableCpus, availableGpus } = getAvailableResources();
+  const { availableCpu, availableGpu } = getAvailableResources();
 
   return (
     <div className="min-h-screen bg-background">
@@ -541,13 +541,13 @@ const Schedule = () => {
                               <div className="flex items-start justify-between mb-2">
                                 <div>
                                   <h4 className="font-semibold">{booking.equipmentName}</h4>
-                                  <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                                    <Clock className="w-3 h-3" />
-                                    <span>
-                                      {format(booking.startTime, "h:mm a")} - {format(booking.endTime, "h:mm a")}
-                                    </span>
-                                    <span className="text-xs">({booking.duration} min)</span>
-                                  </div>
+                                   <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                                     <Clock className="w-3 h-3" />
+                                     <span>
+                                       {format(booking.startTime, "MMM d, h:mm a")} - {format(booking.endTime, "h:mm a")}
+                                     </span>
+                                     <span className="text-xs">({booking.duration} min)</span>
+                                   </div>
                                 </div>
                                 <Badge className="bg-primary text-primary-foreground">
                                   {booking.status}
@@ -960,9 +960,21 @@ const Schedule = () => {
               {/* HiPerGator Resource Allocation */}
               {isHiPerGator && (
                 <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Server className="w-4 h-4" />
-                    <span>Resource Allocation</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Server className="w-4 h-4" />
+                      <span>Resource Allocation</span>
+                    </div>
+                    {(() => {
+                      const cpuPercent = ((availableCpu / (selectedEq?.maxCpuCount || 32)) * 100);
+                      const gpuPercent = ((availableGpu / (selectedEq?.maxGpuCount || 4)) * 100);
+                      const status = cpuPercent > 50 && gpuPercent > 50 ? 'high' : cpuPercent > 20 && gpuPercent > 20 ? 'medium' : 'low';
+                      return (
+                        <Badge variant={status === 'high' ? 'default' : status === 'medium' ? 'secondary' : 'destructive'} className="text-xs">
+                          {availableCpu} CPUs, {availableGpu} GPUs available
+                        </Badge>
+                      );
+                    })()}
                   </div>
                   
                   <div className="space-y-3">
@@ -970,17 +982,14 @@ const Schedule = () => {
                       <div className="flex items-center justify-between">
                         <Label className="flex items-center gap-2">
                           <Cpu className="w-4 h-4" />
-                          CPUs: {cpuCount}
+                          CPUs: {cpuCount} of {availableCpu}
                         </Label>
-                        <span className="text-xs text-muted-foreground">
-                          {availableCpus} available
-                        </span>
                       </div>
                       <Slider
                         value={[cpuCount]}
                         onValueChange={(value) => setCpuCount(value[0])}
                         min={1}
-                        max={Math.min(selectedEq?.maxCpuCount || 32, availableCpus)}
+                        max={Math.max(1, Math.min(selectedEq?.maxCpuCount || 32, availableCpu))}
                         step={1}
                         className="w-full"
                       />
@@ -990,26 +999,24 @@ const Schedule = () => {
                       <div className="flex items-center justify-between">
                         <Label className="flex items-center gap-2">
                           <Server className="w-4 h-4" />
-                          GPUs: {gpuCount}
+                          GPUs: {gpuCount} of {availableGpu}
                         </Label>
-                        <span className="text-xs text-muted-foreground">
-                          {availableGpus} available
-                        </span>
                       </div>
                       <Slider
                         value={[gpuCount]}
                         onValueChange={(value) => setGpuCount(value[0])}
                         min={0}
-                        max={Math.min(selectedEq?.maxGpuCount || 4, availableGpus)}
+                        max={Math.max(0, Math.min(selectedEq?.maxGpuCount || 4, availableGpu))}
                         step={1}
                         className="w-full"
                       />
                     </div>
 
-                    {(availableCpus < 1 || availableGpus < 1) && (
-                      <p className="text-xs text-amber-600">
-                        Limited resources available during this time period
-                      </p>
+                    {(availableCpu < (selectedEq?.maxCpuCount || 32) * 0.2 || availableGpu < (selectedEq?.maxGpuCount || 4) * 0.2) && (
+                      <div className="flex items-start gap-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-700 dark:text-amber-400">
+                        <Server className="w-4 h-4 shrink-0 mt-0.5" />
+                        <p>Limited resources available during this time. Consider selecting a different time slot for more capacity.</p>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1250,42 +1257,60 @@ const Schedule = () => {
               </div>
 
               {isHiPerGator && (
-                <div className="space-y-3 p-3 border rounded-lg bg-muted/50">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="flex items-center gap-2">
-                        <Cpu className="w-4 h-4" />
-                        CPUs: {cpuCount}
-                      </Label>
-                      <span className="text-xs text-muted-foreground">
-                        {availableCpus} available
-                      </span>
+                <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Server className="w-4 h-4" />
+                      <span>Resource Allocation</span>
                     </div>
-                    <Slider
-                      value={[cpuCount]}
-                      onValueChange={(value) => setCpuCount(value[0])}
-                      min={1}
-                      max={Math.min(selectedEq?.maxCpuCount || 32, availableCpus)}
-                      step={1}
-                    />
+                    {(() => {
+                      const cpuPercent = ((availableCpu / (selectedEq?.maxCpuCount || 32)) * 100);
+                      const gpuPercent = ((availableGpu / (selectedEq?.maxGpuCount || 4)) * 100);
+                      const status = cpuPercent > 50 && gpuPercent > 50 ? 'high' : cpuPercent > 20 && gpuPercent > 20 ? 'medium' : 'low';
+                      return (
+                        <Badge variant={status === 'high' ? 'default' : status === 'medium' ? 'secondary' : 'destructive'} className="text-xs">
+                          {availableCpu} CPUs, {availableGpu} GPUs available
+                        </Badge>
+                      );
+                    })()}
                   </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="flex items-center gap-2">
-                        <Server className="w-4 h-4" />
-                        GPUs: {gpuCount}
-                      </Label>
-                      <span className="text-xs text-muted-foreground">
-                        {availableGpus} available
-                      </span>
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="flex items-center gap-2">
+                          <Cpu className="w-4 h-4" />
+                          CPUs: {cpuCount} of {availableCpu}
+                        </Label>
+                      </div>
+                      <Slider
+                        value={[cpuCount]}
+                        onValueChange={(value) => setCpuCount(value[0])}
+                        min={1}
+                        max={Math.max(1, Math.min(selectedEq?.maxCpuCount || 32, availableCpu))}
+                        step={1}
+                      />
                     </div>
-                    <Slider
-                      value={[gpuCount]}
-                      onValueChange={(value) => setGpuCount(value[0])}
-                      min={0}
-                      max={Math.min(selectedEq?.maxGpuCount || 4, availableGpus)}
-                      step={1}
-                    />
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="flex items-center gap-2">
+                          <Server className="w-4 h-4" />
+                          GPUs: {gpuCount} of {availableGpu}
+                        </Label>
+                      </div>
+                      <Slider
+                        value={[gpuCount]}
+                        onValueChange={(value) => setGpuCount(value[0])}
+                        min={0}
+                        max={Math.max(0, Math.min(selectedEq?.maxGpuCount || 4, availableGpu))}
+                        step={1}
+                      />
+                    </div>
+                    {(availableCpu < (selectedEq?.maxCpuCount || 32) * 0.2 || availableGpu < (selectedEq?.maxGpuCount || 4) * 0.2) && (
+                      <div className="flex items-start gap-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-700 dark:text-amber-400">
+                        <Server className="w-4 h-4 shrink-0 mt-0.5" />
+                        <p>Limited resources available during this time. Consider selecting a different time slot for more capacity.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
