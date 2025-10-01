@@ -30,15 +30,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const { data, error } = await supabase
         .from("user_roles")
         .select("role")
-        .eq("user_id", userId)
-        .maybeSingle();
+        .eq("user_id", userId);
 
       if (error) throw error;
 
-      const role = (data?.role as AppRole) || 'user';
-      setUserRole(role);
-      setPermissions(getRolePermissions(role));
-      setIsManager(role === 'manager' || role === 'pi'); // For backward compatibility
+      // Role priority: pi > manager > postdoc > grad_student > undergrad_student > user
+      const rolePriority: Record<AppRole, number> = {
+        pi: 6,
+        manager: 5,
+        postdoc: 4,
+        grad_student: 3,
+        undergrad_student: 2,
+        user: 1,
+      };
+
+      // Get all roles and pick the highest priority one
+      const roles = (data || []).map(r => r.role as AppRole);
+      const highestRole = roles.length > 0 
+        ? roles.reduce((highest, current) => 
+            (rolePriority[current] || 0) > (rolePriority[highest] || 0) ? current : highest
+          )
+        : 'user';
+
+      setUserRole(highestRole);
+      setPermissions(getRolePermissions(highestRole));
+      setIsManager(highestRole === 'manager' || highestRole === 'pi'); // For backward compatibility
     } catch (error) {
       console.error("Error checking user role:", error);
       setUserRole(null);
