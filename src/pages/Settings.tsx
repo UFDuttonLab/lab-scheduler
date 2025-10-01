@@ -255,9 +255,6 @@ const Settings = () => {
         fullName,
         role,
         spiritAnimal
-      },
-      headers: {
-        Authorization: `Bearer ${session.session.access_token}`
       }
     });
 
@@ -307,9 +304,6 @@ const Settings = () => {
             action: 'updateRole',
             userId: editingUser.id,
             role: newRole
-          },
-          headers: {
-            Authorization: `Bearer ${session.session.access_token}`
           }
         });
 
@@ -348,9 +342,6 @@ const Settings = () => {
         body: {
           action: 'delete',
           userId
-        },
-        headers: {
-          Authorization: `Bearer ${session.session.access_token}`
         }
       });
 
