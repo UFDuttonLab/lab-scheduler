@@ -259,12 +259,19 @@ const Settings = () => {
     });
 
     if (error || data?.error) {
-      toast.error(data?.error || "Failed to send invitation");
+      toast.error(data?.error || "Failed to create user");
       console.error(error || data?.error);
       return;
     }
 
-    toast.success("Invitation email sent successfully!");
+    const password = data?.password;
+    toast.success(
+      password 
+        ? `User created! Password: ${password}` 
+        : "User created successfully",
+      { duration: 10000 }
+    );
+    
     setIsAddUserDialogOpen(false);
     fetchUsers();
   };

@@ -90,32 +90,30 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'create') {
-      // Send invitation email - user will set their own password
-      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-        data: {
+      // Generate a random password
+      const generatedPassword = crypto.randomUUID()
+      
+      // Create user directly with password
+      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password: generatedPassword,
+        email_confirm: true,
+        user_metadata: {
           full_name: fullName
-        },
-        redirectTo: `${req.headers.get('origin') || 'http://localhost:8080'}/`
+        }
       })
 
       if (createError) {
-        console.error('User invitation error:', createError)
+        console.error('User creation error:', createError)
         return new Response(JSON.stringify({ error: createError.message }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
 
-      // Wait a moment for the user record to be created
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
-      // Get the user ID from the created user
-      const { data: userData } = await supabaseAdmin.auth.admin.listUsers()
-      const createdUser = userData.users.find(u => u.email === email)
-
-      if (!createdUser) {
-        console.error('Could not find created user')
-        return new Response(JSON.stringify({ error: 'User created but not found' }), {
+      if (!newUser.user) {
+        console.error('Could not create user')
+        return new Response(JSON.stringify({ error: 'User creation failed' }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
@@ -126,7 +124,7 @@ Deno.serve(async (req) => {
         await supabaseAdmin
           .from('profiles')
           .update({ spirit_animal: spiritAnimal })
-          .eq('id', createdUser.id)
+          .eq('id', newUser.user.id)
       }
 
       // Assign role
@@ -134,15 +132,15 @@ Deno.serve(async (req) => {
         await supabaseAdmin
           .from('user_roles')
           .delete()
-          .eq('user_id', createdUser.id)
+          .eq('user_id', newUser.user.id)
 
         await supabaseAdmin
           .from('user_roles')
-          .insert({ user_id: createdUser.id, role })
+          .insert({ user_id: newUser.user.id, role })
       }
 
-      console.log('User invited successfully:', createdUser.id)
-      return new Response(JSON.stringify({ success: true, user: createdUser }), {
+      console.log('User created successfully:', newUser.user.id)
+      return new Response(JSON.stringify({ success: true, user: newUser.user, password: generatedPassword }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
