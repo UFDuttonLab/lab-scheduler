@@ -1,0 +1,80 @@
+import { Equipment, Booking } from "./types";
+
+export const mockEquipment: Equipment[] = [
+  {
+    id: "1",
+    name: "Robotic Arm Alpha",
+    type: "robot",
+    status: "available",
+    location: "Lab Room A-101",
+    description: "6-axis industrial robotic arm for precision tasks",
+  },
+  {
+    id: "2",
+    name: "Robotic Arm Beta",
+    type: "robot",
+    status: "in-use",
+    location: "Lab Room A-101",
+    description: "Collaborative robot for assembly operations",
+  },
+  {
+    id: "3",
+    name: "3D Printer Station",
+    type: "equipment",
+    status: "available",
+    location: "Lab Room B-203",
+    description: "High-precision 3D printer for prototyping",
+  },
+  {
+    id: "4",
+    name: "Microscope Station",
+    type: "equipment",
+    status: "maintenance",
+    location: "Lab Room C-305",
+    description: "Digital microscope with image capture",
+  },
+  {
+    id: "5",
+    name: "Robotic Arm Gamma",
+    type: "robot",
+    status: "available",
+    location: "Lab Room A-102",
+    description: "Mobile robot platform for navigation research",
+  },
+];
+
+export const mockBookings: Booking[] = [
+  {
+    id: "b1",
+    equipmentId: "2",
+    equipmentName: "Robotic Arm Beta",
+    studentName: "Alice Johnson",
+    studentEmail: "alice@university.edu",
+    startTime: new Date(2025, 0, 1, 10, 0),
+    endTime: new Date(2025, 0, 1, 12, 0),
+    purpose: "Assembly testing",
+    status: "in-progress",
+  },
+  {
+    id: "b2",
+    equipmentId: "1",
+    equipmentName: "Robotic Arm Alpha",
+    studentName: "Bob Smith",
+    studentEmail: "bob@university.edu",
+    startTime: new Date(2025, 0, 1, 14, 0),
+    endTime: new Date(2025, 0, 1, 16, 0),
+    purpose: "Precision calibration",
+    status: "scheduled",
+  },
+  {
+    id: "b3",
+    equipmentId: "3",
+    equipmentName: "3D Printer Station",
+    studentName: "Carol White",
+    studentEmail: "carol@university.edu",
+    startTime: new Date(2025, 0, 1, 9, 0),
+    endTime: new Date(2025, 0, 1, 11, 0),
+    purpose: "Prototype printing",
+    status: "completed",
+  },
+];
