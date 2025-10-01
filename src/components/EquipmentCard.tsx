@@ -1,15 +1,18 @@
 import { Equipment } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Settings } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { MapPin, Settings, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface EquipmentCardProps {
   equipment: Equipment;
   onSelect?: (equipment: Equipment) => void;
+  onEdit?: (equipment: Equipment) => void;
+  onDelete?: (equipment: Equipment) => void;
 }
 
-export const EquipmentCard = ({ equipment, onSelect }: EquipmentCardProps) => {
+export const EquipmentCard = ({ equipment, onSelect, onEdit, onDelete }: EquipmentCardProps) => {
   const statusConfig = {
     available: { label: "Available", className: "bg-success text-success-foreground" },
     "in-use": { label: "In Use", className: "bg-warning text-warning-foreground" },
@@ -43,7 +46,40 @@ export const EquipmentCard = ({ equipment, onSelect }: EquipmentCardProps) => {
       </div>
       
       {equipment.description && (
-        <p className="text-sm text-muted-foreground">{equipment.description}</p>
+        <p className="text-sm text-muted-foreground mb-4">{equipment.description}</p>
+      )}
+      
+      {(onEdit || onDelete) && (
+        <div className="flex gap-2 mt-4 pt-4 border-t">
+          {onEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(equipment);
+              }}
+              className="flex-1"
+            >
+              <Pencil className="w-4 h-4 mr-2" />
+              Edit
+            </Button>
+          )}
+          {onDelete && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(equipment);
+              }}
+              className="flex-1"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete
+            </Button>
+          )}
+        </div>
       )}
     </Card>
   );

@@ -30,6 +30,7 @@ const Equipment = () => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingEquipment, setEditingEquipment] = useState<EquipmentType | null>(null);
   
   const { register, handleSubmit, reset, watch, setValue } = useForm<EquipmentFormData>({
     defaultValues: {
@@ -38,6 +39,28 @@ const Equipment = () => {
       projectIds: []
     }
   });
+
+  useEffect(() => {
+    if (editingEquipment) {
+      reset({
+        name: editingEquipment.name,
+        type: editingEquipment.type,
+        location: editingEquipment.location,
+        status: editingEquipment.status as "available" | "maintenance",
+        description: editingEquipment.description || "",
+        projectIds: editingEquipment.compatibleProjects || []
+      });
+    } else {
+      reset({
+        name: "",
+        type: "robot",
+        location: "",
+        status: "available",
+        description: "",
+        projectIds: []
+      });
+    }
+  }, [editingEquipment, reset]);
 
   const selectedProjects = watch("projectIds") || [];
 
@@ -81,44 +104,113 @@ const Equipment = () => {
   const handleAddEquipment = async (formData: EquipmentFormData) => {
     setIsSubmitting(true);
     try {
-      // Insert equipment
-      const { data: newEquipment, error: equipmentError } = await supabase
-        .from("equipment")
-        .insert({
-          name: formData.name,
-          type: formData.type,
-          location: formData.location,
-          status: formData.status,
-          description: formData.description || null
-        })
-        .select()
-        .single();
+      if (editingEquipment) {
+        // Update equipment
+        const { error: equipmentError } = await supabase
+          .from("equipment")
+          .update({
+            name: formData.name,
+            type: formData.type,
+            location: formData.location,
+            status: formData.status,
+            description: formData.description || null
+          })
+          .eq("id", editingEquipment.id);
 
-      if (equipmentError) throw equipmentError;
+        if (equipmentError) throw equipmentError;
 
-      // Insert equipment-project relationships
-      if (formData.projectIds.length > 0) {
-        const relationships = formData.projectIds.map(projectId => ({
-          equipment_id: newEquipment.id,
-          project_id: projectId
-        }));
-
-        const { error: relationError } = await supabase
+        // Delete old relationships
+        await supabase
           .from("equipment_projects")
-          .insert(relationships);
+          .delete()
+          .eq("equipment_id", editingEquipment.id);
 
-        if (relationError) throw relationError;
+        // Insert new relationships
+        if (formData.projectIds.length > 0) {
+          const relationships = formData.projectIds.map(projectId => ({
+            equipment_id: editingEquipment.id,
+            project_id: projectId
+          }));
+
+          const { error: relationError } = await supabase
+            .from("equipment_projects")
+            .insert(relationships);
+
+          if (relationError) throw relationError;
+        }
+
+        toast.success("Equipment updated successfully!");
+        setEquipment(prev => prev.map(eq => 
+          eq.id === editingEquipment.id 
+            ? { ...eq, ...formData, compatibleProjects: formData.projectIds } as EquipmentType
+            : eq
+        ));
+      } else {
+        // Insert equipment
+        const { data: newEquipment, error: equipmentError } = await supabase
+          .from("equipment")
+          .insert({
+            name: formData.name,
+            type: formData.type,
+            location: formData.location,
+            status: formData.status,
+            description: formData.description || null
+          })
+          .select()
+          .single();
+
+        if (equipmentError) throw equipmentError;
+
+        // Insert equipment-project relationships
+        if (formData.projectIds.length > 0) {
+          const relationships = formData.projectIds.map(projectId => ({
+            equipment_id: newEquipment.id,
+            project_id: projectId
+          }));
+
+          const { error: relationError } = await supabase
+            .from("equipment_projects")
+            .insert(relationships);
+
+          if (relationError) throw relationError;
+        }
+
+        toast.success("Equipment added successfully!");
+        setEquipment(prev => [newEquipment as EquipmentType, ...prev]);
       }
-
-      toast.success("Equipment added successfully!");
-      setEquipment(prev => [newEquipment as EquipmentType, ...prev]);
+      
       setIsAddDialogOpen(false);
+      setEditingEquipment(null);
       reset();
     } catch (error) {
-      console.error("Error adding equipment:", error);
-      toast.error("Failed to add equipment");
+      console.error("Error saving equipment:", error);
+      toast.error(`Failed to ${editingEquipment ? "update" : "add"} equipment`);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleEditEquipment = (equipment: EquipmentType) => {
+    setEditingEquipment(equipment);
+    setIsAddDialogOpen(true);
+  };
+
+  const handleDeleteEquipment = async (equipment: EquipmentType) => {
+    if (!confirm(`Are you sure you want to delete ${equipment.name}?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from("equipment")
+        .delete()
+        .eq("id", equipment.id);
+
+      if (error) throw error;
+
+      toast.success("Equipment deleted successfully!");
+      setEquipment(prev => prev.filter(eq => eq.id !== equipment.id));
+    } catch (error) {
+      console.error("Error deleting equipment:", error);
+      toast.error("Failed to delete equipment");
     }
   };
 
@@ -146,7 +238,13 @@ const Equipment = () => {
             </p>
           </div>
           
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
+            setIsAddDialogOpen(open);
+            if (!open) {
+              setEditingEquipment(null);
+              reset();
+            }
+          }}>
             <DialogTrigger asChild>
               <Button size="lg">
                 <Plus className="w-4 h-4 mr-2" />
@@ -155,9 +253,9 @@ const Equipment = () => {
             </DialogTrigger>
             <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
-                <DialogTitle>Add New Equipment</DialogTitle>
+                <DialogTitle>{editingEquipment ? "Edit Equipment" : "Add New Equipment"}</DialogTitle>
                 <DialogDescription>
-                  Add a new robot or equipment to your lab inventory
+                  {editingEquipment ? "Update equipment information" : "Add a new robot or equipment to your lab inventory"}
                 </DialogDescription>
               </DialogHeader>
               
@@ -249,12 +347,12 @@ const Equipment = () => {
                   {isSubmitting ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Adding...
+                      {editingEquipment ? "Updating..." : "Adding..."}
                     </>
                   ) : (
                     <>
                       <Plus className="w-4 h-4 mr-2" />
-                      Add Equipment
+                      {editingEquipment ? "Update Equipment" : "Add Equipment"}
                     </>
                   )}
                 </Button>
@@ -288,7 +386,12 @@ const Equipment = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {equipment.map(item => (
-                  <EquipmentCard key={item.id} equipment={item} />
+                  <EquipmentCard 
+                    key={item.id} 
+                    equipment={item}
+                    onEdit={handleEditEquipment}
+                    onDelete={handleDeleteEquipment}
+                  />
                 ))}
               </div>
             )}
@@ -306,7 +409,12 @@ const Equipment = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {robots.map(item => (
-                  <EquipmentCard key={item.id} equipment={item} />
+                  <EquipmentCard 
+                    key={item.id} 
+                    equipment={item}
+                    onEdit={handleEditEquipment}
+                    onDelete={handleDeleteEquipment}
+                  />
                 ))}
               </div>
             )}
@@ -324,7 +432,12 @@ const Equipment = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {otherEquipment.map(item => (
-                  <EquipmentCard key={item.id} equipment={item} />
+                  <EquipmentCard 
+                    key={item.id} 
+                    equipment={item}
+                    onEdit={handleEditEquipment}
+                    onDelete={handleDeleteEquipment}
+                  />
                 ))}
               </div>
             )}
