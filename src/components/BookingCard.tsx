@@ -34,7 +34,7 @@ interface BookingCardProps {
 }
 
 export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => {
-  const { user, isManager } = useAuth();
+  const { user, permissions } = useAuth();
   const [collaboratorProfiles, setCollaboratorProfiles] = useState<UserProfile[]>([]);
   
   const statusConfig = {
@@ -45,8 +45,8 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
   };
 
   const status = statusConfig[booking.status];
-  const canEdit = user?.id === booking.userId || isManager;
-  const canDelete = isManager;
+  const canEdit = user?.id === booking.userId || permissions.canManageBookings;
+  const canDelete = permissions.canManageUsers; // Only PI can delete any booking
 
   useEffect(() => {
     if (booking.collaborators && booking.collaborators.length > 0) {
