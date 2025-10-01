@@ -324,84 +324,152 @@ const Schedule = () => {
                   </TabsContent>
 
                   <TabsContent value="timeline">
-                    <div className="space-y-2">
-                      {Array.from({ length: 13 }, (_, i) => {
-                        const hour = i + 8;
-                        // Find bookings that span through this hour (not just start at this hour)
-                        const hourBookings = dayBookings.filter(b => {
-                          const bookingStartHour = b.startTime.getHours();
-                          const bookingEndHour = b.endTime.getHours();
-                          const bookingEndMinutes = b.endTime.getMinutes();
-                          
-                          // Include booking if it starts before/at this hour and ends after this hour
-                          // or if it starts at this hour
-                          return (bookingStartHour <= hour && 
-                                 (bookingEndHour > hour || (bookingEndHour === hour && bookingEndMinutes > 0)));
-                        });
+                    {(() => {
+                      // Assign tracks to bookings to avoid visual overlap
+                      const bookingsWithTracks = dayBookings.map(booking => {
+                        const startMinutes = booking.startTime.getHours() * 60 + booking.startTime.getMinutes();
+                        const endMinutes = booking.endTime.getHours() * 60 + booking.endTime.getMinutes();
+                        return { ...booking, startMinutes, endMinutes, track: 0 };
+                      }).sort((a, b) => a.startMinutes - b.startMinutes);
 
-                        return (
-                          <div key={hour} className="flex gap-2 items-start">
-                            <div className="w-20 text-sm font-medium text-muted-foreground pt-2">
-                              {format(new Date().setHours(hour, 0), "h:mm a")}
+                      // Simple track assignment algorithm
+                      const tracks: Array<{ endMinutes: number }> = [];
+                      bookingsWithTracks.forEach(booking => {
+                        // Find first available track
+                        let assignedTrack = -1;
+                        for (let i = 0; i < tracks.length; i++) {
+                          if (tracks[i].endMinutes <= booking.startMinutes) {
+                            assignedTrack = i;
+                            tracks[i].endMinutes = booking.endMinutes;
+                            break;
+                          }
+                        }
+                        
+                        // No available track found, create new one
+                        if (assignedTrack === -1) {
+                          assignedTrack = tracks.length;
+                          tracks.push({ endMinutes: booking.endMinutes });
+                        }
+                        
+                        booking.track = assignedTrack;
+                      });
+
+                      const numTracks = tracks.length;
+                      const hours = Array.from({ length: 13 }, (_, i) => i + 8);
+
+                      return (
+                        <div className="relative">
+                          {/* Timeline grid */}
+                          <div className="flex">
+                            {/* Time column */}
+                            <div className="w-20 flex-shrink-0">
+                              {hours.map(hour => (
+                                <div 
+                                  key={hour} 
+                                  className="h-16 flex items-start text-sm font-medium text-muted-foreground border-b border-border"
+                                >
+                                  {format(new Date().setHours(hour, 0), "h:mm a")}
+                                </div>
+                              ))}
                             </div>
-                            <div className="flex-1 min-h-[60px] border-l-2 border-border pl-4 pb-2">
-                              {hourBookings.length > 0 ? (
-                                <div className="space-y-2">
-                                  {hourBookings.map(booking => {
-                                    const project = projects.find(p => p.id === booking.projectId);
-                                    const isStartHour = booking.startTime.getHours() === hour;
-                                    const isEndHour = booking.endTime.getHours() === hour || 
-                                                     (booking.endTime.getHours() === hour + 1 && booking.endTime.getMinutes() === 0);
-                                    
-                                    return (
-                                      <Card 
-                                        key={booking.id} 
-                                        className="p-3 border-l-4" 
-                                        style={{ borderLeftColor: project?.color || '#ccc' }}
-                                      >
-                                        <div className="flex items-center justify-between">
-                                          <div className="flex-1">
-                                            <p className="font-semibold text-sm">{booking.equipmentName}</p>
-                                            <div className="text-xs text-muted-foreground mt-1">
-                                              <div className="flex items-center gap-2">
-                                                {isStartHour && (
-                                                  <span className="font-medium">
-                                                    Starts: {format(booking.startTime, "h:mm a")}
-                                                  </span>
-                                                )}
-                                                {isEndHour && (
-                                                  <span className="font-medium">
-                                                    Ends: {format(booking.endTime, "h:mm a")}
-                                                  </span>
-                                                )}
-                                                {!isStartHour && !isEndHour && (
-                                                  <span className="italic">In progress</span>
-                                                )}
-                                              </div>
-                                              <div className="flex items-center gap-1 mt-0.5">
-                                                {booking.studentSpiritAnimal && (
-                                                  <span>{booking.studentSpiritAnimal}</span>
-                                                )}
-                                                <span>{booking.studentName}</span>
-                                              </div>
-                                            </div>
-                                          </div>
-                                          <Badge variant="secondary" className="text-xs">
-                                            {booking.duration}m
-                                          </Badge>
-                                        </div>
-                                      </Card>
-                                    );
-                                  })}
+
+                            {/* Tracks container */}
+                            <div className="flex-1 relative border-l-2 border-border">
+                              {numTracks === 0 ? (
+                                <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+                                  <div className="text-center">
+                                    <Clock className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                                    <p>No bookings scheduled</p>
+                                  </div>
                                 </div>
                               ) : (
-                                <div className="text-sm text-muted-foreground pt-2">No bookings</div>
+                                <div className="flex h-full">
+                                  {/* Hour grid lines */}
+                                  <div className="absolute inset-0 pointer-events-none">
+                                    {hours.map((hour, idx) => (
+                                      <div 
+                                        key={hour}
+                                        className="border-b border-border/50"
+                                        style={{ 
+                                          position: 'absolute',
+                                          top: `${idx * 64}px`,
+                                          left: 0,
+                                          right: 0,
+                                          height: '64px'
+                                        }}
+                                      />
+                                    ))}
+                                  </div>
+
+                                  {/* Booking tracks */}
+                                  {Array.from({ length: numTracks }, (_, trackIdx) => (
+                                    <div 
+                                      key={trackIdx}
+                                      className="relative flex-1 border-r border-border/30 last:border-r-0"
+                                      style={{ minWidth: '200px' }}
+                                    >
+                                      {bookingsWithTracks
+                                        .filter(b => b.track === trackIdx)
+                                        .map(booking => {
+                                          const project = projects.find(p => p.id === booking.projectId);
+                                          // Calculate position and height
+                                          const startHour = 8; // First hour is 8am
+                                          const pixelsPerMinute = 64 / 60; // 64px per hour
+                                          const top = (booking.startMinutes - (startHour * 60)) * pixelsPerMinute;
+                                          const height = (booking.endMinutes - booking.startMinutes) * pixelsPerMinute;
+
+                                          return (
+                                            <Card
+                                              key={booking.id}
+                                              className="absolute left-1 right-1 p-3 border-l-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer overflow-hidden"
+                                              style={{
+                                                borderLeftColor: project?.color || 'hsl(var(--primary))',
+                                                top: `${top}px`,
+                                                height: `${height}px`,
+                                              }}
+                                            >
+                                              <div className="flex flex-col h-full">
+                                                <div className="flex items-start justify-between gap-2 mb-1">
+                                                  <p className="font-semibold text-sm leading-tight line-clamp-2">
+                                                    {booking.equipmentName}
+                                                  </p>
+                                                  <Badge variant="secondary" className="text-xs shrink-0">
+                                                    {booking.duration}m
+                                                  </Badge>
+                                                </div>
+                                                
+                                                <div className="text-xs text-muted-foreground space-y-0.5">
+                                                  <div className="flex items-center gap-1">
+                                                    <Clock className="w-3 h-3" />
+                                                    <span>
+                                                      {format(booking.startTime, "h:mm a")} - {format(booking.endTime, "h:mm a")}
+                                                    </span>
+                                                  </div>
+                                                  <div className="flex items-center gap-1">
+                                                    {booking.studentSpiritAnimal && (
+                                                      <span>{booking.studentSpiritAnimal}</span>
+                                                    )}
+                                                    <span className="truncate">{booking.studentName}</span>
+                                                  </div>
+                                                  {booking.projectName && (
+                                                    <div className="truncate font-medium">
+                                                      {booking.projectName}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </Card>
+                                          );
+                                        })}
+                                    </div>
+                                  ))}
+                                </div>
                               )}
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
+                        </div>
+                      );
+                    })()}
                   </TabsContent>
                 </Tabs>
               </Card>
