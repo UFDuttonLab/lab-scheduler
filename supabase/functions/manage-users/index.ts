@@ -27,38 +27,42 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Create a Supabase client with the user's JWT to verify their identity
-    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { 
-        headers: { Authorization: authHeader } 
-      },
-      auth: {
-        persistSession: false
+    // Extract and decode the JWT token to get the authenticated user's ID
+    const token = authHeader.replace('Bearer ', '')
+    let authenticatedUserId: string
+    
+    try {
+      // JWT tokens have 3 parts separated by dots: header.payload.signature
+      // We need to decode the payload (middle part)
+      const payload = token.split('.')[1]
+      const decodedPayload = JSON.parse(atob(payload))
+      authenticatedUserId = decodedPayload.sub
+      
+      console.log('Authenticated user ID:', authenticatedUserId)
+      
+      if (!authenticatedUserId) {
+        throw new Error('No user ID in token')
       }
-    })
-    
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser()
-    
-    console.log('Auth check - User ID:', user?.id, 'Error:', authError)
-    
-    if (authError || !user) {
-      console.error('Authentication error:', authError)
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+    } catch (error) {
+      console.error('Failed to decode JWT token:', error)
+      return new Response(JSON.stringify({ error: 'Invalid authentication token' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    // Check if user is a PI or manager
+    // Check if user is a PI or manager using the service role client
     const { data: roleData, error: roleError } = await supabaseAdmin
       .from('user_roles')
       .select('role')
-      .eq('user_id', user.id)
+      .eq('user_id', authenticatedUserId)
       .in('role', ['pi', 'manager'])
       .maybeSingle()
 
+    console.log('Role check - User:', authenticatedUserId, 'Role data:', roleData, 'Error:', roleError)
+
     if (roleError || !roleData) {
-      console.error('Role check error:', roleError)
+      console.error('Role check failed - Error:', roleError, 'Data:', roleData)
       return new Response(JSON.stringify({ error: 'Forbidden: PI or Manager access required' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
