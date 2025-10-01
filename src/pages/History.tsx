@@ -19,41 +19,55 @@ const History = () => {
   }, []);
 
   const fetchBookings = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('bookings')
-      .select(`
-        *,
-        equipment:equipment_id (name),
-        project:project_id (name, color),
-        user:user_id (email, full_name)
-      `)
-      .order('start_time', { ascending: false });
-    
-    if (error) {
+    try {
+      setLoading(true);
+      
+      // Fetch all data separately
+      const { data: bookingsData, error: bookingsError } = await supabase
+        .from('bookings')
+        .select('*')
+        .order('start_time', { ascending: false });
+
+      if (bookingsError) throw bookingsError;
+
+      const { data: equipmentData } = await supabase.from('equipment').select('*');
+      const { data: projectsData } = await supabase.from('projects').select('*');
+      const { data: profilesData } = await supabase.from('profiles').select('*');
+
+      // Create lookup maps
+      const equipmentMap = new Map(equipmentData?.map(e => [e.id, e]) || []);
+      const projectMap = new Map(projectsData?.map(p => [p.id, p]) || []);
+      const profileMap = new Map(profilesData?.map(u => [u.id, u]) || []);
+
+      // Transform bookings with enriched data
+      const transformedBookings: Booking[] = (bookingsData || []).map((booking: any) => {
+        const equipment = equipmentMap.get(booking.equipment_id);
+        const project = projectMap.get(booking.project_id);
+        const profile = profileMap.get(booking.user_id);
+
+        return {
+          id: booking.id,
+          equipmentId: booking.equipment_id,
+          equipmentName: equipment?.name || 'Unknown',
+          studentName: profile?.full_name || profile?.email?.split('@')[0] || 'Unknown',
+          studentEmail: profile?.email || 'Unknown',
+          startTime: new Date(booking.start_time),
+          endTime: new Date(booking.end_time),
+          duration: Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000),
+          projectId: booking.project_id || undefined,
+          projectName: project?.name || undefined,
+          purpose: booking.purpose || undefined,
+          status: booking.status as "scheduled" | "in-progress" | "completed" | "cancelled"
+        };
+      });
+
+      setBookings(transformedBookings);
+    } catch (error) {
+      console.error("Error fetching bookings:", error);
       toast.error("Failed to load bookings");
+    } finally {
       setLoading(false);
-      return;
     }
-    
-    // Transform the data to match our Booking type
-    const transformedBookings: Booking[] = (data || []).map((booking: any) => ({
-      id: booking.id,
-      equipmentId: booking.equipment_id,
-      equipmentName: booking.equipment?.name || 'Unknown',
-      studentName: booking.user?.full_name || 'Unknown',
-      studentEmail: booking.user?.email || 'Unknown',
-      startTime: new Date(booking.start_time),
-      endTime: new Date(booking.end_time),
-      duration: Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000),
-      projectId: booking.project_id || undefined,
-      projectName: booking.project?.name || undefined,
-      purpose: booking.purpose || undefined,
-      status: booking.status as "scheduled" | "in-progress" | "completed" | "cancelled"
-    }));
-    
-    setBookings(transformedBookings);
-    setLoading(false);
   };
 
   const allBookings = bookings;

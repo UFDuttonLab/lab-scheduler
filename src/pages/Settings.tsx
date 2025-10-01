@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Project } from "@/lib/types";
-import { Plus, Trash2, Edit, Loader2 } from "lucide-react";
+import { Plus, Trash2, Edit, Loader2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { DialogFooter } from "@/components/ui/dialog";
 
 interface UserProfile {
   id: string;
@@ -21,7 +22,9 @@ const Settings = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isAddProjectDialogOpen, setIsAddProjectDialogOpen] = useState(false);
+  const [isEditUserDialogOpen, setIsEditUserDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [projectName, setProjectName] = useState("");
   const [projectDescription, setProjectDescription] = useState("");
@@ -146,6 +149,34 @@ const Settings = () => {
     } catch (error) {
       console.error("Error deleting project:", error);
       toast.error("Failed to delete project");
+    }
+  };
+
+  const handleSaveUser = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const fullName = formData.get("fullName") as string;
+
+    if (!editingUser) return;
+
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ full_name: fullName })
+        .eq("id", editingUser.id);
+
+      if (error) throw error;
+
+      setUsers(prev => prev.map(u => 
+        u.id === editingUser.id ? { ...u, full_name: fullName } : u
+      ));
+      
+      setIsEditUserDialogOpen(false);
+      setEditingUser(null);
+      toast.success("User updated successfully");
+    } catch (error) {
+      console.error("Error updating user:", error);
+      toast.error("Failed to update user");
     }
   };
 
@@ -334,14 +365,27 @@ const Settings = () => {
                         </h3>
                         <p className="text-sm text-muted-foreground">{user.email}</p>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => handleDeleteUser(user.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => {
+                            setEditingUser(user);
+                            setIsEditUserDialogOpen(true);
+                          }}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => handleDeleteUser(user.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   </Card>
                 ))
@@ -350,6 +394,43 @@ const Settings = () => {
           </Card>
           </div>
         )}
+
+        {/* Edit User Dialog */}
+        <Dialog open={isEditUserDialogOpen} onOpenChange={setIsEditUserDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit User</DialogTitle>
+              <DialogDescription>
+                Update user information
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSaveUser} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  defaultValue={editingUser?.email || ""}
+                  disabled
+                  className="bg-muted"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fullName">Full Name</Label>
+                <Input
+                  id="fullName"
+                  name="fullName"
+                  defaultValue={editingUser?.full_name || ""}
+                  placeholder="Enter full name"
+                  required
+                />
+              </div>
+              <DialogFooter>
+                <Button type="submit">Save Changes</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );

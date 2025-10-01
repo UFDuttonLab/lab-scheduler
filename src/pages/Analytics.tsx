@@ -23,35 +23,33 @@ const Analytics = () => {
     try {
       setLoading(true);
 
-      // Fetch bookings with related data
+      // Fetch all data separately
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
-        .select(`
-          *,
-          equipment:equipment_id (name),
-          project:project_id (name, color),
-          profile:user_id (full_name, email)
-        `);
+        .select('*');
 
       if (bookingsError) throw bookingsError;
 
-      // Fetch projects
-      const { data: projectsData, error: projectsError } = await supabase
-        .from('projects')
-        .select('*');
+      const { data: equipmentData } = await supabase.from('equipment').select('*');
+      const { data: projectsData } = await supabase.from('projects').select('*');
+      const { data: profilesData } = await supabase.from('profiles').select('*');
 
-      if (projectsError) throw projectsError;
+      // Create lookup maps
+      const equipmentMap = new Map(equipmentData?.map(e => [e.id, e]) || []);
+      const projectMap = new Map(projectsData?.map(p => [p.id, p]) || []);
+      const profileMap = new Map(profilesData?.map(u => [u.id, u]) || []);
 
-      // Fetch users/profiles
-      const { data: usersData, error: usersError } = await supabase
-        .from('profiles')
-        .select('*');
+      // Enrich bookings with related data
+      const enrichedBookings = (bookingsData || []).map(booking => ({
+        ...booking,
+        equipment: equipmentMap.get(booking.equipment_id),
+        project: projectMap.get(booking.project_id),
+        profile: profileMap.get(booking.user_id)
+      }));
 
-      if (usersError) throw usersError;
-
-      setBookings(bookingsData || []);
+      setBookings(enrichedBookings);
       setProjects(projectsData || []);
-      setUsers(usersData || []);
+      setUsers(profilesData || []);
     } catch (error: any) {
       toast({
         title: "Error fetching analytics data",

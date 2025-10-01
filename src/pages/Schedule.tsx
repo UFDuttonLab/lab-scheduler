@@ -38,12 +38,12 @@ const Schedule = () => {
     fetchBookings();
   }, []);
 
-  // Auto-open dialog and pre-select equipment if passed via URL
+  // Pre-select equipment if passed via URL, but don't auto-open dialog
   useEffect(() => {
     const equipmentId = searchParams.get('equipment');
     if (equipmentId && equipment.length > 0) {
       setSelectedEquipment(equipmentId);
-      setIsBookingDialogOpen(true);
+      // Don't auto-open dialog - let user select date first
     }
   }, [searchParams, equipment]);
 
