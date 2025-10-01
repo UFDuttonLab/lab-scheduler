@@ -7,12 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Project } from "@/lib/types";
-import { Plus, Trash2, Edit, Loader2, Pencil, User } from "lucide-react";
+import { Plus, Trash2, Edit, Loader2, Pencil, User, Mail, Smile } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { DialogFooter } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 
 interface UserProfile {
   id: string;
@@ -46,6 +47,7 @@ const Settings = () => {
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
   const [isAddProjectDialogOpen, setIsAddProjectDialogOpen] = useState(false);
   const [isEditUserDialogOpen, setIsEditUserDialogOpen] = useState(false);
+  const [isAddUserDialogOpen, setIsAddUserDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -92,7 +94,10 @@ const Settings = () => {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("*")
+        .select(`
+          *,
+          user_roles(role)
+        `)
         .order("email");
 
       if (error) throw error;
@@ -212,13 +217,54 @@ const Settings = () => {
     }
   };
 
+  const handleAddUser = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
+    const fullName = formData.get("fullName") as string;
+    const role = formData.get("role") as string;
+    const spiritAnimal = formData.get("spiritAnimal") as string;
+
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session) {
+      toast.error("You must be logged in");
+      return;
+    }
+
+    const { data, error } = await supabase.functions.invoke('manage-users', {
+      body: {
+        action: 'create',
+        email,
+        password,
+        fullName,
+        role,
+        spiritAnimal
+      }
+    });
+
+    if (error || data?.error) {
+      toast.error(data?.error || "Failed to create user");
+      console.error(error || data?.error);
+      return;
+    }
+
+    toast.success("User created successfully");
+    setIsAddUserDialogOpen(false);
+    fetchUsers();
+  };
+
   const handleSaveUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const fullName = formData.get("fullName") as string;
     const spiritAnimal = formData.get("spiritAnimal") as string;
+    const newRole = formData.get("role") as string;
 
     if (!editingUser) return;
+
+    const currentRole = (editingUser as any).user_roles?.[0]?.role;
 
     try {
       const { error } = await supabase
@@ -231,6 +277,29 @@ const Settings = () => {
 
       if (error) throw error;
 
+      // Update role if changed
+      if (newRole && newRole !== currentRole) {
+        const { data: session } = await supabase.auth.getSession();
+        if (!session.session) {
+          toast.error("You must be logged in");
+          return;
+        }
+
+        const { data, error: roleError } = await supabase.functions.invoke('manage-users', {
+          body: {
+            action: 'updateRole',
+            userId: editingUser.id,
+            role: newRole
+          }
+        });
+
+        if (roleError || data?.error) {
+          toast.error(data?.error || "Failed to update role");
+          console.error(roleError || data?.error);
+          return;
+        }
+      }
+
       setUsers(prev => prev.map(u => 
         u.id === editingUser.id ? { ...u, full_name: fullName, spirit_animal: spiritAnimal } : u
       ));
@@ -238,6 +307,7 @@ const Settings = () => {
       setIsEditUserDialogOpen(false);
       setEditingUser(null);
       toast.success("User updated successfully");
+      fetchUsers();
     } catch (error) {
       console.error("Error updating user:", error);
       toast.error("Failed to update user");
@@ -457,9 +527,13 @@ const Settings = () => {
               <div>
                 <h2 className="text-2xl font-bold mb-1">Registered Users</h2>
                 <p className="text-sm text-muted-foreground">
-                  View all users registered in the system
+                  View and manage all users registered in the system
                 </p>
               </div>
+              <Button onClick={() => setIsAddUserDialogOpen(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add User
+              </Button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -471,14 +545,21 @@ const Settings = () => {
                 users.map(user => (
                   <Card key={user.id} className="p-4">
                     <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2 flex-1">
+                      <div className="flex items-start gap-2 flex-1">
                         {user.spirit_animal && (
                           <span className="text-2xl">{user.spirit_animal}</span>
                         )}
-                        <div>
-                          <h3 className="font-semibold mb-1">
-                            {user.full_name || "No name set"}
-                          </h3>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold">
+                              {user.full_name || "No name set"}
+                            </h3>
+                            {(user as any).user_roles?.[0]?.role && (
+                              <Badge variant={(user as any).user_roles[0].role === 'manager' ? 'default' : 'secondary'}>
+                                {(user as any).user_roles[0].role}
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-sm text-muted-foreground">{user.email}</p>
                         </div>
                       </div>
@@ -512,13 +593,90 @@ const Settings = () => {
           </div>
         )}
 
+        {/* Add User Dialog */}
+        <Dialog open={isAddUserDialogOpen} onOpenChange={setIsAddUserDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add New User</DialogTitle>
+              <DialogDescription>
+                Create a new user account with role assignment
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleAddUser} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="add-email">Email *</Label>
+                <Input
+                  id="add-email"
+                  name="email"
+                  type="email"
+                  placeholder="user@example.com"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="add-password">Password *</Label>
+                <Input
+                  id="add-password"
+                  name="password"
+                  type="password"
+                  placeholder="Minimum 6 characters"
+                  required
+                  minLength={6}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="add-fullName">Full Name *</Label>
+                <Input
+                  id="add-fullName"
+                  name="fullName"
+                  placeholder="John Doe"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="add-role">Role *</Label>
+                <Select name="role" defaultValue="user">
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="manager">Manager</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="add-spiritAnimal">Spirit Animal</Label>
+                <Select name="spiritAnimal">
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose spirit animal (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SPIRIT_ANIMALS.map((animal) => (
+                      <SelectItem key={animal.value} value={animal.value}>
+                        {animal.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsAddUserDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit">Create User</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
         {/* Edit User Dialog */}
         <Dialog open={isEditUserDialogOpen} onOpenChange={setIsEditUserDialogOpen}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Edit User</DialogTitle>
               <DialogDescription>
-                Update user information
+                Update user information and role
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSaveUser} className="space-y-4">
@@ -541,6 +699,18 @@ const Settings = () => {
                   placeholder="Enter full name"
                   required
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="role">Role</Label>
+                <Select name="role" defaultValue={(editingUser as any)?.user_roles?.[0]?.role || "user"}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="manager">Manager</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="spiritAnimal">Spirit Animal</Label>
