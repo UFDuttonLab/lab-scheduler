@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { mockEquipment } from "@/lib/mockData";
+import { Checkbox } from "@/components/ui/checkbox";
+import { mockEquipment, mockProjects } from "@/lib/mockData";
 import { Equipment as EquipmentType } from "@/lib/types";
 import { Plus, Settings } from "lucide-react";
 import { toast } from "sonner";
@@ -97,6 +98,23 @@ const Equipment = () => {
                     placeholder="Brief description of the equipment" 
                     rows={3}
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Compatible Projects</Label>
+                  <div className="space-y-2 border rounded-md p-3">
+                    {mockProjects.map(project => (
+                      <div key={project.id} className="flex items-center space-x-2">
+                        <Checkbox id={`project-${project.id}`} />
+                        <label
+                          htmlFor={`project-${project.id}`}
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                          {project.name}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <Button type="submit" className="w-full">

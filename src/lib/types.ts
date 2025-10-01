@@ -5,6 +5,14 @@ export interface Equipment {
   status: "available" | "in-use" | "maintenance";
   location: string;
   description?: string;
+  compatibleProjects?: string[]; // Array of project IDs
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string; // For calendar color coding
 }
 
 export interface Booking {
@@ -15,6 +23,9 @@ export interface Booking {
   studentEmail: string;
   startTime: Date;
   endTime: Date;
+  duration: number; // Duration in minutes
+  projectId?: string;
+  projectName?: string;
   purpose?: string;
   status: "scheduled" | "in-progress" | "completed" | "cancelled";
 }

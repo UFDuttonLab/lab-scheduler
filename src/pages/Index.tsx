@@ -27,9 +27,9 @@ const Index = () => {
       
       <main className="container mx-auto px-6 py-8">
         <div className="mb-8 animate-fade-in">
-          <h1 className="text-4xl font-bold mb-2">Lab Equipment Dashboard</h1>
+          <h1 className="text-4xl font-bold mb-2">Dutton Lab Dashboard</h1>
           <p className="text-muted-foreground">
-            Manage your lab equipment and robot scheduling in one place
+            Equipment and robot scheduling for the University of Florida
           </p>
         </div>
 
@@ -45,7 +45,7 @@ const Index = () => {
             title="Today's Bookings"
             value={todayBookings}
             icon={Calendar}
-            trend="3 pending approval"
+            trend="First-come, first-served"
           />
           <StatsCard
             title="Active Sessions"

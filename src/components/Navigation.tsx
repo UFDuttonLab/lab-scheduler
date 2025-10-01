@@ -1,15 +1,16 @@
 import { Link, useLocation } from "react-router-dom";
-import { Calendar, LayoutDashboard, Settings, History } from "lucide-react";
+import { Home, Calendar, Settings, History, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Navigation = () => {
   const location = useLocation();
-  
-  const links = [
-    { to: "/", label: "Dashboard", icon: LayoutDashboard },
-    { to: "/schedule", label: "Schedule", icon: Calendar },
-    { to: "/equipment", label: "Equipment", icon: Settings },
-    { to: "/history", label: "History", icon: History },
+
+  const navItems = [
+    { path: "/", label: "Dashboard", icon: Home },
+    { path: "/schedule", label: "Schedule", icon: Calendar },
+    { path: "/equipment", label: "Equipment", icon: Wrench },
+    { path: "/history", label: "History", icon: History },
+    { path: "/settings", label: "Settings", icon: Settings },
   ];
 
   return (
@@ -17,19 +18,24 @@ export const Navigation = () => {
       <div className="container mx-auto px-6">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-primary" />
-            <span className="text-xl font-bold">Lab Scheduler</span>
+            <div className="w-10 h-10 rounded-lg bg-gradient-primary flex items-center justify-center">
+              <Wrench className="w-6 h-6 text-primary-foreground" />
+            </div>
+            <div>
+              <span className="font-bold text-xl block">Dutton Lab</span>
+              <span className="text-xs text-muted-foreground">University of Florida</span>
+            </div>
           </div>
           
           <div className="flex gap-1">
-            {links.map((link) => {
-              const Icon = link.icon;
-              const isActive = location.pathname === link.to;
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = location.pathname === item.path;
               
               return (
                 <Link
-                  key={link.to}
-                  to={link.to}
+                  key={item.path}
+                  to={item.path}
                   className={cn(
                     "flex items-center gap-2 px-4 py-2 rounded-lg transition-all",
                     isActive
@@ -38,7 +44,7 @@ export const Navigation = () => {
                   )}
                 >
                   <Icon className="w-4 h-4" />
-                  <span>{link.label}</span>
+                  <span>{item.label}</span>
                 </Link>
               );
             })}
