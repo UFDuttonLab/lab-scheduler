@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+// Page imports
 import Index from "./pages/Index";
 import Schedule from "./pages/Schedule";
 import Equipment from "./pages/Equipment";
