@@ -39,7 +39,7 @@ const Schedule = () => {
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [selectedProject, setSelectedProject] = useState<string>("");
-  const [selectedEquipment, setSelectedEquipment] = useState<string>("");
+  const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
   const [selectedTime, setSelectedTime] = useState<string>("");
   const [duration, setDuration] = useState<string>("60");
   const [purpose, setPurpose] = useState<string>("");
@@ -66,19 +66,23 @@ const Schedule = () => {
   useEffect(() => {
     const equipmentId = searchParams.get('equipment');
     if (equipmentId && equipment.length > 0) {
-      setSelectedEquipment(equipmentId);
+      setSelectedEquipment([equipmentId]);
       // Don't auto-open dialog - let user select date first
     }
   }, [searchParams, equipment]);
 
   // Reset duration and resource counts when switching equipment types
   useEffect(() => {
-    const selectedEq = equipment.find(e => e.id === selectedEquipment);
-    if (selectedEq?.type === "HiPerGator") {
+    const hasHiPerGator = selectedEquipment.some(eqId => {
+      const eq = equipment.find(e => e.id === eqId);
+      return eq?.type === "HiPerGator";
+    });
+    
+    if (hasHiPerGator) {
       setDuration("60");
       setCpuCount(1);
       setGpuCount(0);
-    } else if (selectedEquipment) {
+    } else if (selectedEquipment.length > 0) {
       setDuration("60");
     }
     setSamplesCount(1);
@@ -217,8 +221,10 @@ const Schedule = () => {
       return;
     }
 
-    const selectedEq = equipment.find(e => e.id === selectedEquipment);
-    const isHiPerGator = selectedEq?.type === "HiPerGator";
+    if (selectedEquipment.length === 0) {
+      toast.error("Please select at least one equipment");
+      return;
+    }
 
     setLoading(true);
 
@@ -230,69 +236,94 @@ const Schedule = () => {
       
       const endTime = addMinutes(startTime, parseInt(duration));
 
-      // For HiPerGator, check resource availability
-      if (isHiPerGator) {
-        const overlappingBookings = bookings.filter(b => 
-          b.equipmentId === selectedEquipment &&
-          b.status !== 'cancelled' &&
-          (
-            (b.startTime <= startTime && b.endTime > startTime) ||
-            (b.startTime < endTime && b.endTime >= endTime) ||
-            (b.startTime >= startTime && b.endTime <= endTime)
-          )
-        );
+      // Generate a booking group ID for linking multiple bookings
+      const bookingGroupId = crypto.randomUUID();
 
-        const totalCpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.cpuCount || 0), 0);
-        const totalGpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.gpuCount || 0), 0);
+      // Validate and prepare bookings for each equipment
+      const bookingRecords = [];
+      
+      for (const equipmentId of selectedEquipment) {
+        const selectedEq = equipment.find(e => e.id === equipmentId);
+        const isHiPerGator = selectedEq?.type === "HiPerGator";
 
-        const maxCpus = selectedEq.maxCpuCount || 32;
-        const maxGpus = selectedEq.maxGpuCount || 4;
+        // For HiPerGator, check resource availability
+        if (isHiPerGator) {
+          const overlappingBookings = bookings.filter(b => 
+            b.equipmentId === equipmentId &&
+            b.status !== 'cancelled' &&
+            (
+              (b.startTime <= startTime && b.endTime > startTime) ||
+              (b.startTime < endTime && b.endTime >= endTime) ||
+              (b.startTime >= startTime && b.endTime <= endTime)
+            )
+          );
 
-        if (totalCpuUsed + cpuCount > maxCpus) {
-          toast.error(`Not enough CPUs available. Currently ${maxCpus - totalCpuUsed} CPUs free during this time.`);
-          setLoading(false);
-          return;
+          const totalCpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.cpuCount || 0), 0);
+          const totalGpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.gpuCount || 0), 0);
+
+          const maxCpus = selectedEq.maxCpuCount || 32;
+          const maxGpus = selectedEq.maxGpuCount || 4;
+
+          if (totalCpuUsed + cpuCount > maxCpus) {
+            toast.error(`${selectedEq.name}: Not enough CPUs available. Currently ${maxCpus - totalCpuUsed} CPUs free during this time.`);
+            setLoading(false);
+            return;
+          }
+
+          if (totalGpuUsed + gpuCount > maxGpus) {
+            toast.error(`${selectedEq.name}: Not enough GPUs available. Currently ${maxGpus - totalGpuUsed} GPUs free during this time.`);
+            setLoading(false);
+            return;
+          }
         }
 
-        if (totalGpuUsed + gpuCount > maxGpus) {
-          toast.error(`Not enough GPUs available. Currently ${maxGpus - totalGpuUsed} GPUs free during this time.`);
-          setLoading(false);
-          return;
+        // Prepare booking data
+        const bookingData: any = {
+          equipment_id: equipmentId,
+          user_id: user.id,
+          project_id: selectedProject || null,
+          start_time: startTime.toISOString(),
+          end_time: endTime.toISOString(),
+          purpose: purpose || null,
+          status: 'scheduled',
+          samples_processed: samplesCount,
+          collaborators: selectedCollaborators,
+          booking_group_id: selectedEquipment.length > 1 ? bookingGroupId : null
+        };
+
+        // Add resource counts for HiPerGator
+        if (isHiPerGator) {
+          bookingData.cpu_count = cpuCount;
+          bookingData.gpu_count = gpuCount;
         }
+
+        bookingRecords.push(bookingData);
       }
 
-      // Insert booking into database
-      const bookingData: any = {
-        equipment_id: selectedEquipment,
-        user_id: user.id,
-        project_id: selectedProject || null,
-        start_time: startTime.toISOString(),
-        end_time: endTime.toISOString(),
-        purpose: purpose || null,
-        status: 'scheduled',
-        samples_processed: samplesCount,
-        collaborators: selectedCollaborators
-      };
-
-      // Add resource counts for HiPerGator
-      if (isHiPerGator) {
-        bookingData.cpu_count = cpuCount;
-        bookingData.gpu_count = gpuCount;
-      }
-
+      // Insert all bookings
       const { error } = await supabase
         .from('bookings')
-        .insert(bookingData);
+        .insert(bookingRecords);
 
       if (error) throw error;
 
-      toast.success(isHiPerGator 
-        ? `HiPerGator booked: ${cpuCount} CPUs, ${gpuCount} GPUs` 
-        : "Equipment booked successfully!");
+      const hasHiPerGator = selectedEquipment.some(eqId => {
+        const eq = equipment.find(e => e.id === eqId);
+        return eq?.type === "HiPerGator";
+      });
+
+      toast.success(
+        selectedEquipment.length > 1 
+          ? `${selectedEquipment.length} equipment pieces booked successfully!` 
+          : hasHiPerGator 
+            ? `HiPerGator booked: ${cpuCount} CPUs, ${gpuCount} GPUs` 
+            : "Equipment booked successfully!"
+      );
+      
       setIsBookingDialogOpen(false);
       setBookingDate(new Date());
       setSelectedProject("");
-      setSelectedEquipment("");
+      setSelectedEquipment([]);
       setSelectedTime("");
       setPurpose("");
       setCpuCount(1);
@@ -323,7 +354,14 @@ const Schedule = () => {
       return;
     }
 
-    const selectedEq = equipment.find(e => e.id === selectedEquipment);
+    if (selectedEquipment.length === 0) {
+      toast.error("Please select equipment");
+      return;
+    }
+
+    // For editing, we only support single equipment
+    const equipmentId = selectedEquipment[0];
+    const selectedEq = equipment.find(e => e.id === equipmentId);
     const isHiPerGator = selectedEq?.type === "HiPerGator";
 
     setLoading(true);
@@ -339,7 +377,7 @@ const Schedule = () => {
       if (isHiPerGator) {
         const overlappingBookings = bookings.filter(b => 
           b.id !== selectedBooking.id &&
-          b.equipmentId === selectedEquipment &&
+          b.equipmentId === equipmentId &&
           b.status !== 'cancelled' &&
           (
             (b.startTime <= startTime && b.endTime > startTime) ||
@@ -368,7 +406,7 @@ const Schedule = () => {
       }
 
       const bookingData: any = {
-        equipment_id: selectedEquipment,
+        equipment_id: equipmentId,
         project_id: selectedProject || null,
         start_time: startTime.toISOString(),
         end_time: endTime.toISOString(),
@@ -393,7 +431,7 @@ const Schedule = () => {
       setIsEditDialogOpen(false);
       setSelectedBooking(null);
       setSelectedProject("");
-      setSelectedEquipment("");
+      setSelectedEquipment([]);
       setSelectedTime("");
       setPurpose("");
       setCpuCount(1);
@@ -415,8 +453,11 @@ const Schedule = () => {
     return `${hour.toString().padStart(2, '0')}:00`;
   });
 
-  const selectedEq = equipment.find(e => e.id === selectedEquipment);
-  const isHiPerGator = selectedEq?.type === "HiPerGator";
+  const hasHiPerGator = selectedEquipment.some(eqId => {
+    const eq = equipment.find(e => e.id === eqId);
+    return eq?.type === "HiPerGator";
+  });
+  const isHiPerGator = hasHiPerGator;
 
   const durationOptions = [
     { value: "30", label: "30 minutes" },
@@ -436,8 +477,9 @@ const Schedule = () => {
   // Calculate available HiPerGator resources if applicable
   const getAvailableResources = () => {
     if (!isHiPerGator || !bookingDate || !selectedTime) {
-      const maxCpus = selectedEq?.maxCpuCount || 32;
-      const maxGpus = selectedEq?.maxGpuCount || 4;
+      const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
+      const maxCpus = hiPerGatorEq?.maxCpuCount || 32;
+      const maxGpus = hiPerGatorEq?.maxGpuCount || 4;
       return { availableCpu: maxCpus, availableGpu: maxGpus };
     }
 
@@ -446,8 +488,18 @@ const Schedule = () => {
     startTime.setHours(hours, minutes, 0, 0);
     const endTime = addMinutes(startTime, parseInt(duration));
 
+    // Find the HiPerGator equipment ID
+    const hiPerGatorId = selectedEquipment.find(eqId => {
+      const eq = equipment.find(e => e.id === eqId);
+      return eq?.type === "HiPerGator";
+    });
+
+    if (!hiPerGatorId) {
+      return { availableCpu: 32, availableGpu: 4 };
+    }
+
     const overlappingBookings = bookings.filter(b => 
-      b.equipmentId === selectedEquipment &&
+      b.equipmentId === hiPerGatorId &&
       b.status !== 'cancelled' &&
       (
         (b.startTime <= startTime && b.endTime > startTime) ||
@@ -459,6 +511,7 @@ const Schedule = () => {
     const usedCpus = overlappingBookings.reduce((sum, b) => sum + (b.cpuCount || 0), 0);
     const usedGpus = overlappingBookings.reduce((sum, b) => sum + (b.gpuCount || 0), 0);
 
+    const selectedEq = equipment.find(e => e.id === hiPerGatorId);
     const maxCpus = selectedEq?.maxCpuCount || 32;
     const maxGpus = selectedEq?.maxGpuCount || 4;
 
@@ -809,26 +862,38 @@ const Schedule = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Equipment</Label>
-                <Select 
-                  value={selectedEquipment} 
-                  onValueChange={setSelectedEquipment}
-                  disabled={!selectedProject}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={selectedProject ? "Select equipment" : "Select a project first"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableEquipment.map(eq => (
-                      <SelectItem key={eq.id} value={eq.id}>
-                        {eq.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedProject && availableEquipment.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    No compatible equipment available for this project
+                <Label>Equipment (Select one or more)</Label>
+                <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto">
+                  {availableEquipment.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      {selectedProject ? "No compatible equipment available for this project" : "Select a project first"}
+                    </p>
+                  ) : (
+                    availableEquipment.map(eq => (
+                      <label key={eq.id} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-2 rounded">
+                        <input
+                          type="checkbox"
+                          checked={selectedEquipment.includes(eq.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedEquipment([...selectedEquipment, eq.id]);
+                            } else {
+                              setSelectedEquipment(selectedEquipment.filter(id => id !== eq.id));
+                            }
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{eq.name}</span>
+                        {eq.type === "HiPerGator" && (
+                          <Badge variant="secondary" className="text-xs ml-auto">HiPerGator</Badge>
+                        )}
+                      </label>
+                    ))
+                  )}
+                </div>
+                {selectedEquipment.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedEquipment.length} equipment piece{selectedEquipment.length > 1 ? 's' : ''} selected
                   </p>
                 )}
               </div>
@@ -963,11 +1028,14 @@ const Schedule = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-sm font-medium">
                       <Server className="w-4 h-4" />
-                      <span>Resource Allocation</span>
+                      <span>HiPerGator Resource Allocation</span>
                     </div>
                     {(() => {
-                      const cpuPercent = ((availableCpu / (selectedEq?.maxCpuCount || 32)) * 100);
-                      const gpuPercent = ((availableGpu / (selectedEq?.maxGpuCount || 4)) * 100);
+                      const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
+                      const maxCpus = hiPerGatorEq?.maxCpuCount || 32;
+                      const maxGpus = hiPerGatorEq?.maxGpuCount || 4;
+                      const cpuPercent = ((availableCpu / maxCpus) * 100);
+                      const gpuPercent = ((availableGpu / maxGpus) * 100);
                       const status = cpuPercent > 50 && gpuPercent > 50 ? 'high' : cpuPercent > 20 && gpuPercent > 20 ? 'medium' : 'low';
                       return (
                         <Badge variant={status === 'high' ? 'default' : status === 'medium' ? 'secondary' : 'destructive'} className="text-xs">
@@ -989,7 +1057,7 @@ const Schedule = () => {
                         value={[cpuCount]}
                         onValueChange={(value) => setCpuCount(value[0])}
                         min={1}
-                        max={Math.max(1, Math.min(selectedEq?.maxCpuCount || 32, availableCpu))}
+                        max={Math.max(1, Math.min(equipment.find(e => e.type === "HiPerGator")?.maxCpuCount || 32, availableCpu))}
                         step={1}
                         className="w-full"
                       />
@@ -1006,18 +1074,23 @@ const Schedule = () => {
                         value={[gpuCount]}
                         onValueChange={(value) => setGpuCount(value[0])}
                         min={0}
-                        max={Math.max(0, Math.min(selectedEq?.maxGpuCount || 4, availableGpu))}
+                        max={Math.max(0, Math.min(equipment.find(e => e.type === "HiPerGator")?.maxGpuCount || 4, availableGpu))}
                         step={1}
                         className="w-full"
                       />
                     </div>
 
-                    {(availableCpu < (selectedEq?.maxCpuCount || 32) * 0.2 || availableGpu < (selectedEq?.maxGpuCount || 4) * 0.2) && (
-                      <div className="flex items-start gap-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-700 dark:text-amber-400">
-                        <Server className="w-4 h-4 shrink-0 mt-0.5" />
-                        <p>Limited resources available during this time. Consider selecting a different time slot for more capacity.</p>
-                      </div>
-                    )}
+                    {(() => {
+                      const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
+                      const maxCpus = hiPerGatorEq?.maxCpuCount || 32;
+                      const maxGpus = hiPerGatorEq?.maxGpuCount || 4;
+                      return (availableCpu < maxCpus * 0.2 || availableGpu < maxGpus * 0.2) && (
+                        <div className="flex items-start gap-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-700 dark:text-amber-400">
+                          <Server className="w-4 h-4 shrink-0 mt-0.5" />
+                          <p>Limited resources available during this time. Consider selecting a different time slot for more capacity.</p>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -1025,7 +1098,7 @@ const Schedule = () => {
               <Button
                 type="submit" 
                 className="w-full" 
-                disabled={!selectedProject || !selectedEquipment || !selectedTime || loading}
+                disabled={!selectedProject || selectedEquipment.length === 0 || !selectedTime || loading}
               >
                 {loading ? (
                   <>
@@ -1060,9 +1133,9 @@ const Schedule = () => {
                   setSelectedBooking(booking);
                   setIsEditDialogOpen(true);
                   setIsDetailsDialogOpen(false);
-                  // Pre-fill form
+                  // Pre-fill form - editing keeps single equipment
                   setSelectedProject(booking.projectId || "");
-                  setSelectedEquipment(booking.equipmentId);
+                  setSelectedEquipment([booking.equipmentId]);
                   setBookingDate(booking.startTime);
                   setSelectedTime(format(booking.startTime, "HH:mm"));
                   setDuration(booking.duration.toString());
@@ -1264,8 +1337,11 @@ const Schedule = () => {
                       <span>Resource Allocation</span>
                     </div>
                     {(() => {
-                      const cpuPercent = ((availableCpu / (selectedEq?.maxCpuCount || 32)) * 100);
-                      const gpuPercent = ((availableGpu / (selectedEq?.maxGpuCount || 4)) * 100);
+                      const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
+                      const maxCpus = hiPerGatorEq?.maxCpuCount || 32;
+                      const maxGpus = hiPerGatorEq?.maxGpuCount || 4;
+                      const cpuPercent = ((availableCpu / maxCpus) * 100);
+                      const gpuPercent = ((availableGpu / maxGpus) * 100);
                       const status = cpuPercent > 50 && gpuPercent > 50 ? 'high' : cpuPercent > 20 && gpuPercent > 20 ? 'medium' : 'low';
                       return (
                         <Badge variant={status === 'high' ? 'default' : status === 'medium' ? 'secondary' : 'destructive'} className="text-xs">
@@ -1286,7 +1362,7 @@ const Schedule = () => {
                         value={[cpuCount]}
                         onValueChange={(value) => setCpuCount(value[0])}
                         min={1}
-                        max={Math.max(1, Math.min(selectedEq?.maxCpuCount || 32, availableCpu))}
+                        max={Math.max(1, Math.min(equipment.find(e => e.type === "HiPerGator")?.maxCpuCount || 32, availableCpu))}
                         step={1}
                       />
                     </div>
@@ -1301,16 +1377,21 @@ const Schedule = () => {
                         value={[gpuCount]}
                         onValueChange={(value) => setGpuCount(value[0])}
                         min={0}
-                        max={Math.max(0, Math.min(selectedEq?.maxGpuCount || 4, availableGpu))}
+                        max={Math.max(0, Math.min(equipment.find(e => e.type === "HiPerGator")?.maxGpuCount || 4, availableGpu))}
                         step={1}
                       />
                     </div>
-                    {(availableCpu < (selectedEq?.maxCpuCount || 32) * 0.2 || availableGpu < (selectedEq?.maxGpuCount || 4) * 0.2) && (
-                      <div className="flex items-start gap-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-700 dark:text-amber-400">
-                        <Server className="w-4 h-4 shrink-0 mt-0.5" />
-                        <p>Limited resources available during this time. Consider selecting a different time slot for more capacity.</p>
-                      </div>
-                    )}
+                    {(() => {
+                      const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
+                      const maxCpus = hiPerGatorEq?.maxCpuCount || 32;
+                      const maxGpus = hiPerGatorEq?.maxGpuCount || 4;
+                      return (availableCpu < maxCpus * 0.2 || availableGpu < maxGpus * 0.2) && (
+                        <div className="flex items-start gap-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-700 dark:text-amber-400">
+                          <Server className="w-4 h-4 shrink-0 mt-0.5" />
+                          <p>Limited resources available during this time. Consider selecting a different time slot for more capacity.</p>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}

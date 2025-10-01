@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       bookings: {
         Row: {
+          booking_group_id: string | null
           collaborators: Json | null
           cpu_count: number | null
           created_at: string
@@ -31,6 +32,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          booking_group_id?: string | null
           collaborators?: Json | null
           cpu_count?: number | null
           created_at?: string
@@ -46,6 +48,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          booking_group_id?: string | null
           collaborators?: Json | null
           cpu_count?: number | null
           created_at?: string
@@ -202,6 +205,7 @@ export type Database = {
       }
       usage_records: {
         Row: {
+          booking_group_id: string | null
           created_at: string
           end_time: string
           equipment_id: string
@@ -213,6 +217,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          booking_group_id?: string | null
           created_at?: string
           end_time: string
           equipment_id: string
@@ -224,6 +229,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          booking_group_id?: string | null
           created_at?: string
           end_time?: string
           equipment_id?: string

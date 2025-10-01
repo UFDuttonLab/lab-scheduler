@@ -38,7 +38,7 @@ export default function QuickAdd() {
   const [selectedTime, setSelectedTime] = useState<string>("");
 
   const [formData, setFormData] = useState({
-    equipmentId: "",
+    equipmentIds: [] as string[],
     projectId: "",
     duration: "30",
     samplesProcessed: 1,
@@ -125,6 +125,16 @@ export default function QuickAdd() {
       return;
     }
 
+    if (formData.equipmentIds.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please select at least one equipment",
+        variant: "destructive",
+      });
+      setLoading(false);
+      return;
+    }
+
     // Parse the time and combine with selected date
     const [hours, minutes] = selectedTime.split(':').map(Number);
     const startTime = new Date(selectedDate);
@@ -132,16 +142,23 @@ export default function QuickAdd() {
     
     const endTime = addMinutes(startTime, parseInt(formData.duration));
 
-    const { error } = await supabase.from("usage_records").insert({
+    // Generate a group ID for linking multiple usage records
+    const usageGroupId = formData.equipmentIds.length > 1 ? crypto.randomUUID() : null;
+
+    // Create usage records for each equipment
+    const usageRecords = formData.equipmentIds.map(equipmentId => ({
       user_id: user.id,
-      equipment_id: formData.equipmentId,
+      equipment_id: equipmentId,
       project_id: formData.projectId || null,
       start_time: startTime.toISOString(),
       end_time: endTime.toISOString(),
       samples_processed: formData.samplesProcessed,
       notes: formData.notes || null,
       collaborators: selectedCollaborators,
-    });
+      booking_group_id: usageGroupId
+    }));
+
+    const { error } = await supabase.from("usage_records").insert(usageRecords);
 
     if (error) {
       toast({
@@ -152,12 +169,14 @@ export default function QuickAdd() {
     } else {
       toast({
         title: "Success",
-        description: "Usage record added successfully",
+        description: formData.equipmentIds.length > 1 
+          ? `${formData.equipmentIds.length} usage records added successfully`
+          : "Usage record added successfully",
       });
       
       // Reset form
       setFormData({
-        equipmentId: "",
+        equipmentIds: [],
         projectId: "",
         duration: "30",
         samplesProcessed: 1,
@@ -253,25 +272,35 @@ export default function QuickAdd() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="equipment">Equipment *</Label>
-                <Select
-                  value={formData.equipmentId}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, equipmentId: value })
-                  }
-                  required
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select equipment" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {equipment.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
-                        {item.name} - {item.location}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="equipment">Equipment (Select one or more) *</Label>
+                <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto">
+                  {equipment.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No equipment available</p>
+                  ) : (
+                    equipment.map((item) => (
+                      <label key={item.id} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-2 rounded">
+                        <input
+                          type="checkbox"
+                          checked={formData.equipmentIds.includes(item.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData({ ...formData, equipmentIds: [...formData.equipmentIds, item.id] });
+                            } else {
+                              setFormData({ ...formData, equipmentIds: formData.equipmentIds.filter(id => id !== item.id) });
+                            }
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm flex-1">{item.name} - {item.location}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {formData.equipmentIds.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {formData.equipmentIds.length} equipment piece{formData.equipmentIds.length > 1 ? 's' : ''} selected
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
