@@ -13,13 +13,28 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
     
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Verify the requesting user is a manager
-    const authHeader = req.headers.get('Authorization')!
+    // Verify the requesting user is authenticated
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      console.error('No authorization header provided')
+      return new Response(JSON.stringify({ error: 'Unauthorized: No authorization header' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
     const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
+    
+    // Create a client with the user's token to verify authentication
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    })
+    
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser()
     
     if (authError || !user) {
       console.error('Authentication error:', authError)
