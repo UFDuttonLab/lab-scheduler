@@ -6,24 +6,37 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { mockProjects } from "@/lib/mockData";
-import { Project } from "@/lib/types";
+import { mockProjects, mockStudents } from "@/lib/mockData";
+import { Project, Student } from "@/lib/types";
 import { Plus, Trash2, Edit } from "lucide-react";
 import { toast } from "sonner";
 
 const Settings = () => {
   const [projects, setProjects] = useState<Project[]>(mockProjects);
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [students, setStudents] = useState<Student[]>(mockStudents);
+  const [isAddProjectDialogOpen, setIsAddProjectDialogOpen] = useState(false);
+  const [isAddStudentDialogOpen, setIsAddStudentDialogOpen] = useState(false);
 
   const handleAddProject = (e: React.FormEvent) => {
     e.preventDefault();
     toast.success("Project added successfully!");
-    setIsAddDialogOpen(false);
+    setIsAddProjectDialogOpen(false);
   };
 
   const handleDeleteProject = (projectId: string) => {
     setProjects(projects.filter(p => p.id !== projectId));
     toast.success("Project deleted");
+  };
+
+  const handleAddStudent = (e: React.FormEvent) => {
+    e.preventDefault();
+    toast.success("Student added successfully!");
+    setIsAddStudentDialogOpen(false);
+  };
+
+  const handleDeleteStudent = (studentId: string) => {
+    setStudents(students.filter(s => s.id !== studentId));
+    toast.success("Student removed");
   };
 
   return (
@@ -40,21 +53,22 @@ const Settings = () => {
           </div>
         </div>
 
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-2xl font-bold mb-1">Lab Projects</h2>
-              <p className="text-sm text-muted-foreground">
-                Manage projects that students can select when booking equipment
-              </p>
-            </div>
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Project
-                </Button>
-              </DialogTrigger>
+        <div className="space-y-8">
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-bold mb-1">Lab Projects</h2>
+                <p className="text-sm text-muted-foreground">
+                  Manage projects that students can select when booking equipment
+                </p>
+              </div>
+              <Dialog open={isAddProjectDialogOpen} onOpenChange={setIsAddProjectDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Project
+                  </Button>
+                </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Add New Project</DialogTitle>
@@ -89,9 +103,9 @@ const Settings = () => {
                 </form>
               </DialogContent>
             </Dialog>
-          </div>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {projects.map(project => (
               <Card key={project.id} className="p-4">
                 <div className="flex items-start justify-between">
@@ -128,9 +142,85 @@ const Settings = () => {
                   </div>
                 </div>
               </Card>
-            ))}
-          </div>
-        </Card>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-bold mb-1">Registered Students</h2>
+                <p className="text-sm text-muted-foreground">
+                  Manage students who can book equipment
+                </p>
+              </div>
+              <Dialog open={isAddStudentDialogOpen} onOpenChange={setIsAddStudentDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Student
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add New Student</DialogTitle>
+                    <DialogDescription>
+                      Register a student to enable quick booking selection
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  <form onSubmit={handleAddStudent} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Student Name</Label>
+                      <Input placeholder="e.g., John Smith" required />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Email</Label>
+                      <Input type="email" placeholder="john.smith@ufl.edu" required />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Department (Optional)</Label>
+                      <Input placeholder="e.g., Electrical Engineering" />
+                    </div>
+
+                    <Button type="submit" className="w-full">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Student
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {students.map(student => (
+                <Card key={student.id} className="p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-semibold mb-1">{student.name}</h3>
+                      <p className="text-sm text-muted-foreground">{student.email}</p>
+                      {student.department && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {student.department}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive hover:text-destructive"
+                      onClick={() => handleDeleteStudent(student.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </Card>
+        </div>
       </main>
     </div>
   );

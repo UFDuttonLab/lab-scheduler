@@ -15,6 +15,13 @@ export interface Project {
   color?: string; // For calendar color coding
 }
 
+export interface Student {
+  id: string;
+  name: string;
+  email: string;
+  department?: string;
+}
+
 export interface Booking {
   id: string;
   equipmentId: string;

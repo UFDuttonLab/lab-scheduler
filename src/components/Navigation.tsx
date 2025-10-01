@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Calendar, Settings, History, Wrench } from "lucide-react";
+import { Home, Calendar, Settings, History, Wrench, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Navigation = () => {
@@ -9,6 +9,7 @@ export const Navigation = () => {
     { path: "/", label: "Dashboard", icon: Home },
     { path: "/schedule", label: "Schedule", icon: Calendar },
     { path: "/equipment", label: "Equipment", icon: Wrench },
+    { path: "/analytics", label: "Analytics", icon: BarChart3 },
     { path: "/history", label: "History", icon: History },
     { path: "/settings", label: "Settings", icon: Settings },
   ];

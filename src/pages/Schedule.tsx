@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { mockEquipment, mockBookings, mockProjects } from "@/lib/mockData";
+import { mockEquipment, mockBookings, mockProjects, mockStudents } from "@/lib/mockData";
 import { Equipment, Project } from "@/lib/types";
 import { format, isSameDay } from "date-fns";
 import { Plus, Clock } from "lucide-react";
@@ -236,13 +236,19 @@ const Schedule = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Your Name</Label>
-                <Input placeholder="Enter your name" required />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input type="email" placeholder="your.email@ufl.edu" required />
+                <Label>Student Name</Label>
+                <Select required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select your name" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mockStudents.map(student => (
+                      <SelectItem key={student.id} value={student.id}>
+                        {student.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">

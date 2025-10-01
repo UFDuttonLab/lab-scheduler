@@ -1,5 +1,32 @@
 // Mock data for Dutton Lab Equipment Scheduler
-import { Equipment, Booking, Project } from "./types";
+import { Equipment, Booking, Project, Student } from "./types";
+
+export const mockStudents: Student[] = [
+  {
+    id: "s1",
+    name: "Alice Johnson",
+    email: "alice.johnson@ufl.edu",
+    department: "Electrical Engineering",
+  },
+  {
+    id: "s2",
+    name: "Bob Martinez",
+    email: "bob.martinez@ufl.edu",
+    department: "Physics",
+  },
+  {
+    id: "s3",
+    name: "Carol White",
+    email: "carol.white@ufl.edu",
+    department: "Materials Science",
+  },
+  {
+    id: "s4",
+    name: "David Chen",
+    email: "david.chen@ufl.edu",
+    department: "Computer Science",
+  },
+];
 
 export const mockProjects: Project[] = [
   {
