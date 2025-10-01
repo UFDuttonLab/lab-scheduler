@@ -14,9 +14,11 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSearchParams } from "react-router-dom";
 
 const Schedule = () => {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [isBookingDialogOpen, setIsBookingDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<string>("");
@@ -35,6 +37,15 @@ const Schedule = () => {
     fetchEquipment();
     fetchBookings();
   }, []);
+
+  // Auto-open dialog and pre-select equipment if passed via URL
+  useEffect(() => {
+    const equipmentId = searchParams.get('equipment');
+    if (equipmentId && equipment.length > 0) {
+      setSelectedEquipment(equipmentId);
+      setIsBookingDialogOpen(true);
+    }
+  }, [searchParams, equipment]);
 
   const fetchProjects = async () => {
     const { data, error } = await supabase

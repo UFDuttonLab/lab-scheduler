@@ -207,7 +207,7 @@ const Index = () => {
                   <EquipmentCard
                     key={eq.id}
                     equipment={eq}
-                    onSelect={() => navigate("/schedule")}
+                    onSelect={() => navigate(`/schedule?equipment=${eq.id}`)}
                   />
                 ))
               ) : (

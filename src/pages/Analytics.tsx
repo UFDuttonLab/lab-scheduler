@@ -1,16 +1,76 @@
+import { useState, useEffect } from "react";
 import { Navigation } from "@/components/Navigation";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { mockBookings, mockProjects, mockStudents } from "@/lib/mockData";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { Clock, TrendingUp, Users, FolderKanban } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { Clock, TrendingUp, Users, FolderKanban, Loader2 } from "lucide-react";
 import { StatsCard } from "@/components/StatsCard";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const Analytics = () => {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch bookings with related data
+      const { data: bookingsData, error: bookingsError } = await supabase
+        .from('bookings')
+        .select(`
+          *,
+          equipment:equipment_id (name),
+          project:project_id (name, color),
+          profile:user_id (full_name, email)
+        `);
+
+      if (bookingsError) throw bookingsError;
+
+      // Fetch projects
+      const { data: projectsData, error: projectsError } = await supabase
+        .from('projects')
+        .select('*');
+
+      if (projectsError) throw projectsError;
+
+      // Fetch users/profiles
+      const { data: usersData, error: usersError } = await supabase
+        .from('profiles')
+        .select('*');
+
+      if (usersError) throw usersError;
+
+      setBookings(bookingsData || []);
+      setProjects(projectsData || []);
+      setUsers(usersData || []);
+    } catch (error: any) {
+      toast({
+        title: "Error fetching analytics data",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Calculate time per project
-  const projectTimeData = mockProjects.map(project => {
-    const projectBookings = mockBookings.filter(b => b.projectId === project.id);
-    const totalMinutes = projectBookings.reduce((sum, b) => sum + b.duration, 0);
+  const projectTimeData = projects.map(project => {
+    const projectBookings = bookings.filter(b => b.project_id === project.id);
+    const totalMinutes = projectBookings.reduce((sum, booking) => {
+      const start = new Date(booking.start_time);
+      const end = new Date(booking.end_time);
+      return sum + (end.getTime() - start.getTime()) / (1000 * 60);
+    }, 0);
     const totalHours = Math.round(totalMinutes / 60 * 10) / 10;
     
     return {
@@ -19,26 +79,46 @@ const Analytics = () => {
       bookings: projectBookings.length,
       color: project.color || "#8884d8",
     };
-  });
+  }).filter(p => p.hours > 0);
 
   // Calculate time per student
-  const studentTimeData = mockStudents.map(student => {
-    const studentBookings = mockBookings.filter(b => b.studentName === student.name);
-    const totalMinutes = studentBookings.reduce((sum, b) => sum + b.duration, 0);
+  const studentTimeData = users.map(user => {
+    const userBookings = bookings.filter(b => b.user_id === user.id);
+    const totalMinutes = userBookings.reduce((sum, booking) => {
+      const start = new Date(booking.start_time);
+      const end = new Date(booking.end_time);
+      return sum + (end.getTime() - start.getTime()) / (1000 * 60);
+    }, 0);
     const totalHours = Math.round(totalMinutes / 60 * 10) / 10;
     
     return {
-      name: student.name,
+      name: user.full_name || user.email,
       hours: totalHours,
-      bookings: studentBookings.length,
+      bookings: userBookings.length,
     };
-  }).sort((a, b) => b.hours - a.hours);
+  }).filter(s => s.hours > 0).sort((a, b) => b.hours - a.hours);
 
   // Summary stats
-  const totalBookings = mockBookings.length;
-  const totalHours = Math.round(mockBookings.reduce((sum, b) => sum + b.duration, 0) / 60 * 10) / 10;
-  const activeStudents = new Set(mockBookings.map(b => b.studentName)).size;
-  const avgBookingDuration = Math.round(mockBookings.reduce((sum, b) => sum + b.duration, 0) / totalBookings);
+  const totalBookings = bookings.length;
+  const totalMinutes = bookings.reduce((sum, booking) => {
+    const start = new Date(booking.start_time);
+    const end = new Date(booking.end_time);
+    return sum + (end.getTime() - start.getTime()) / (1000 * 60);
+  }, 0);
+  const totalHours = Math.round(totalMinutes / 60 * 10) / 10;
+  const activeStudents = new Set(bookings.map(b => b.user_id)).size;
+  const avgBookingDuration = totalBookings > 0 ? Math.round(totalMinutes / totalBookings) : 0;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navigation />
+        <div className="container mx-auto p-6 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -69,7 +149,7 @@ const Analytics = () => {
             title="Active Students"
             value={activeStudents}
             icon={Users}
-            trend={`${mockStudents.length} registered`}
+            trend={`${users.length} registered`}
           />
           <StatsCard
             title="Avg Booking Duration"
@@ -89,37 +169,49 @@ const Analytics = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="p-6">
                 <h3 className="font-semibold text-xl mb-4">Usage Hours by Project</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={projectTimeData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
-                    <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip />
-                    <Bar dataKey="hours" fill="hsl(var(--primary))" />
-                  </BarChart>
-                </ResponsiveContainer>
+                {projectTimeData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={projectTimeData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                      <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} />
+                      <Tooltip />
+                      <Bar dataKey="hours" fill="hsl(var(--primary))" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    No project usage data available
+                  </div>
+                )}
               </Card>
 
               <Card className="p-6">
                 <h3 className="font-semibold text-xl mb-4">Project Distribution</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={projectTimeData}
-                      dataKey="hours"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={100}
-                      label={(entry) => `${entry.name}: ${entry.hours}h`}
-                    >
-                      {projectTimeData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
+                {projectTimeData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={projectTimeData}
+                        dataKey="hours"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        label={(entry) => `${entry.name}: ${entry.hours}h`}
+                      >
+                        {projectTimeData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    No data available for distribution chart
+                  </div>
+                )}
               </Card>
 
               <Card className="p-6 lg:col-span-2">
@@ -135,27 +227,35 @@ const Analytics = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {projectTimeData.map((project) => (
-                        <tr key={project.name} className="border-b hover:bg-muted/50">
-                          <td className="py-3 px-4">
-                            <div className="flex items-center gap-2">
-                              <div 
-                                className="w-3 h-3 rounded-full" 
-                                style={{ backgroundColor: project.color }}
-                              />
-                              {project.name}
-                            </div>
-                          </td>
-                          <td className="text-right py-3 px-4">{project.hours}h</td>
-                          <td className="text-right py-3 px-4">{project.bookings}</td>
-                          <td className="text-right py-3 px-4">
-                            {project.bookings > 0 
-                              ? Math.round(project.hours / project.bookings * 60) + 'm'
-                              : '-'
-                            }
+                      {projectTimeData.length > 0 ? (
+                        projectTimeData.map((project) => (
+                          <tr key={project.name} className="border-b hover:bg-muted/50">
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <div 
+                                  className="w-3 h-3 rounded-full" 
+                                  style={{ backgroundColor: project.color }}
+                                />
+                                {project.name}
+                              </div>
+                            </td>
+                            <td className="text-right py-3 px-4">{project.hours}h</td>
+                            <td className="text-right py-3 px-4">{project.bookings}</td>
+                            <td className="text-right py-3 px-4">
+                              {project.bookings > 0 
+                                ? Math.round(project.hours / project.bookings * 60) + 'm'
+                                : '-'
+                              }
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={4} className="py-4 text-center text-muted-foreground">
+                            No project data available
                           </td>
                         </tr>
-                      ))}
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -167,37 +267,49 @@ const Analytics = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="p-6">
                 <h3 className="font-semibold text-xl mb-4">Usage Hours by Student</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={studentTimeData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
-                    <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip />
-                    <Bar dataKey="hours" fill="hsl(var(--secondary))" />
-                  </BarChart>
-                </ResponsiveContainer>
+                {studentTimeData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={studentTimeData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                      <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} />
+                      <Tooltip />
+                      <Bar dataKey="hours" fill="hsl(var(--secondary))" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    No student usage data available
+                  </div>
+                )}
               </Card>
 
               <Card className="p-6 lg:col-span-1">
                 <h3 className="font-semibold text-xl mb-4">Student Rankings</h3>
-                <div className="space-y-3">
-                  {studentTimeData.slice(0, 5).map((student, index) => (
-                    <div key={student.name} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
-                          {index + 1}
+                {studentTimeData.length > 0 ? (
+                  <div className="space-y-3">
+                    {studentTimeData.slice(0, 5).map((student, index) => (
+                      <div key={student.name} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <p className="font-medium">{student.name}</p>
+                            <p className="text-sm text-muted-foreground">{student.bookings} bookings</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium">{student.name}</p>
-                          <p className="text-sm text-muted-foreground">{student.bookings} bookings</p>
+                        <div className="text-right">
+                          <p className="font-bold text-lg">{student.hours}h</p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold text-lg">{student.hours}h</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+                    No student data available
+                  </div>
+                )}
               </Card>
 
               <Card className="p-6 lg:col-span-2">
@@ -213,19 +325,27 @@ const Analytics = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {studentTimeData.map((student) => (
-                        <tr key={student.name} className="border-b hover:bg-muted/50">
-                          <td className="py-3 px-4">{student.name}</td>
-                          <td className="text-right py-3 px-4">{student.hours}h</td>
-                          <td className="text-right py-3 px-4">{student.bookings}</td>
-                          <td className="text-right py-3 px-4">
-                            {student.bookings > 0 
-                              ? Math.round(student.hours / student.bookings * 60) + 'm'
-                              : '-'
-                            }
+                      {studentTimeData.length > 0 ? (
+                        studentTimeData.map((student) => (
+                          <tr key={student.name} className="border-b hover:bg-muted/50">
+                            <td className="py-3 px-4">{student.name}</td>
+                            <td className="text-right py-3 px-4">{student.hours}h</td>
+                            <td className="text-right py-3 px-4">{student.bookings}</td>
+                            <td className="text-right py-3 px-4">
+                              {student.bookings > 0 
+                                ? Math.round(student.hours / student.bookings * 60) + 'm'
+                                : '-'
+                              }
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={4} className="py-4 text-center text-muted-foreground">
+                            No student data available
                           </td>
                         </tr>
-                      ))}
+                      )}
                     </tbody>
                   </table>
                 </div>
