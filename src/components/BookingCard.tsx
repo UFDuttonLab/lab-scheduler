@@ -1,14 +1,32 @@
 import { Booking } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, User, Mail } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Clock, User, Mail, Trash2 } from "lucide-react";
 import { format } from "date-fns";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface BookingCardProps {
   booking: Booking;
+  onDelete?: () => void;
 }
 
-export const BookingCard = ({ booking }: BookingCardProps) => {
+export const BookingCard = ({ booking, onDelete }: BookingCardProps) => {
+  const { isManager } = useAuth();
+  
   const statusConfig = {
     scheduled: { label: "Scheduled", className: "bg-primary text-primary-foreground" },
     "in-progress": { label: "In Progress", className: "bg-warning text-warning-foreground" },
@@ -18,10 +36,25 @@ export const BookingCard = ({ booking }: BookingCardProps) => {
 
   const status = statusConfig[booking.status];
 
+  const handleDelete = async () => {
+    const { error } = await supabase
+      .from('bookings')
+      .delete()
+      .eq('id', booking.id);
+
+    if (error) {
+      toast.error("Failed to delete booking");
+      return;
+    }
+
+    toast.success("Booking deleted successfully");
+    onDelete?.();
+  };
+
   return (
     <Card className="p-4 hover:shadow-md transition-all animate-fade-in">
       <div className="flex items-start justify-between mb-3">
-        <div>
+        <div className="flex-1">
           <h4 className="font-semibold">{booking.equipmentName}</h4>
           <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
             <Clock className="w-3 h-3" />
@@ -30,7 +63,30 @@ export const BookingCard = ({ booking }: BookingCardProps) => {
             </span>
           </div>
         </div>
-        <Badge className={status.className}>{status.label}</Badge>
+        <div className="flex items-center gap-2">
+          <Badge className={status.className}>{status.label}</Badge>
+          {isManager && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Booking</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to delete this booking? This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
       </div>
 
       <div className="space-y-1">

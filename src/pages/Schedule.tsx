@@ -1,42 +1,179 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { mockEquipment, mockBookings, mockProjects, mockStudents } from "@/lib/mockData";
-import { Equipment, Project } from "@/lib/types";
-import { format, isSameDay } from "date-fns";
-import { Plus, Clock } from "lucide-react";
+import { Equipment, Project, Booking } from "@/lib/types";
+import { format, isSameDay, parse, addMinutes } from "date-fns";
+import { Plus, Clock, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Schedule = () => {
+  const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [isBookingDialogOpen, setIsBookingDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [selectedEquipment, setSelectedEquipment] = useState<string>("");
+  const [selectedTime, setSelectedTime] = useState<string>("");
   const [duration, setDuration] = useState<string>("60");
+  const [purpose, setPurpose] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+  
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
 
-  const availableEquipment = mockEquipment.filter(e => 
-    e.status === "available" && 
-    (!selectedProject || e.compatibleProjects?.includes(selectedProject))
-  );
+  useEffect(() => {
+    fetchProjects();
+    fetchEquipment();
+    fetchBookings();
+  }, []);
+
+  const fetchProjects = async () => {
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .order('name');
+    
+    if (error) {
+      toast.error("Failed to load projects");
+      return;
+    }
+    
+    setProjects(data || []);
+  };
+
+  const fetchEquipment = async () => {
+    const { data, error } = await supabase
+      .from('equipment')
+      .select('*')
+      .order('name');
+    
+    if (error) {
+      toast.error("Failed to load equipment");
+      return;
+    }
+    
+    // Transform to match Equipment type
+    const transformedEquipment: Equipment[] = (data || []).map(eq => ({
+      id: eq.id,
+      name: eq.name,
+      type: eq.type as "robot" | "equipment",
+      status: eq.status as "available" | "in-use" | "maintenance",
+      location: eq.location,
+      description: eq.description || undefined,
+    }));
+    
+    setEquipment(transformedEquipment);
+  };
+
+  const fetchBookings = async () => {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select(`
+        *,
+        equipment:equipment_id (name),
+        project:project_id (name, color),
+        user:user_id (email, full_name)
+      `)
+      .order('start_time');
+    
+    if (error) {
+      toast.error("Failed to load bookings");
+      return;
+    }
+    
+    // Transform the data to match our Booking type
+    const transformedBookings: Booking[] = (data || []).map((booking: any) => ({
+      id: booking.id,
+      equipmentId: booking.equipment_id,
+      equipmentName: booking.equipment?.name || 'Unknown',
+      studentName: booking.user?.full_name || 'Unknown',
+      studentEmail: booking.user?.email || 'Unknown',
+      startTime: new Date(booking.start_time),
+      endTime: new Date(booking.end_time),
+      duration: Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000),
+      projectId: booking.project_id || undefined,
+      projectName: booking.project?.name || undefined,
+      purpose: booking.purpose || undefined,
+      status: booking.status as "scheduled" | "in-progress" | "completed" | "cancelled"
+    }));
+    
+    setBookings(transformedBookings);
+  };
+
+  const availableEquipment = equipment.filter(e => {
+    if (e.status !== "available") return false;
+    if (!selectedProject) return true;
+    
+    // Check if this equipment is compatible with the selected project
+    // Note: We need to fetch equipment_projects relationships
+    return true; // For now, show all available equipment
+  });
 
   const dayBookings = selectedDate 
-    ? mockBookings.filter(b => isSameDay(b.startTime, selectedDate))
+    ? bookings.filter(b => isSameDay(b.startTime, selectedDate))
     : [];
 
-  const handleBooking = (e: React.FormEvent) => {
+  const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success("Equipment booked successfully! First-come, first-served.");
-    setIsBookingDialogOpen(false);
-    setSelectedProject("");
-    setSelectedEquipment("");
+    
+    if (!user) {
+      toast.error("You must be logged in to book equipment");
+      return;
+    }
+
+    if (!selectedDate || !selectedTime) {
+      toast.error("Please select a date and time");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Parse the time and combine with selected date
+      const [hours, minutes] = selectedTime.split(':').map(Number);
+      const startTime = new Date(selectedDate);
+      startTime.setHours(hours, minutes, 0, 0);
+      
+      const endTime = addMinutes(startTime, parseInt(duration));
+
+      // Insert booking into database
+      const { error } = await supabase
+        .from('bookings')
+        .insert({
+          equipment_id: selectedEquipment,
+          user_id: user.id,
+          project_id: selectedProject || null,
+          start_time: startTime.toISOString(),
+          end_time: endTime.toISOString(),
+          purpose: purpose || null,
+          status: 'scheduled'
+        });
+
+      if (error) throw error;
+
+      toast.success("Equipment booked successfully!");
+      setIsBookingDialogOpen(false);
+      setSelectedProject("");
+      setSelectedEquipment("");
+      setSelectedTime("");
+      setPurpose("");
+      
+      // Refresh bookings
+      fetchBookings();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to book equipment");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const timeSlots = Array.from({ length: 12 }, (_, i) => {
@@ -101,37 +238,40 @@ const Schedule = () => {
                 
                 {dayBookings.length > 0 ? (
                   <div className="space-y-4">
-                    {dayBookings.map((booking) => (
-                      <Card key={booking.id} className="p-4 border-l-4" style={{ borderLeftColor: mockProjects.find(p => p.id === booking.projectId)?.color || '#ccc' }}>
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <h4 className="font-semibold">{booking.equipmentName}</h4>
-                            <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                              <Clock className="w-3 h-3" />
-                              <span>
-                                {format(booking.startTime, "h:mm a")} - {format(booking.endTime, "h:mm a")}
-                              </span>
-                              <span className="text-xs">({booking.duration} min)</span>
+                    {dayBookings.map((booking) => {
+                      const project = projects.find(p => p.id === booking.projectId);
+                      return (
+                        <Card key={booking.id} className="p-4 border-l-4" style={{ borderLeftColor: project?.color || '#ccc' }}>
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <h4 className="font-semibold">{booking.equipmentName}</h4>
+                              <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                                <Clock className="w-3 h-3" />
+                                <span>
+                                  {format(booking.startTime, "h:mm a")} - {format(booking.endTime, "h:mm a")}
+                                </span>
+                                <span className="text-xs">({booking.duration} min)</span>
+                              </div>
                             </div>
+                            <Badge className="bg-primary text-primary-foreground">
+                              {booking.status}
+                            </Badge>
                           </div>
-                          <Badge className="bg-primary text-primary-foreground">
-                            {booking.status}
-                          </Badge>
-                        </div>
-                        <div className="text-sm">
-                          <p className="font-medium">{booking.studentName}</p>
-                          <p className="text-muted-foreground">{booking.studentEmail}</p>
-                          {booking.projectName && (
-                            <p className="mt-2 text-sm">
-                              <span className="font-medium">Project:</span> {booking.projectName}
-                            </p>
-                          )}
-                          {booking.purpose && (
-                            <p className="mt-1 text-muted-foreground">{booking.purpose}</p>
-                          )}
-                        </div>
-                      </Card>
-                    ))}
+                          <div className="text-sm">
+                            <p className="font-medium">{booking.studentName}</p>
+                            <p className="text-muted-foreground">{booking.studentEmail}</p>
+                            {booking.projectName && (
+                              <p className="mt-2 text-sm">
+                                <span className="font-medium">Project:</span> {booking.projectName}
+                              </p>
+                            )}
+                            {booking.purpose && (
+                              <p className="mt-1 text-muted-foreground">{booking.purpose}</p>
+                            )}
+                          </div>
+                        </Card>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-12 text-muted-foreground">
@@ -161,7 +301,7 @@ const Schedule = () => {
                     <SelectValue placeholder="Choose your project" />
                   </SelectTrigger>
                   <SelectContent>
-                    {mockProjects.map(project => (
+                    {projects.map(project => (
                       <SelectItem key={project.id} value={project.id}>
                         <div className="flex items-center gap-2">
                           <div 
@@ -204,7 +344,7 @@ const Schedule = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Start Time</Label>
-                  <Select>
+                  <Select value={selectedTime} onValueChange={setSelectedTime} required>
                     <SelectTrigger>
                       <SelectValue placeholder="Select time" />
                     </SelectTrigger>
@@ -236,29 +376,31 @@ const Schedule = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Student Name</Label>
-                <Select required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select your name" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mockStudents.map(student => (
-                      <SelectItem key={student.id} value={student.id}>
-                        {student.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
                 <Label>Purpose (Optional)</Label>
-                <Textarea placeholder="Brief description of what you'll be doing" rows={2} />
+                <Textarea 
+                  placeholder="Brief description of what you'll be doing" 
+                  rows={2}
+                  value={purpose}
+                  onChange={(e) => setPurpose(e.target.value)}
+                />
               </div>
 
-              <Button type="submit" className="w-full" disabled={!selectedProject || !selectedEquipment}>
-                <Plus className="w-4 h-4 mr-2" />
-                Book Equipment
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={!selectedProject || !selectedEquipment || !selectedTime || loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Booking...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Book Equipment
+                  </>
+                )}
               </Button>
             </form>
           </DialogContent>
