@@ -29,17 +29,17 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Check if user is a manager
+    // Check if user is a PI or manager
     const { data: roleData, error: roleError } = await supabaseAdmin
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
-      .eq('role', 'manager')
+      .in('role', ['pi', 'manager'])
       .maybeSingle()
 
     if (roleError || !roleData) {
       console.error('Role check error:', roleError)
-      return new Response(JSON.stringify({ error: 'Forbidden: Manager access required' }), {
+      return new Response(JSON.stringify({ error: 'Forbidden: PI or Manager access required' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
