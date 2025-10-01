@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { AuthRedirectHandler } from "@/components/AuthRedirectHandler";
 // Page imports
 import Index from "./pages/Index";
 import Schedule from "./pages/Schedule";
@@ -26,6 +27,7 @@ const App = () => (
       <Sonner />
       <HashRouter>
         <AuthProvider>
+          <AuthRedirectHandler />
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/reset-password" element={<ResetPassword />} />

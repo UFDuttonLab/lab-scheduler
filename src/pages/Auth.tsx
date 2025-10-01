@@ -57,10 +57,10 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      // Construct the redirect URL to work with GitHub Pages deployment
+      // Redirect to base URL so Supabase tokens are properly captured before hash routing
       const baseUrl = window.location.origin;
-      const pathname = window.location.pathname.replace(/\/$/, ''); // Remove trailing slash
-      const redirectUrl = `${baseUrl}${pathname}/#/reset-password`;
+      const pathname = window.location.pathname.replace(/\/$/, '');
+      const redirectUrl = `${baseUrl}${pathname}/`;
       
       console.log("Sending password reset email with redirect URL:", redirectUrl);
       

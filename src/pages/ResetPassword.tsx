@@ -11,27 +11,39 @@ const ResetPassword = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isRecoverySession, setIsRecoverySession] = useState(false);
   const [verifying, setVerifying] = useState(true);
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
-    // Give Supabase time to process the token from the URL
-    const timer = setTimeout(() => {
-      supabase.auth.getSession().then(({ data: { session } }) => {
+    // Check if we have a recovery session
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        setIsRecoverySession(true);
         setVerifying(false);
-        if (!session) {
-          toast({
-            title: "Invalid or expired link",
-            description: "Please request a new password reset link.",
-            variant: "destructive",
-          });
-          navigate("/auth");
-        }
-      });
-    }, 1000);
+      } else {
+        // Give Supabase more time to process the token
+        setTimeout(async () => {
+          const { data: { session: retrySession } } = await supabase.auth.getSession();
+          if (retrySession) {
+            setIsRecoverySession(true);
+          } else {
+            toast({
+              title: "Invalid or expired link",
+              description: "Please request a new password reset link.",
+              variant: "destructive",
+            });
+            navigate("/auth");
+          }
+          setVerifying(false);
+        }, 2000);
+      }
+    };
 
-    return () => clearTimeout(timer);
+    checkSession();
   }, [navigate, toast]);
 
   const handleResetPassword = async (e: React.FormEvent) => {
@@ -96,6 +108,10 @@ const ResetPassword = () => {
         </Card>
       </div>
     );
+  }
+
+  if (!isRecoverySession) {
+    return null; // Will redirect in useEffect
   }
 
   return (
