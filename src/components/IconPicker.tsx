@@ -1,5 +1,3 @@
-import { LucideIcon } from "lucide-react";
-import * as Icons from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,58 +8,54 @@ interface IconPickerProps {
   onChange: (icon: string) => void;
 }
 
-const iconCategories = {
-  Animals: [
-    "Cat", "Dog", "Fish", "Bird", "Rabbit", "Squirrel", "Bug", "Turtle",
-    "Snail", "BugOff", "PawPrint"
-  ],
-  Environment: [
-    "Mountain", "Waves", "Sun", "Cloud", "Leaf", "Flower", "Globe",
-    "Trees", "Wind", "Snowflake", "Droplets", "Cloudy"
-  ],
+const emojiCategories = {
   Science: [
-    "Microscope", "TestTube", "Flask", "Atom", "Dna", "Beaker",
-    "ActivitySquare", "FlaskConical", "FlaskRound", "Pipette"
+    "🧪", "🔬", "🧬", "⚗️", "🔭", "🧫", "💉", "🩺", "⚡", "🔋"
   ],
   Technology: [
-    "Cpu", "HardDrive", "Smartphone", "Monitor", "Wifi", "Battery",
-    "Laptop", "Usb", "Bluetooth", "Radio", "Server"
+    "💻", "🖥️", "⚙️", "🔧", "🛠️", "🤖", "📡", "🔌", "💾", "📱"
   ],
-  General: [
-    "Star", "Heart", "Diamond", "Zap", "Target", "Award", "Bookmark",
-    "Lightbulb", "Flame", "Sparkles", "Crown", "Trophy"
+  Nature: [
+    "🌱", "🌿", "🌳", "🌲", "🌾", "🍃", "🌺", "🌸", "🌻", "🌼"
+  ],
+  Environment: [
+    "🌍", "🌎", "🌏", "🌊", "🔥", "💧", "🌬️", "⛰️", "🏔️", "☀️"
+  ],
+  Medical: [
+    "🩺", "💊", "💉", "🏥", "⚕️", "🧬", "🦠", "🧠", "🫀", "🫁"
+  ],
+  Research: [
+    "🎯", "📊", "📈", "📉", "🔍", "🔎", "📝", "📋", "📌", "🏆"
   ],
 };
 
 export function IconPicker({ value, onChange }: IconPickerProps) {
   return (
-    <Tabs defaultValue="Animals" className="w-full">
-      <TabsList className="grid w-full grid-cols-5">
-        {Object.keys(iconCategories).map((category) => (
+    <Tabs defaultValue="Science" className="w-full">
+      <TabsList className="grid w-full grid-cols-6">
+        {Object.keys(emojiCategories).map((category) => (
           <TabsTrigger key={category} value={category} className="text-xs">
             {category}
           </TabsTrigger>
         ))}
       </TabsList>
-      {Object.entries(iconCategories).map(([category, icons]) => (
+      {Object.entries(emojiCategories).map(([category, emojis]) => (
         <TabsContent key={category} value={category}>
           <ScrollArea className="h-[200px] w-full rounded-md border p-4">
             <div className="grid grid-cols-6 gap-2">
-              {icons.map((iconName) => {
-                const Icon = Icons[iconName as keyof typeof Icons] as LucideIcon;
-                if (!Icon) return null;
+              {emojis.map((emoji) => {
                 return (
                   <Button
-                    key={iconName}
+                    key={emoji}
                     variant="ghost"
                     size="icon"
-                    onClick={() => onChange(iconName)}
+                    onClick={() => onChange(emoji)}
                     className={cn(
-                      "h-10 w-10",
-                      value === iconName && "bg-accent"
+                      "h-10 w-10 text-2xl",
+                      value === emoji && "bg-accent ring-2 ring-primary"
                     )}
                   >
-                    <Icon className="h-5 w-5" />
+                    {emoji}
                   </Button>
                 );
               })}

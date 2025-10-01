@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       bookings: {
         Row: {
+          collaborators: Json | null
           cpu_count: number | null
           created_at: string
           end_time: string
@@ -24,11 +25,13 @@ export type Database = {
           id: string
           project_id: string | null
           purpose: string | null
+          samples_processed: number | null
           start_time: string
           status: string
           user_id: string
         }
         Insert: {
+          collaborators?: Json | null
           cpu_count?: number | null
           created_at?: string
           end_time: string
@@ -37,11 +40,13 @@ export type Database = {
           id?: string
           project_id?: string | null
           purpose?: string | null
+          samples_processed?: number | null
           start_time: string
           status?: string
           user_id: string
         }
         Update: {
+          collaborators?: Json | null
           cpu_count?: number | null
           created_at?: string
           end_time?: string
@@ -50,6 +55,7 @@ export type Database = {
           id?: string
           project_id?: string | null
           purpose?: string | null
+          samples_processed?: number | null
           start_time?: string
           status?: string
           user_id?: string

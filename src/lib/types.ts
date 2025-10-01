@@ -52,6 +52,9 @@ export interface Booking {
   status: "scheduled" | "in-progress" | "completed" | "cancelled";
   cpuCount?: number; // For HiPerGator bookings
   gpuCount?: number; // For HiPerGator bookings
+  samplesProcessed?: number; // Number of samples (1-100)
+  collaborators?: string[]; // Array of user IDs
+  userId?: string; // Owner of the booking
 }
 
 export interface TimeSlot {

@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Equipment, Project, Booking } from "@/lib/types";
 import { format, isSameDay, parse, addMinutes, addDays } from "date-fns";
-import { Plus, Clock, Loader2, List, Grid3x3, Cpu, Server } from "lucide-react";
+import { Plus, Clock, Loader2, List, Grid3x3, Cpu, Server, FlaskConical, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,12 +18,21 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BookingCard } from "@/components/BookingCard";
+import { Input } from "@/components/ui/input";
+
+interface UserProfile {
+  id: string;
+  email: string;
+  full_name?: string;
+  spirit_animal?: string;
+}
 
 const Schedule = () => {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [isBookingDialogOpen, setIsBookingDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [selectedProject, setSelectedProject] = useState<string>("");
@@ -33,6 +42,10 @@ const Schedule = () => {
   const [purpose, setPurpose] = useState<string>("");
   const [cpuCount, setCpuCount] = useState<number>(1);
   const [gpuCount, setGpuCount] = useState<number>(0);
+  const [samplesCount, setSamplesCount] = useState<number>(1);
+  const [collaboratorSearch, setCollaboratorSearch] = useState<string>("");
+  const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
   
   const [projects, setProjects] = useState<Project[]>([]);
@@ -43,6 +56,7 @@ const Schedule = () => {
     fetchProjects();
     fetchEquipment();
     fetchBookings();
+    fetchUsers();
   }, []);
 
   // Pre-select equipment if passed via URL, but don't auto-open dialog
@@ -58,12 +72,13 @@ const Schedule = () => {
   useEffect(() => {
     const selectedEq = equipment.find(e => e.id === selectedEquipment);
     if (selectedEq?.type === "HiPerGator") {
-      setDuration("60"); // Reset to 1 hour for HiPerGator
+      setDuration("60");
       setCpuCount(1);
       setGpuCount(0);
     } else if (selectedEquipment) {
-      setDuration("60"); // Reset to 1 hour for regular equipment
+      setDuration("60");
     }
+    setSamplesCount(1);
   }, [selectedEquipment, equipment]);
 
   const fetchProjects = async () => {
@@ -78,6 +93,20 @@ const Schedule = () => {
     }
     
     setProjects(data || []);
+  };
+
+  const fetchUsers = async () => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, full_name, spirit_animal')
+      .order('full_name');
+    
+    if (error) {
+      console.error("Failed to load users:", error);
+      return;
+    }
+    
+    setAvailableUsers(data || []);
   };
 
   const fetchEquipment = async () => {
@@ -142,7 +171,10 @@ const Schedule = () => {
           purpose: booking.purpose || undefined,
           status: booking.status as "scheduled" | "in-progress" | "completed" | "cancelled",
           cpuCount: booking.cpu_count || undefined,
-          gpuCount: booking.gpu_count || undefined
+          gpuCount: booking.gpu_count || undefined,
+          samplesProcessed: booking.samples_processed || undefined,
+          collaborators: (booking.collaborators as string[]) || [],
+          userId: booking.user_id
         };
       });
 
@@ -228,7 +260,9 @@ const Schedule = () => {
         start_time: startTime.toISOString(),
         end_time: endTime.toISOString(),
         purpose: purpose || null,
-        status: 'scheduled'
+        status: 'scheduled',
+        samples_processed: samplesCount,
+        collaborators: selectedCollaborators
       };
 
       // Add resource counts for HiPerGator
@@ -253,11 +287,111 @@ const Schedule = () => {
       setPurpose("");
       setCpuCount(1);
       setGpuCount(0);
+      setSamplesCount(1);
+      setSelectedCollaborators([]);
+      setCollaboratorSearch("");
       
       // Refresh bookings
       fetchBookings();
     } catch (error: any) {
       toast.error(error.message || "Failed to book equipment");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditBooking = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!user || !selectedBooking) {
+      toast.error("Invalid booking");
+      return;
+    }
+
+    if (!selectedDate || !selectedTime) {
+      toast.error("Please select a date and time");
+      return;
+    }
+
+    const selectedEq = equipment.find(e => e.id === selectedEquipment);
+    const isHiPerGator = selectedEq?.type === "HiPerGator";
+
+    setLoading(true);
+
+    try {
+      const [hours, minutes] = selectedTime.split(':').map(Number);
+      const startTime = new Date(selectedDate);
+      startTime.setHours(hours, minutes, 0, 0);
+      
+      const endTime = addMinutes(startTime, parseInt(duration));
+
+      // For HiPerGator, check resource availability (excluding current booking)
+      if (isHiPerGator) {
+        const overlappingBookings = bookings.filter(b => 
+          b.id !== selectedBooking.id &&
+          b.equipmentId === selectedEquipment &&
+          b.status !== 'cancelled' &&
+          (
+            (b.startTime <= startTime && b.endTime > startTime) ||
+            (b.startTime < endTime && b.endTime >= endTime) ||
+            (b.startTime >= startTime && b.endTime <= endTime)
+          )
+        );
+
+        const totalCpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.cpuCount || 0), 0);
+        const totalGpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.gpuCount || 0), 0);
+
+        if (totalCpuUsed + cpuCount > 32) {
+          toast.error(`Not enough CPUs available. Currently ${32 - totalCpuUsed} CPUs free during this time.`);
+          setLoading(false);
+          return;
+        }
+
+        if (totalGpuUsed + gpuCount > 2) {
+          toast.error(`Not enough GPUs available. Currently ${2 - totalGpuUsed} GPUs free during this time.`);
+          setLoading(false);
+          return;
+        }
+      }
+
+      const bookingData: any = {
+        equipment_id: selectedEquipment,
+        project_id: selectedProject || null,
+        start_time: startTime.toISOString(),
+        end_time: endTime.toISOString(),
+        purpose: purpose || null,
+        samples_processed: samplesCount,
+        collaborators: selectedCollaborators
+      };
+
+      if (isHiPerGator) {
+        bookingData.cpu_count = cpuCount;
+        bookingData.gpu_count = gpuCount;
+      }
+
+      const { error } = await supabase
+        .from('bookings')
+        .update(bookingData)
+        .eq('id', selectedBooking.id);
+
+      if (error) throw error;
+
+      toast.success("Booking updated successfully!");
+      setIsEditDialogOpen(false);
+      setSelectedBooking(null);
+      setSelectedProject("");
+      setSelectedEquipment("");
+      setSelectedTime("");
+      setPurpose("");
+      setCpuCount(1);
+      setGpuCount(0);
+      setSamplesCount(1);
+      setSelectedCollaborators([]);
+      setCollaboratorSearch("");
+      
+      fetchBookings();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update booking");
     } finally {
       setLoading(false);
     }
@@ -271,7 +405,8 @@ const Schedule = () => {
   const selectedEq = equipment.find(e => e.id === selectedEquipment);
   const isHiPerGator = selectedEq?.type === "HiPerGator";
 
-  const durationOptions = isHiPerGator ? [
+  const durationOptions = [
+    { value: "30", label: "30 minutes" },
     { value: "60", label: "1 hour" },
     { value: "120", label: "2 hours" },
     { value: "240", label: "4 hours" },
@@ -279,14 +414,10 @@ const Schedule = () => {
     { value: "1440", label: "1 day" },
     { value: "2880", label: "2 days" },
     { value: "4320", label: "3 days" },
-    { value: "10080", label: "1 week" },
-  ] : [
-    { value: "30", label: "30 minutes" },
-    { value: "60", label: "1 hour" },
-    { value: "90", label: "1.5 hours" },
-    { value: "120", label: "2 hours" },
-    { value: "180", label: "3 hours" },
-    { value: "240", label: "4 hours" },
+    { value: "5760", label: "4 days" },
+    { value: "7200", label: "5 days" },
+    { value: "8640", label: "6 days" },
+    { value: "10080", label: "7 days" },
   ];
 
   // Calculate available HiPerGator resources if applicable
@@ -620,10 +751,7 @@ const Schedule = () => {
                     {projects.map(project => (
                       <SelectItem key={project.id} value={project.id}>
                         <div className="flex items-center gap-2">
-                          <div 
-                            className="w-3 h-3 rounded-full" 
-                            style={{ backgroundColor: project.color }}
-                          />
+                          <span className="text-lg">{project.icon || "🧪"}</span>
                           {project.name}
                         </div>
                       </SelectItem>
@@ -699,6 +827,86 @@ const Schedule = () => {
                   value={purpose}
                   onChange={(e) => setPurpose(e.target.value)}
                 />
+              </div>
+
+              {/* Samples Count Slider */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <FlaskConical className="w-4 h-4" />
+                    Samples: {samplesCount}
+                  </Label>
+                </div>
+                <Slider
+                  value={[samplesCount]}
+                  onValueChange={(value) => setSamplesCount(value[0])}
+                  min={1}
+                  max={100}
+                  step={1}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Collaborators */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Collaborators (Optional)
+                </Label>
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Search by name or email..."
+                    value={collaboratorSearch}
+                    onChange={(e) => setCollaboratorSearch(e.target.value)}
+                  />
+                  {collaboratorSearch && (
+                    <div className="max-h-32 overflow-y-auto border rounded-md p-2 space-y-1">
+                      {availableUsers
+                        .filter(u => 
+                          u.id !== user?.id &&
+                          !selectedCollaborators.includes(u.id) &&
+                          (u.full_name?.toLowerCase().includes(collaboratorSearch.toLowerCase()) ||
+                           u.email.toLowerCase().includes(collaboratorSearch.toLowerCase()))
+                        )
+                        .slice(0, 5)
+                        .map(u => (
+                          <Button
+                            key={u.id}
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start text-left"
+                            onClick={() => {
+                              setSelectedCollaborators([...selectedCollaborators, u.id]);
+                              setCollaboratorSearch("");
+                            }}
+                          >
+                            {u.spirit_animal && <span className="mr-2">{u.spirit_animal}</span>}
+                            <span className="truncate">{u.full_name || u.email}</span>
+                          </Button>
+                        ))}
+                    </div>
+                  )}
+                  {selectedCollaborators.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedCollaborators.map(collab => {
+                        const user = availableUsers.find(u => u.id === collab);
+                        return user ? (
+                          <Badge key={collab} variant="secondary" className="gap-1">
+                            {user.spirit_animal && <span>{user.spirit_animal}</span>}
+                            <span>{user.full_name || user.email}</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCollaborators(selectedCollaborators.filter(c => c !== collab))}
+                              className="ml-1 hover:text-destructive"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </Badge>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* HiPerGator Resource Allocation */}
@@ -793,8 +1001,142 @@ const Schedule = () => {
                   setIsDetailsDialogOpen(false);
                   fetchBookings();
                 }}
+                onEdit={(booking) => {
+                  setSelectedBooking(booking);
+                  setIsEditDialogOpen(true);
+                  setIsDetailsDialogOpen(false);
+                  // Pre-fill form
+                  setSelectedProject(booking.projectId || "");
+                  setSelectedEquipment(booking.equipmentId);
+                  setSelectedDate(booking.startTime);
+                  setSelectedTime(format(booking.startTime, "HH:mm"));
+                  setDuration(booking.duration.toString());
+                  setPurpose(booking.purpose || "");
+                  setSamplesCount(booking.samplesProcessed || 1);
+                  setCpuCount(booking.cpuCount || 1);
+                  setGpuCount(booking.gpuCount || 0);
+                  setSelectedCollaborators(booking.collaborators || []);
+                }}
               />
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Booking Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Edit Booking</DialogTitle>
+              <DialogDescription>
+                Update your booking details
+              </DialogDescription>
+            </DialogHeader>
+            
+            <form onSubmit={handleEditBooking} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Project</Label>
+                <Select value={selectedProject} onValueChange={setSelectedProject}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose your project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map(project => (
+                      <SelectItem key={project.id} value={project.id}>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{project.icon || "🧪"}</span>
+                          {project.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Start Time</Label>
+                  <Select value={selectedTime} onValueChange={setSelectedTime} required>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select time" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {timeSlots.map(slot => (
+                        <SelectItem key={slot} value={slot}>
+                          {slot}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Duration</Label>
+                  <Select value={duration} onValueChange={setDuration}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {durationOptions.map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <FlaskConical className="w-4 h-4" />
+                    Samples: {samplesCount}
+                  </Label>
+                </div>
+                <Slider
+                  value={[samplesCount]}
+                  onValueChange={(value) => setSamplesCount(value[0])}
+                  min={1}
+                  max={100}
+                  step={1}
+                />
+              </div>
+
+              {isHiPerGator && (
+                <div className="space-y-3 p-3 border rounded-lg bg-muted/50">
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Cpu className="w-4 h-4" />
+                      CPUs: {cpuCount}
+                    </Label>
+                    <Slider
+                      value={[cpuCount]}
+                      onValueChange={(value) => setCpuCount(value[0])}
+                      min={1}
+                      max={32}
+                      step={1}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Server className="w-4 h-4" />
+                      GPUs: {gpuCount}
+                    </Label>
+                    <Slider
+                      value={[gpuCount]}
+                      onValueChange={(value) => setGpuCount(value[0])}
+                      min={0}
+                      max={2}
+                      step={1}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Updating...</> : "Update Booking"}
+              </Button>
+            </form>
           </DialogContent>
         </Dialog>
       </main>

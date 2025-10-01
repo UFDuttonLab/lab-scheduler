@@ -2,11 +2,12 @@ import { Booking } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Clock, User, Mail, Trash2, Cpu, Server } from "lucide-react";
+import { Clock, User, Mail, Trash2, Cpu, Server, FlaskConical, Users, Edit } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useState, useEffect } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,13 +20,22 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+interface UserProfile {
+  id: string;
+  email: string;
+  full_name?: string;
+  spirit_animal?: string;
+}
+
 interface BookingCardProps {
   booking: Booking;
   onDelete?: () => void;
+  onEdit?: (booking: Booking) => void;
 }
 
-export const BookingCard = ({ booking, onDelete }: BookingCardProps) => {
-  const { isManager } = useAuth();
+export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => {
+  const { user, isManager } = useAuth();
+  const [collaboratorProfiles, setCollaboratorProfiles] = useState<UserProfile[]>([]);
   
   const statusConfig = {
     scheduled: { label: "Scheduled", className: "bg-primary text-primary-foreground" },
@@ -35,6 +45,27 @@ export const BookingCard = ({ booking, onDelete }: BookingCardProps) => {
   };
 
   const status = statusConfig[booking.status];
+  const canEdit = user?.id === booking.userId || isManager;
+  const canDelete = isManager;
+
+  useEffect(() => {
+    if (booking.collaborators && booking.collaborators.length > 0) {
+      fetchCollaborators();
+    }
+  }, [booking.collaborators]);
+
+  const fetchCollaborators = async () => {
+    if (!booking.collaborators || booking.collaborators.length === 0) return;
+    
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, full_name, spirit_animal')
+      .in('id', booking.collaborators);
+    
+    if (!error && data) {
+      setCollaboratorProfiles(data);
+    }
+  };
 
   const handleDelete = async () => {
     const { error } = await supabase
@@ -65,7 +96,17 @@ export const BookingCard = ({ booking, onDelete }: BookingCardProps) => {
         </div>
         <div className="flex items-center gap-2">
           <Badge className={status.className}>{status.label}</Badge>
-          {isManager && (
+          {canEdit && booking.status === "scheduled" && onEdit && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8"
+              onClick={() => onEdit(booking)}
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+          )}
+          {canDelete && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -89,7 +130,7 @@ export const BookingCard = ({ booking, onDelete }: BookingCardProps) => {
         </div>
       </div>
 
-      <div className="space-y-1">
+      <div className="space-y-2">
         <div className="flex items-center gap-2 text-sm">
           {booking.studentSpiritAnimal ? (
             <span className="text-lg">{booking.studentSpiritAnimal}</span>
@@ -102,6 +143,14 @@ export const BookingCard = ({ booking, onDelete }: BookingCardProps) => {
           <Mail className="w-3 h-3" />
           <span>{booking.studentEmail}</span>
         </div>
+        
+        {booking.samplesProcessed && (
+          <div className="flex items-center gap-2 text-sm pt-2">
+            <FlaskConical className="w-3 h-3 text-primary" />
+            <span className="font-medium">Samples:</span>
+            <span>{booking.samplesProcessed}</span>
+          </div>
+        )}
         
         {booking.cpuCount !== undefined && (
           <div className="flex items-center gap-4 text-sm pt-2 border-t mt-2">
@@ -117,6 +166,23 @@ export const BookingCard = ({ booking, onDelete }: BookingCardProps) => {
                 <span>{booking.gpuCount}</span>
               </div>
             )}
+          </div>
+        )}
+
+        {collaboratorProfiles.length > 0 && (
+          <div className="pt-2 border-t mt-2">
+            <div className="flex items-center gap-2 text-sm mb-2">
+              <Users className="w-3 h-3 text-primary" />
+              <span className="font-medium">Collaborators:</span>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {collaboratorProfiles.map(collab => (
+                <Badge key={collab.id} variant="secondary" className="text-xs">
+                  {collab.spirit_animal && <span className="mr-1">{collab.spirit_animal}</span>}
+                  {collab.full_name || collab.email}
+                </Badge>
+              ))}
+            </div>
           </div>
         )}
       </div>

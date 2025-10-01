@@ -56,7 +56,7 @@ const Settings = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [projectName, setProjectName] = useState("");
   const [projectDescription, setProjectDescription] = useState("");
-  const [projectIcon, setProjectIcon] = useState("Beaker");
+  const [projectIcon, setProjectIcon] = useState("🧪");
 
   useEffect(() => {
     fetchProjects();
@@ -68,11 +68,11 @@ const Settings = () => {
     if (editingProject) {
       setProjectName(editingProject.name);
       setProjectDescription(editingProject.description || "");
-      setProjectIcon(editingProject.icon || "Beaker");
+      setProjectIcon(editingProject.icon || "🧪");
     } else {
       setProjectName("");
       setProjectDescription("");
-      setProjectIcon("Beaker");
+      setProjectIcon("🧪");
     }
   }, [editingProject]);
 
@@ -206,7 +206,7 @@ const Settings = () => {
       setEditingProject(null);
       setProjectName("");
       setProjectDescription("");
-      setProjectIcon("Beaker");
+      setProjectIcon("🧪");
     } catch (error) {
       console.error("Error saving project:", error);
       toast.error(`Failed to ${editingProject ? "update" : "add"} project`);
@@ -428,7 +428,7 @@ const Settings = () => {
                   setEditingProject(null);
                   setProjectName("");
                   setProjectDescription("");
-                  setProjectIcon("Beaker");
+                  setProjectIcon("🧪");
                 }
               }}>
                 <DialogTrigger asChild>
@@ -487,16 +487,12 @@ const Settings = () => {
                 </p>
               ) : (
                 projects.map(project => {
-                  const ProjectIcon = project.icon
-                    ? (Icons[project.icon as keyof typeof Icons] as LucideIcon)
-                    : Icons.Beaker;
-                  
                   return (
                     <Card key={project.id} className="p-4">
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3 flex-1">
-                          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center mt-1 flex-shrink-0">
-                            <ProjectIcon className="w-5 h-5 text-primary" />
+                          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0">
+                            {project.icon || "🧪"}
                           </div>
                           <div className="flex-1">
                             <h3 className="font-semibold mb-1">{project.name}</h3>
