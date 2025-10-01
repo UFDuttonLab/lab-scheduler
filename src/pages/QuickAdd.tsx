@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Equipment, Project } from "@/lib/types";
-import { Clock, FlaskConical, CalendarIcon } from "lucide-react";
+import { Clock, FlaskConical, CalendarIcon, Users } from "lucide-react";
 import { format, addMinutes } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -30,9 +30,12 @@ export default function QuickAdd() {
   const { toast } = useToast();
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [selectedTime, setSelectedTime] = useState<string>("");
+  const [collaboratorSearch, setCollaboratorSearch] = useState<string>("");
+  const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
 
   const [formData, setFormData] = useState({
     equipmentIds: [] as string[],
@@ -45,6 +48,7 @@ export default function QuickAdd() {
   useEffect(() => {
     fetchEquipment();
     fetchProjects();
+    fetchUsers();
   }, []);
 
   const fetchEquipment = async () => {
@@ -79,6 +83,19 @@ export default function QuickAdd() {
       });
     } else {
       setProjects(data as Project[]);
+    }
+  };
+
+  const fetchUsers = async () => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, email, full_name, spirit_animal")
+      .order("full_name");
+
+    if (error) {
+      console.error("Failed to fetch users:", error);
+    } else {
+      setAvailableUsers(data || []);
     }
   };
 
@@ -136,7 +153,8 @@ export default function QuickAdd() {
       end_time: endTime.toISOString(),
       samples_processed: formData.samplesProcessed,
       notes: formData.notes || null,
-      booking_group_id: usageGroupId
+      booking_group_id: usageGroupId,
+      collaborators: selectedCollaborators
     }));
 
     const { error } = await supabase.from("usage_records").insert(usageRecords);
@@ -166,6 +184,8 @@ export default function QuickAdd() {
       });
       setSelectedDate(new Date());
       setSelectedTime("");
+      setSelectedCollaborators([]);
+      setCollaboratorSearch("");
     }
 
     setLoading(false);
@@ -361,6 +381,54 @@ export default function QuickAdd() {
                   placeholder="Add any additional notes..."
                   rows={3}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Collaborators (Optional)
+                </Label>
+                <Input
+                  type="text"
+                  placeholder="Search users..."
+                  value={collaboratorSearch}
+                  onChange={(e) => setCollaboratorSearch(e.target.value)}
+                  className="mb-2"
+                />
+                <div className="border rounded-md p-3 space-y-2 max-h-40 overflow-y-auto">
+                  {availableUsers
+                    .filter(u => 
+                      u.full_name?.toLowerCase().includes(collaboratorSearch.toLowerCase()) ||
+                      u.email.toLowerCase().includes(collaboratorSearch.toLowerCase())
+                    )
+                    .map((profile) => (
+                      <label key={profile.id} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-2 rounded">
+                        <input
+                          type="checkbox"
+                          checked={selectedCollaborators.includes(profile.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedCollaborators([...selectedCollaborators, profile.id]);
+                            } else {
+                              setSelectedCollaborators(selectedCollaborators.filter(id => id !== profile.id));
+                            }
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm flex-1">
+                          {profile.full_name || profile.email}
+                          {profile.spirit_animal && (
+                            <span className="ml-2 text-muted-foreground">({profile.spirit_animal})</span>
+                          )}
+                        </span>
+                      </label>
+                    ))}
+                </div>
+                {selectedCollaborators.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedCollaborators.length} collaborator{selectedCollaborators.length > 1 ? 's' : ''} selected
+                  </p>
+                )}
               </div>
 
               <div className="flex gap-3">

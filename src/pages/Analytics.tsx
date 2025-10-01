@@ -24,32 +24,46 @@ const Analytics = () => {
       setLoading(true);
 
       // Fetch all data separately
-      const { data: bookingsData, error: bookingsError } = await supabase
-        .from('bookings')
-        .select('*');
+      const [bookingsRes, usageRecordsRes, equipmentRes, projectsRes, profilesRes] = await Promise.all([
+        supabase.from('bookings').select('*'),
+        supabase.from('usage_records').select('*'),
+        supabase.from('equipment').select('*'),
+        supabase.from('projects').select('*'),
+        supabase.from('profiles').select('id, email, full_name, spirit_animal')
+      ]);
 
-      if (bookingsError) throw bookingsError;
-
-      const { data: equipmentData } = await supabase.from('equipment').select('*');
-      const { data: projectsData } = await supabase.from('projects').select('*');
-      const { data: profilesData } = await supabase.from('profiles').select('id, email, full_name, spirit_animal');
+      if (bookingsRes.error) throw bookingsRes.error;
+      if (usageRecordsRes.error) throw usageRecordsRes.error;
 
       // Create lookup maps
-      const equipmentMap = new Map(equipmentData?.map(e => [e.id, e]) || []);
-      const projectMap = new Map(projectsData?.map(p => [p.id, p]) || []);
-      const profileMap = new Map(profilesData?.map(u => [u.id, u]) || []);
+      const equipmentMap = new Map(equipmentRes.data?.map(e => [e.id, e]) || []);
+      const projectMap = new Map(projectsRes.data?.map(p => [p.id, p]) || []);
+      const profileMap = new Map(profilesRes.data?.map(u => [u.id, u]) || []);
 
       // Enrich bookings with related data
-      const enrichedBookings = (bookingsData || []).map(booking => ({
+      const enrichedBookings = (bookingsRes.data || []).map(booking => ({
         ...booking,
         equipment: equipmentMap.get(booking.equipment_id),
         project: projectMap.get(booking.project_id),
-        profile: profileMap.get(booking.user_id)
+        profile: profileMap.get(booking.user_id),
+        source: 'booking' as const
       }));
 
-      setBookings(enrichedBookings);
-      setProjects(projectsData || []);
-      setUsers(profilesData || []);
+      // Enrich usage records with related data
+      const enrichedUsageRecords = (usageRecordsRes.data || []).map(record => ({
+        ...record,
+        equipment: equipmentMap.get(record.equipment_id),
+        project: projectMap.get(record.project_id),
+        profile: profileMap.get(record.user_id),
+        source: 'usage_record' as const
+      }));
+
+      // Combine bookings and usage records for analytics
+      const allRecords = [...enrichedBookings, ...enrichedUsageRecords];
+
+      setBookings(allRecords);
+      setProjects(projectsRes.data || []);
+      setUsers(profilesRes.data || []);
     } catch (error: any) {
       toast({
         title: "Error fetching analytics data",
@@ -79,12 +93,18 @@ const Analytics = () => {
     };
   }).filter(p => p.hours > 0);
 
-  // Calculate time per student
+  // Calculate time per student (including collaborators)
   const studentTimeData = users.map(user => {
-    const userBookings = bookings.filter(b => b.user_id === user.id);
-    const totalMinutes = userBookings.reduce((sum, booking) => {
-      const start = new Date(booking.start_time);
-      const end = new Date(booking.end_time);
+    // Find bookings/usage records where user is either primary user or collaborator
+    const userRecords = bookings.filter(b => {
+      const isOwner = b.user_id === user.id;
+      const isCollaborator = Array.isArray(b.collaborators) && b.collaborators.includes(user.id);
+      return isOwner || isCollaborator;
+    });
+    
+    const totalMinutes = userRecords.reduce((sum, record) => {
+      const start = new Date(record.start_time);
+      const end = new Date(record.end_time);
       return sum + (end.getTime() - start.getTime()) / (1000 * 60);
     }, 0);
     const totalHours = Math.round(totalMinutes / 60 * 10) / 10;
@@ -92,7 +112,7 @@ const Analytics = () => {
     return {
       name: user.full_name || user.email,
       hours: totalHours,
-      bookings: userBookings.length,
+      bookings: userRecords.length,
     };
   }).filter(s => s.hours > 0).sort((a, b) => b.hours - a.hours);
 
@@ -104,7 +124,15 @@ const Analytics = () => {
     return sum + (end.getTime() - start.getTime()) / (1000 * 60);
   }, 0);
   const totalHours = Math.round(totalMinutes / 60 * 10) / 10;
-  const activeStudents = new Set(bookings.map(b => b.user_id)).size;
+  // Count unique students including collaborators
+  const uniqueStudents = new Set<string>();
+  bookings.forEach(b => {
+    uniqueStudents.add(b.user_id);
+    if (Array.isArray(b.collaborators)) {
+      b.collaborators.forEach(collaboratorId => uniqueStudents.add(collaboratorId));
+    }
+  });
+  const activeStudents = uniqueStudents.size;
   const avgBookingDuration = totalBookings > 0 ? Math.round(totalMinutes / totalBookings) : 0;
 
   if (loading) {

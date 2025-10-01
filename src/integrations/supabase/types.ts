@@ -206,6 +206,7 @@ export type Database = {
       usage_records: {
         Row: {
           booking_group_id: string | null
+          collaborators: Json | null
           created_at: string
           end_time: string
           equipment_id: string
@@ -218,6 +219,7 @@ export type Database = {
         }
         Insert: {
           booking_group_id?: string | null
+          collaborators?: Json | null
           created_at?: string
           end_time: string
           equipment_id: string
@@ -230,6 +232,7 @@ export type Database = {
         }
         Update: {
           booking_group_id?: string | null
+          collaborators?: Json | null
           created_at?: string
           end_time?: string
           equipment_id?: string
