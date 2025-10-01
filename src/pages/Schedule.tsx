@@ -16,12 +16,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { BookingCard } from "@/components/BookingCard";
 
 const Schedule = () => {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [isBookingDialogOpen, setIsBookingDialogOpen] = useState(false);
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [selectedEquipment, setSelectedEquipment] = useState<string>("");
   const [selectedTime, setSelectedTime] = useState<string>("");
@@ -418,9 +421,13 @@ const Schedule = () => {
                                           const top = (booking.startMinutes - (startHour * 60)) * pixelsPerMinute;
                                           const height = (booking.endMinutes - booking.startMinutes) * pixelsPerMinute;
 
-                                          return (
+                                           return (
                                             <Card
                                               key={booking.id}
+                                              onClick={() => {
+                                                setSelectedBooking(booking);
+                                                setIsDetailsDialogOpen(true);
+                                              }}
                                               className="absolute left-1 right-1 p-3 border-l-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer overflow-hidden"
                                               style={{
                                                 borderLeftColor: project?.color || 'hsl(var(--primary))',
@@ -596,6 +603,24 @@ const Schedule = () => {
                 )}
               </Button>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Booking Details Dialog */}
+        <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Booking Details</DialogTitle>
+            </DialogHeader>
+            {selectedBooking && (
+              <BookingCard 
+                booking={selectedBooking} 
+                onDelete={() => {
+                  setIsDetailsDialogOpen(false);
+                  fetchBookings();
+                }}
+              />
+            )}
           </DialogContent>
         </Dialog>
       </main>
