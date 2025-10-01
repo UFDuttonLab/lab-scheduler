@@ -2,6 +2,7 @@ import { Navigation } from "@/components/Navigation";
 import { StatsCard } from "@/components/StatsCard";
 import { BookingCard } from "@/components/BookingCard";
 import { EquipmentCard } from "@/components/EquipmentCard";
+import { Footer } from "@/components/Footer";
 import { Calendar, Clock, Settings, TrendingUp, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
@@ -217,6 +218,7 @@ const Index = () => {
           </div>
         </div>
       </main>
+      <Footer />
     </div>
   );
 };
