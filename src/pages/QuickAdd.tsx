@@ -140,7 +140,30 @@ export default function QuickAdd() {
     const startTime = new Date(selectedDate);
     startTime.setHours(hours, minutes, 0, 0);
     
-    const endTime = addMinutes(startTime, parseInt(formData.duration));
+    // Validate usage is not in the future (Quick Add is for past usage)
+    if (startTime > new Date()) {
+      toast({
+        title: "Error",
+        description: "Quick Add is for logging past usage. Use Schedule for future bookings.",
+        variant: "destructive",
+      });
+      setLoading(false);
+      return;
+    }
+
+    // Validate duration (max 7 days)
+    const durationMinutes = parseInt(formData.duration);
+    if (durationMinutes > 10080) { // 7 days in minutes
+      toast({
+        title: "Error",
+        description: "Maximum duration is 7 days",
+        variant: "destructive",
+      });
+      setLoading(false);
+      return;
+    }
+    
+    const endTime = addMinutes(startTime, durationMinutes);
 
     // Generate a group ID for linking multiple usage records
     const usageGroupId = formData.equipmentIds.length > 1 ? crypto.randomUUID() : null;
@@ -208,8 +231,8 @@ export default function QuickAdd() {
     { value: "10080", label: "7 days" },
   ];
 
-  const timeSlots = Array.from({ length: 12 }, (_, i) => {
-    const hour = i + 8;
+  const timeSlots = Array.from({ length: 16 }, (_, i) => {
+    const hour = i + 6;
     return `${hour.toString().padStart(2, '0')}:00`;
   });
 

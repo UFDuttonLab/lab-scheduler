@@ -236,6 +236,23 @@ const Schedule = () => {
       return;
     }
 
+    // Validate booking is not in the past
+    const [hours, minutes] = selectedTime.split(':').map(Number);
+    const startTime = new Date(bookingDate);
+    startTime.setHours(hours, minutes, 0, 0);
+    
+    if (startTime < new Date()) {
+      toast.error("Cannot book equipment in the past");
+      return;
+    }
+
+    // Validate duration (max 7 days)
+    const durationMinutes = parseInt(duration);
+    if (durationMinutes > 10080) { // 7 days in minutes
+      toast.error("Maximum booking duration is 7 days");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -458,8 +475,8 @@ const Schedule = () => {
     }
   };
 
-  const timeSlots = Array.from({ length: 12 }, (_, i) => {
-    const hour = i + 8;
+  const timeSlots = Array.from({ length: 16 }, (_, i) => {
+    const hour = i + 6;
     return `${hour.toString().padStart(2, '0')}:00`;
   });
 

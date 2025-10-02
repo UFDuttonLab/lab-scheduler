@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { Clock, TrendingUp, Users, FolderKanban, Loader2, Wrench } from "lucide-react";
@@ -153,6 +154,10 @@ const Analytics = () => {
     const gpuUsage = equipmentRecords.reduce((sum, r) => sum + (r.gpu_count || 0), 0);
     const samplesProcessed = equipmentRecords.reduce((sum, r) => sum + (r.samples_processed || 0), 0);
     
+    // Calculate source breakdown
+    const scheduledCount = equipmentRecords.filter(r => r.source === 'booking').length;
+    const quickAddCount = equipmentRecords.filter(r => r.source === 'usage_record').length;
+    
     return {
       id: eq.id,
       name: eq.name,
@@ -161,6 +166,8 @@ const Analytics = () => {
       icon: eq.icon,
       hours: totalHours,
       bookings: equipmentRecords.length,
+      scheduledCount,
+      quickAddCount,
       cpuUsage: cpuUsage,
       gpuUsage: gpuUsage,
       avgCpuPerSession: equipmentRecords.length > 0 ? Math.round(cpuUsage / equipmentRecords.length * 10) / 10 : 0,
@@ -558,17 +565,18 @@ const Analytics = () => {
               <h3 className="font-semibold text-xl mb-4">Equipment Details</h3>
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-3 px-4">Equipment</th>
-                      <th className="text-left py-3 px-4">Type</th>
-                      <th className="text-left py-3 px-4">Location</th>
-                      <th className="text-right py-3 px-4">Total Hours</th>
-                      <th className="text-right py-3 px-4">Sessions</th>
-                      <th className="text-right py-3 px-4">Avg Duration</th>
-                      <th className="text-right py-3 px-4">Samples</th>
-                    </tr>
-                  </thead>
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-3 px-4">Equipment</th>
+                        <th className="text-left py-3 px-4">Type</th>
+                        <th className="text-left py-3 px-4">Location</th>
+                        <th className="text-left py-3 px-4">Source</th>
+                        <th className="text-right py-3 px-4">Total Hours</th>
+                        <th className="text-right py-3 px-4">Sessions</th>
+                        <th className="text-right py-3 px-4">Avg Duration</th>
+                        <th className="text-right py-3 px-4">Samples</th>
+                      </tr>
+                    </thead>
                   <tbody>
                     {equipmentTimeData.length > 0 ? (
                       equipmentTimeData.map((eq) => (
@@ -583,6 +591,20 @@ const Analytics = () => {
                             <span className="px-2 py-1 bg-muted rounded text-xs">{eq.type}</span>
                           </td>
                           <td className="py-3 px-4 text-muted-foreground">{eq.location}</td>
+                          <td className="py-3 px-4">
+                            <div className="flex gap-2">
+                              {eq.scheduledCount > 0 && (
+                                <Badge variant="outline" className="text-xs">
+                                  Scheduled: {eq.scheduledCount}
+                                </Badge>
+                              )}
+                              {eq.quickAddCount > 0 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  Quick Add: {eq.quickAddCount}
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
                           <td className="text-right py-3 px-4 font-medium">{eq.hours}h</td>
                           <td className="text-right py-3 px-4">{eq.bookings}</td>
                           <td className="text-right py-3 px-4">
@@ -598,7 +620,7 @@ const Analytics = () => {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={7} className="py-4 text-center text-muted-foreground">
+                        <td colSpan={8} className="py-4 text-center text-muted-foreground">
                           No equipment data available
                         </td>
                       </tr>
