@@ -420,8 +420,8 @@ const Settings = () => {
     }
   };
 
-  const handleDeleteUser = async (userId: string) => {
-    if (!confirm("Are you sure you want to remove this user? This action cannot be undone.")) return;
+  const handleDeactivateUser = async (userId: string) => {
+    if (!confirm("Are you sure you want to deactivate this user? They will no longer be able to log in or create bookings.")) return;
 
     try {
       const { data: session } = await supabase.auth.getSession();
@@ -438,17 +438,16 @@ const Settings = () => {
       });
 
       if (error || data?.error) {
-        toast.error(data?.error || "Failed to delete user");
+        toast.error(data?.error || "Failed to deactivate user");
         console.error(error || data?.error);
         return;
       }
 
-      setUsers(prev => prev.filter(u => u.id !== userId));
-      toast.success("User removed successfully");
+      toast.success("User deactivated successfully");
       fetchUsers();
     } catch (error) {
-      console.error("Error deleting user:", error);
-      toast.error("Failed to remove user");
+      console.error("Error deactivating user:", error);
+      toast.error("Failed to deactivate user");
     }
   };
 
@@ -695,7 +694,8 @@ const Settings = () => {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => handleDeleteUser(user.id)}
+                          onClick={() => handleDeactivateUser(user.id)}
+                          title="Deactivate user"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>

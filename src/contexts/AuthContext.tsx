@@ -3,6 +3,7 @@ import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { AppRole, getRolePermissions, RolePermissions } from "@/lib/permissions";
+import { toast } from "sonner";
 
 interface AuthContextType {
   user: User | null;
@@ -27,6 +28,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const checkUserRole = async (userId: string) => {
     try {
+      // First check if user is active
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("active")
+        .eq("id", userId)
+        .single();
+
+      if (profileError) throw profileError;
+
+      // If user is inactive, sign them out
+      if (profile && !profile.active) {
+        await signOut();
+        toast.error("Your account has been deactivated");
+        return;
+      }
+
       const { data, error } = await supabase
         .from("user_roles")
         .select("role")
