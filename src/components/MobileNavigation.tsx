@@ -17,13 +17,10 @@ export const MobileNavigation = () => {
     { path: "/settings", label: "Settings", icon: Settings, requirePermission: 'canManageUsers' },
   ].filter(item => !item.requirePermission || permissions[item.requirePermission as keyof typeof permissions]);
 
-  // Show max 5 items on mobile
-  const displayItems = navItems.slice(0, 5);
-
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 safe-area-inset-bottom">
-      <div className="flex items-center justify-around h-16 px-2">
-        {displayItems.map((item) => {
+    <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 safe-area-inset-bottom overflow-x-auto">
+      <div className="flex items-center justify-start min-w-max h-16 px-2 gap-1">
+        {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
           
