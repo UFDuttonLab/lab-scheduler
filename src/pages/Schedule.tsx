@@ -642,28 +642,47 @@ const Schedule = () => {
                                     <span className="text-lg">{booking.studentSpiritAnimal}</span>
                                   )}
                                   <p className="font-medium">{booking.studentName}</p>
-                                </div>
-                                <p className="text-muted-foreground">{booking.studentEmail}</p>
-                                 {booking.projectName && (
-                                   <p className="mt-2 text-sm">
-                                     <span className="font-medium">Project:</span> {booking.projectName}
-                                   </p>
-                                 )}
-                                 {booking.cpuCount !== undefined && (
-                                   <p className="mt-2 text-sm flex items-center gap-2">
-                                     <Cpu className="w-3 h-3" />
-                                     <span><span className="font-medium">CPUs:</span> {booking.cpuCount}</span>
-                                     {booking.gpuCount !== undefined && (
-                                       <>
-                                         <Server className="w-3 h-3 ml-2" />
-                                         <span><span className="font-medium">GPUs:</span> {booking.gpuCount}</span>
-                                       </>
-                                     )}
-                                   </p>
-                                 )}
-                                 {booking.purpose && (
-                                   <p className="mt-1 text-muted-foreground">{booking.purpose}</p>
-                                 )}
+                                 </div>
+                                 <p className="text-muted-foreground">{booking.studentEmail}</p>
+                                  {booking.projectName && (
+                                    <p className="mt-2 text-sm">
+                                      <span className="font-medium">Project:</span> {booking.projectName}
+                                    </p>
+                                  )}
+                                  {booking.collaborators && booking.collaborators.length > 0 && (
+                                    <div className="mt-2 pt-2 border-t">
+                                      <div className="flex items-center gap-2 text-sm mb-1">
+                                        <Users className="w-3 h-3 text-primary" />
+                                        <span className="font-medium">Collaborators:</span>
+                                      </div>
+                                      <div className="flex flex-wrap gap-1">
+                                        {booking.collaborators.map(collabId => {
+                                          const collab = availableUsers.find(u => u.id === collabId);
+                                          return collab ? (
+                                            <Badge key={collabId} variant="secondary" className="text-xs">
+                                              {collab.spirit_animal && <span className="mr-1">{collab.spirit_animal}</span>}
+                                              {collab.full_name || collab.email}
+                                            </Badge>
+                                          ) : null;
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {booking.cpuCount !== undefined && (
+                                    <p className="mt-2 text-sm flex items-center gap-2">
+                                      <Cpu className="w-3 h-3" />
+                                      <span><span className="font-medium">CPUs:</span> {booking.cpuCount}</span>
+                                      {booking.gpuCount !== undefined && (
+                                        <>
+                                          <Server className="w-3 h-3 ml-2" />
+                                          <span><span className="font-medium">GPUs:</span> {booking.gpuCount}</span>
+                                        </>
+                                      )}
+                                    </p>
+                                  )}
+                                  {booking.purpose && (
+                                    <p className="mt-1 text-muted-foreground">{booking.purpose}</p>
+                                  )}
                               </div>
                             </Card>
                           );
@@ -838,11 +857,17 @@ const Schedule = () => {
                                                     )}
                                                     <span className="truncate">{booking.studentName}</span>
                                                   </div>
-                                                  {booking.projectName && (
-                                                    <div className="truncate font-medium">
-                                                      {booking.projectName}
-                                                    </div>
-                                                  )}
+                                                   {booking.projectName && (
+                                                     <div className="truncate font-medium">
+                                                       {booking.projectName}
+                                                     </div>
+                                                   )}
+                                                   {booking.collaborators && booking.collaborators.length > 0 && (
+                                                     <div className="flex items-center gap-1">
+                                                       <Users className="w-3 h-3" />
+                                                       <span>+{booking.collaborators.length}</span>
+                                                     </div>
+                                                   )}
                                                 </div>
                                               </div>
                                             </Card>
