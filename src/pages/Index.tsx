@@ -58,6 +58,7 @@ const Index = () => {
         status: eq.status as "available" | "in-use" | "maintenance",
         location: eq.location,
         description: eq.description || undefined,
+        icon: eq.icon || undefined,
       }));
       
       // Transform bookings data
@@ -137,7 +138,7 @@ const Index = () => {
         <div className="mb-6 sm:mb-8 animate-fade-in">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2">Dutton Lab Dashboard</h1>
           <p className="text-sm sm:text-base text-muted-foreground">
-            Equipment and robot scheduling for the University of Florida
+            Equipment and robot scheduling
           </p>
         </div>
 
