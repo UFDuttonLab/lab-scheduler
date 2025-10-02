@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Clock, User, Mail, Trash2, Cpu, Server, FlaskConical, Users, Edit } from "lucide-react";
-import { format } from "date-fns";
+import { format, isSameDay } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -90,7 +90,10 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
           <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground mt-1">
             <Clock className="w-3 h-3 flex-shrink-0" />
             <span className="truncate">
-              {format(booking.startTime, "MMM d, h:mm a")} - {format(booking.endTime, "h:mm a")}
+              {isSameDay(booking.startTime, booking.endTime)
+                ? `${format(booking.startTime, "MMM d, h:mm a")} - ${format(booking.endTime, "h:mm a")}`
+                : `${format(booking.startTime, "MMM d, h:mm a")} - ${format(booking.endTime, "MMM d, h:mm a")}`
+              }
             </span>
           </div>
         </div>

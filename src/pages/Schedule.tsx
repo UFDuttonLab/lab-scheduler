@@ -594,11 +594,14 @@ const Schedule = () => {
                             <Card key={booking.id} className="p-4 border-l-4" style={{ borderLeftColor: project?.color || '#ccc' }}>
                               <div className="flex items-start justify-between mb-2">
                                 <div>
-                                  <h4 className="font-semibold">{booking.equipmentName}</h4>
+                                   <h4 className="font-semibold">{booking.equipmentName}</h4>
                                    <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
                                      <Clock className="w-3 h-3" />
                                      <span>
-                                       {format(booking.startTime, "MMM d, h:mm a")} - {format(booking.endTime, "h:mm a")}
+                                       {isSameDay(booking.startTime, booking.endTime)
+                                         ? `${format(booking.startTime, "MMM d, h:mm a")} - ${format(booking.endTime, "h:mm a")}`
+                                         : `${format(booking.startTime, "MMM d, h:mm a")} - ${format(booking.endTime, "MMM d, h:mm a")}`
+                                       }
                                      </span>
                                      <span className="text-xs">({booking.duration} min)</span>
                                    </div>
@@ -648,13 +651,25 @@ const Schedule = () => {
                     )}
                   </TabsContent>
 
-                  <TabsContent value="timeline">
+                   <TabsContent value="timeline">
                     {(() => {
                       // Assign tracks to bookings to avoid visual overlap
                       const bookingsWithTracks = dayBookings.map(booking => {
-                        const startMinutes = booking.startTime.getHours() * 60 + booking.startTime.getMinutes();
-                        const endMinutes = booking.endTime.getHours() * 60 + booking.endTime.getMinutes();
-                        return { ...booking, startMinutes, endMinutes, track: 0 };
+                        // For timeline view, we need to handle multiday bookings
+                        const isMultiday = !isSameDay(booking.startTime, booking.endTime);
+                        const selectedDayStart = new Date(selectedDate!);
+                        selectedDayStart.setHours(0, 0, 0, 0);
+                        const selectedDayEnd = new Date(selectedDate!);
+                        selectedDayEnd.setHours(23, 59, 59, 999);
+                        
+                        // Calculate display start: either booking start or beginning of selected day
+                        const displayStart = booking.startTime > selectedDayStart ? booking.startTime : selectedDayStart;
+                        // Calculate display end: either booking end or end of selected day, whichever is earlier
+                        const displayEnd = booking.endTime < selectedDayEnd ? booking.endTime : selectedDayEnd;
+                        
+                        const startMinutes = displayStart.getHours() * 60 + displayStart.getMinutes();
+                        const endMinutes = displayEnd.getHours() * 60 + displayEnd.getMinutes();
+                        return { ...booking, startMinutes, endMinutes, track: 0, isMultiday };
                       }).sort((a, b) => a.startMinutes - b.startMinutes);
 
                       // Simple track assignment algorithm
@@ -771,7 +786,10 @@ const Schedule = () => {
                                                   <div className="flex items-center gap-1">
                                                     <Clock className="w-3 h-3" />
                                                     <span>
-                                                      {format(booking.startTime, "h:mm a")} - {format(booking.endTime, "h:mm a")}
+                                                      {booking.isMultiday 
+                                                        ? `${format(booking.startTime, "MMM d")} - ${format(booking.endTime, "MMM d")}`
+                                                        : `${format(booking.startTime, "h:mm a")} - ${format(booking.endTime, "h:mm a")}`
+                                                      }
                                                     </span>
                                                   </div>
                                                   <div className="flex items-center gap-1">

@@ -204,7 +204,7 @@ const Equipment = () => {
       <Navigation />
       
       <main className="container mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-8 animate-fade-in">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 animate-fade-in">
           <div>
             <h1 className="text-4xl font-bold mb-2">Equipment Management</h1>
             <p className="text-muted-foreground">
@@ -220,7 +220,7 @@ const Equipment = () => {
             }
           }}>
             <DialogTrigger asChild>
-              <Button size="lg">
+              <Button size="lg" className="w-full sm:w-auto shrink-0">
                 <Plus className="w-4 h-4 mr-2" />
                 Add Equipment
               </Button>
