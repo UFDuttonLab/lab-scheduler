@@ -704,7 +704,22 @@ const Schedule = () => {
                       });
 
                       const numTracks = tracks.length;
-                      const hours = Array.from({ length: 13 }, (_, i) => i + 8);
+                      
+                      // Calculate dynamic hour range based on bookings
+                      let startHour = 8;
+                      let endHour = 20;
+                      
+                      if (bookingsWithTracks.length > 0) {
+                        const minMinutes = Math.min(...bookingsWithTracks.map(b => b.startMinutes));
+                        const maxMinutes = Math.max(...bookingsWithTracks.map(b => b.endMinutes));
+                        
+                        // Round down to nearest hour and add 1 hour padding
+                        startHour = Math.max(0, Math.floor(minMinutes / 60) - 1);
+                        // Round up to nearest hour and add 1 hour padding
+                        endHour = Math.min(23, Math.ceil(maxMinutes / 60) + 1);
+                      }
+                      
+                      const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => i + startHour);
 
                       return (
                         <div className="relative">
@@ -762,7 +777,6 @@ const Schedule = () => {
                                         .map(booking => {
                                           const project = projects.find(p => p.id === booking.projectId);
                                           // Calculate position and height
-                                          const startHour = 8; // First hour is 8am
                                           const pixelsPerMinute = 64 / 60; // 64px per hour
                                           const top = (booking.startMinutes - (startHour * 60)) * pixelsPerMinute;
                                           const height = (booking.endMinutes - booking.startMinutes) * pixelsPerMinute;
