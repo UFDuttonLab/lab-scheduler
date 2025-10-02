@@ -91,6 +91,7 @@ export default function QuickAdd() {
     const { data, error } = await supabase
       .from("profiles")
       .select("id, email, full_name, spirit_animal")
+      .eq("active", true)
       .order("full_name");
 
     if (error) {
