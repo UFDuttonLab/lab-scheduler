@@ -17,11 +17,18 @@ serve(async (req) => {
       throw new Error('Management API token is required');
     }
 
-    const projectId = Deno.env.get('VITE_SUPABASE_PROJECT_ID');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
 
     if (!resendApiKey) {
       throw new Error('RESEND_API_KEY not configured');
+    }
+
+    // Extract project ID from Supabase URL
+    const projectId = supabaseUrl?.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
+    
+    if (!projectId) {
+      throw new Error('Could not extract project ID from SUPABASE_URL');
     }
 
     console.log('Configuring SMTP settings for project:', projectId);
