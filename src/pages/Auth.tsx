@@ -58,29 +58,26 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      // Redirect to base URL so Supabase tokens are properly captured before hash routing
-      const baseUrl = window.location.origin;
-      const pathname = window.location.pathname.replace(/\/$/, '');
-      const redirectUrl = `${baseUrl}${pathname}/`;
-      
-      console.log("Sending password reset email with redirect URL:", redirectUrl);
-      
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: redirectUrl,
+      const { data, error } = await supabase.functions.invoke("request-password-reset", {
+        body: { email },
       });
 
       if (error) throw error;
 
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
       toast({
         title: "Check your email",
-        description: "We've sent you a password reset link.",
+        description: "If an account exists with that email, we've sent you a password reset link.",
       });
       setShowForgotPassword(false);
       setEmail("");
     } catch (error: any) {
       toast({
-        title: "Error sending reset email",
-        description: error.message,
+        title: "Error",
+        description: error.message || "Failed to send reset email. Please try again.",
         variant: "destructive",
       });
     } finally {

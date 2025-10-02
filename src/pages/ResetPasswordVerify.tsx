@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,48 +8,36 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { Footer } from "@/components/Footer";
 
-const ResetPassword = () => {
+const ResetPasswordVerify = () => {
+  const [searchParams] = useSearchParams();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isRecoverySession, setIsRecoverySession] = useState(false);
   const [verifying, setVerifying] = useState(true);
+  const [tokenValid, setTokenValid] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  useEffect(() => {
-    // Check if we have a recovery session
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
-        setIsRecoverySession(true);
-        setVerifying(false);
-      } else {
-        // Give Supabase more time to process the token
-        setTimeout(async () => {
-          const { data: { session: retrySession } } = await supabase.auth.getSession();
-          if (retrySession) {
-            setIsRecoverySession(true);
-          } else {
-            toast({
-              title: "Invalid or expired link",
-              description: "Please request a new password reset link.",
-              variant: "destructive",
-            });
-            navigate("/auth");
-          }
-          setVerifying(false);
-        }, 2000);
-      }
-    };
+  const token = searchParams.get("token");
 
-    checkSession();
-  }, [navigate, toast]);
+  useEffect(() => {
+    if (!token) {
+      toast({
+        title: "Invalid Link",
+        description: "This password reset link is invalid.",
+        variant: "destructive",
+      });
+      setTimeout(() => navigate("/auth"), 2000);
+      return;
+    }
+
+    setVerifying(false);
+    setTokenValid(true);
+  }, [token, navigate, toast]);
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (password !== confirmPassword) {
       toast({
         title: "Passwords don't match",
@@ -71,24 +59,30 @@ const ResetPassword = () => {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: password,
+      const { data, error } = await supabase.functions.invoke("update-password", {
+        body: {
+          token,
+          newPassword: password,
+        },
       });
 
       if (error) throw error;
 
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
       toast({
-        title: "Password updated!",
+        title: "Password Updated",
         description: "Your password has been successfully updated. You can now sign in.",
       });
-      
-      // Sign out and redirect to auth page
-      await supabase.auth.signOut();
-      navigate("/auth");
+
+      setTimeout(() => navigate("/auth"), 2000);
     } catch (error: any) {
+      console.error("Error resetting password:", error);
       toast({
-        title: "Error updating password",
-        description: error.message,
+        title: "Error",
+        description: error.message || "Failed to reset password. The link may have expired.",
         variant: "destructive",
       });
     } finally {
@@ -102,9 +96,9 @@ const ResetPassword = () => {
         <div className="flex-1 flex items-center justify-center p-4">
           <Card className="w-full max-w-md">
             <CardContent className="pt-6">
-              <div className="text-center space-y-2">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-                <p className="text-sm text-muted-foreground">Verifying reset link...</p>
+              <div className="flex flex-col items-center gap-4">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                <p className="text-muted-foreground">Verifying reset link...</p>
               </div>
             </CardContent>
           </Card>
@@ -114,8 +108,8 @@ const ResetPassword = () => {
     );
   }
 
-  if (!isRecoverySession) {
-    return null; // Will redirect in useEffect
+  if (!tokenValid) {
+    return null;
   }
 
   return (
@@ -123,7 +117,7 @@ const ResetPassword = () => {
       <div className="flex-1 flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Set New Password</CardTitle>
+            <CardTitle className="text-2xl">Reset Your Password</CardTitle>
             <CardDescription>Enter your new password below</CardDescription>
           </CardHeader>
           <CardContent>
@@ -141,7 +135,7 @@ const ResetPassword = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="confirm-password">Confirm Password</Label>
+                <Label htmlFor="confirm-password">Confirm New Password</Label>
                 <Input
                   id="confirm-password"
                   type="password"
@@ -153,7 +147,15 @@ const ResetPassword = () => {
                 />
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Updating..." : "Update Password"}
+                {loading ? "Updating Password..." : "Update Password"}
+              </Button>
+              <Button
+                type="button"
+                variant="link"
+                className="w-full"
+                onClick={() => navigate("/auth")}
+              >
+                Back to Sign In
               </Button>
             </form>
           </CardContent>
@@ -164,4 +166,4 @@ const ResetPassword = () => {
   );
 };
 
-export default ResetPassword;
+export default ResetPasswordVerify;

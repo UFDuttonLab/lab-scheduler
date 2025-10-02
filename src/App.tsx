@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { AuthRedirectHandler } from "@/components/AuthRedirectHandler";
 // Page imports
 import Index from "./pages/Index";
 import Schedule from "./pages/Schedule";
@@ -16,8 +15,7 @@ import Settings from "./pages/Settings";
 import QuickAdd from "./pages/QuickAdd";
 import ActivityLog from "./pages/ActivityLog";
 import Auth from "./pages/Auth";
-import ResetPassword from "./pages/ResetPassword";
-import ConfigureSMTP from "./pages/ConfigureSMTP";
+import ResetPasswordVerify from "./pages/ResetPasswordVerify";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,11 +27,9 @@ const App = () => (
       <Sonner />
       <HashRouter>
         <AuthProvider>
-          <AuthRedirectHandler />
           <Routes>
             <Route path="/auth" element={<Auth />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/configure-smtp" element={<ConfigureSMTP />} />
+            <Route path="/reset-password" element={<ResetPasswordVerify />} />
             <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
             <Route path="/schedule" element={<ProtectedRoute><Schedule /></ProtectedRoute>} />
             <Route path="/equipment" element={<ProtectedRoute requirePermission="canManageEquipment"><Equipment /></ProtectedRoute>} />
