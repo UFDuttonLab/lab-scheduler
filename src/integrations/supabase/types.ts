@@ -24,7 +24,7 @@ export type Database = {
           entity_type: Database["public"]["Enums"]["entity_type"]
           id: string
           metadata: Json | null
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           action_type: Database["public"]["Enums"]["action_type"]
@@ -35,7 +35,7 @@ export type Database = {
           entity_type: Database["public"]["Enums"]["entity_type"]
           id?: string
           metadata?: Json | null
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           action_type?: Database["public"]["Enums"]["action_type"]
@@ -46,7 +46,7 @@ export type Database = {
           entity_type?: Database["public"]["Enums"]["entity_type"]
           id?: string
           metadata?: Json | null
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
