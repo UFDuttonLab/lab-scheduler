@@ -17,6 +17,7 @@ import QuickAdd from "./pages/QuickAdd";
 import ActivityLog from "./pages/ActivityLog";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
+import ConfigureSMTP from "./pages/ConfigureSMTP";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/configure-smtp" element={<ConfigureSMTP />} />
             <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
             <Route path="/schedule" element={<ProtectedRoute><Schedule /></ProtectedRoute>} />
             <Route path="/equipment" element={<ProtectedRoute requirePermission="canManageEquipment"><Equipment /></ProtectedRoute>} />
