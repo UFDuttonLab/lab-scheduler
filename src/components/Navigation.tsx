@@ -5,10 +5,23 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ROLE_LABELS } from "@/lib/permissions";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { MobileNavigation } from "./MobileNavigation";
+import { MobileHeader } from "./MobileHeader";
 
 export const Navigation = () => {
   const location = useLocation();
   const { user, userRole, permissions, signOut } = useAuth();
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return (
+      <>
+        <MobileHeader />
+        <MobileNavigation />
+      </>
+    );
+  }
 
   const navItems = [
     { path: "/", label: "Dashboard", icon: Home },

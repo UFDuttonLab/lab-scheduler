@@ -130,18 +130,18 @@ const Index = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20 sm:pb-0">
       <Navigation />
       
-      <main className="container mx-auto px-6 py-8">
-        <div className="mb-8 animate-fade-in">
-          <h1 className="text-4xl font-bold mb-2">Dutton Lab Dashboard</h1>
-          <p className="text-muted-foreground">
+      <main className="container mx-auto px-4 sm:px-6 py-4 sm:py-8">
+        <div className="mb-6 sm:mb-8 animate-fade-in">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2">Dutton Lab Dashboard</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Equipment and robot scheduling for the University of Florida
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
           <StatsCard
             title="Available Equipment"
             value={`${availableEquipment}/${totalEquipment}`}
@@ -170,18 +170,18 @@ const Index = () => {
           />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold">Upcoming Bookings</h2>
+              <h2 className="text-xl sm:text-2xl font-bold">Upcoming Bookings</h2>
               <button
                 onClick={() => navigate("/schedule")}
-                className="text-sm text-primary hover:underline"
+                className="text-xs sm:text-sm text-primary hover:underline min-h-[44px] flex items-center"
               >
                 View all
               </button>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {upcomingBookings.length > 0 ? (
                 upcomingBookings.map(booking => (
                   <BookingCard key={booking.id} booking={booking} onDelete={fetchData} />
@@ -194,15 +194,15 @@ const Index = () => {
 
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold">Available Equipment</h2>
+              <h2 className="text-xl sm:text-2xl font-bold">Available Equipment</h2>
               <button
                 onClick={() => navigate("/equipment")}
-                className="text-sm text-primary hover:underline"
+                className="text-xs sm:text-sm text-primary hover:underline min-h-[44px] flex items-center"
               >
                 Manage all
               </button>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {recentEquipment.length > 0 ? (
                 recentEquipment.map(eq => (
                   <EquipmentCard

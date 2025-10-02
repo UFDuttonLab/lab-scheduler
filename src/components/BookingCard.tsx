@@ -83,18 +83,18 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
   };
 
   return (
-    <Card className="p-4 hover:shadow-md transition-all animate-fade-in">
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex-1">
-          <h4 className="font-semibold">{booking.equipmentName}</h4>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-            <Clock className="w-3 h-3" />
-            <span>
+    <Card className="p-4 sm:p-5 hover:shadow-md transition-all animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+        <div className="flex-1 min-w-0">
+          <h4 className="font-semibold text-base sm:text-lg">{booking.equipmentName}</h4>
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground mt-1">
+            <Clock className="w-3 h-3 flex-shrink-0" />
+            <span className="truncate">
               {format(booking.startTime, "MMM d, h:mm a")} - {format(booking.endTime, "h:mm a")}
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-start">
           <Badge className={status.className}>{status.label}</Badge>
           {canEdit && booking.status === "scheduled" && onEdit && (
             <Button 
@@ -131,17 +131,17 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
       </div>
 
       <div className="space-y-2">
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-xs sm:text-sm">
           {booking.studentSpiritAnimal ? (
-            <span className="text-lg">{booking.studentSpiritAnimal}</span>
+            <span className="text-base sm:text-lg flex-shrink-0">{booking.studentSpiritAnimal}</span>
           ) : (
-            <User className="w-3 h-3 text-muted-foreground" />
+            <User className="w-3 h-3 text-muted-foreground flex-shrink-0" />
           )}
-          <span>{booking.studentName}</span>
+          <span className="truncate">{booking.studentName}</span>
         </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Mail className="w-3 h-3" />
-          <span>{booking.studentEmail}</span>
+        <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+          <Mail className="w-3 h-3 flex-shrink-0" />
+          <span className="truncate">{booking.studentEmail}</span>
         </div>
         
         {booking.samplesProcessed && (
