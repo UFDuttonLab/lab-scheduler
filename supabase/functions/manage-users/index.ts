@@ -72,6 +72,16 @@ Deno.serve(async (req) => {
     const { action, email, fullName, role, spiritAnimal, userId } = await req.json()
 
     if (action === 'delete') {
+      // Log activity BEFORE deletion to avoid FK constraint violation
+      await supabaseAdmin.from('activity_logs').insert({
+        user_id: authenticatedUserId,
+        action_type: 'delete',
+        entity_type: 'user',
+        entity_id: userId,
+        entity_name: email || 'User',
+        metadata: { action: 'delete_user' }
+      })
+
       // Delete user from auth.users (will cascade to all other tables)
       const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
 
@@ -82,16 +92,6 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
-
-      // Log activity
-      await supabaseAdmin.from('activity_logs').insert({
-        user_id: authenticatedUserId,
-        action_type: 'delete',
-        entity_type: 'user',
-        entity_id: userId,
-        entity_name: email || 'User',
-        metadata: { action: 'delete_user' }
-      })
 
       console.log('User deleted successfully:', userId)
       return new Response(JSON.stringify({ success: true }), {
