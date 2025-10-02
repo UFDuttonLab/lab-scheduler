@@ -256,6 +256,7 @@ const Equipment = () => {
                   <Label htmlFor="type">Type</Label>
                   <Select 
                     value={selectedType}
+                    defaultValue="robot"
                     onValueChange={(value) => {
                       setSelectedType(value);
                       setValue("type", value as "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator" | "Sequencer");
