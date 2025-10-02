@@ -1202,7 +1202,7 @@ const Schedule = () => {
 
         {/* Booking Details Dialog */}
         <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto p-6">
             <DialogHeader>
               <DialogTitle>Booking Details</DialogTitle>
             </DialogHeader>

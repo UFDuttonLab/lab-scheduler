@@ -83,7 +83,7 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
   };
 
   return (
-    <Card className="p-4 sm:p-5 hover:shadow-md transition-all animate-fade-in">
+    <Card className="p-4 sm:p-5 hover:shadow-md transition-all animate-fade-in max-w-full overflow-hidden">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
         <div className="flex-1 min-w-0">
           <h4 className="font-semibold text-base sm:text-lg">{booking.equipmentName}</h4>
@@ -191,7 +191,7 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
       </div>
 
       {booking.purpose && (
-        <p className="text-sm text-muted-foreground mt-3 pt-3 border-t">
+        <p className="text-sm text-muted-foreground mt-3 pt-3 border-t break-words">
           {booking.purpose}
         </p>
       )}
