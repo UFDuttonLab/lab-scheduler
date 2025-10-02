@@ -14,6 +14,7 @@ import Analytics from "./pages/Analytics";
 import History from "./pages/History";
 import Settings from "./pages/Settings";
 import QuickAdd from "./pages/QuickAdd";
+import ActivityLog from "./pages/ActivityLog";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
@@ -37,6 +38,7 @@ const App = () => (
             <Route path="/quick-add" element={<ProtectedRoute><QuickAdd /></ProtectedRoute>} />
             <Route path="/analytics" element={<ProtectedRoute requirePermission="canViewAnalytics"><Analytics /></ProtectedRoute>} />
             <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
+            <Route path="/activity-log" element={<ProtectedRoute><ActivityLog /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute requirePermission="canManageUsers"><Settings /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

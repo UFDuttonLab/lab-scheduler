@@ -14,6 +14,85 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_logs: {
+        Row: {
+          action_type: Database["public"]["Enums"]["action_type"]
+          changes: Json | null
+          created_at: string
+          entity_id: string | null
+          entity_name: string | null
+          entity_type: Database["public"]["Enums"]["entity_type"]
+          id: string
+          metadata: Json | null
+          user_id: string
+        }
+        Insert: {
+          action_type: Database["public"]["Enums"]["action_type"]
+          changes?: Json | null
+          created_at?: string
+          entity_id?: string | null
+          entity_name?: string | null
+          entity_type: Database["public"]["Enums"]["entity_type"]
+          id?: string
+          metadata?: Json | null
+          user_id: string
+        }
+        Update: {
+          action_type?: Database["public"]["Enums"]["action_type"]
+          changes?: Json | null
+          created_at?: string
+          entity_id?: string | null
+          entity_name?: string | null
+          entity_type?: Database["public"]["Enums"]["entity_type"]
+          id?: string
+          metadata?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_versions: {
+        Row: {
+          changes: Json
+          created_at: string
+          id: string
+          released_at: string
+          released_by: string | null
+          version: string
+        }
+        Insert: {
+          changes?: Json
+          created_at?: string
+          id?: string
+          released_at?: string
+          released_by?: string | null
+          version: string
+        }
+        Update: {
+          changes?: Json
+          created_at?: string
+          id?: string
+          released_at?: string
+          released_by?: string | null
+          version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_versions_released_by_fkey"
+            columns: ["released_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bookings: {
         Row: {
           booking_group_id: string | null
@@ -283,6 +362,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_current_version: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
       has_any_role: {
         Args: {
           _roles: Database["public"]["Enums"]["app_role"][]
@@ -299,6 +382,7 @@ export type Database = {
       }
     }
     Enums: {
+      action_type: "create" | "update" | "delete" | "login" | "logout"
       app_role:
         | "pi"
         | "postdoc"
@@ -306,6 +390,13 @@ export type Database = {
         | "undergrad_student"
         | "manager"
         | "user"
+      entity_type:
+        | "booking"
+        | "equipment"
+        | "project"
+        | "user"
+        | "usage_record"
+        | "profile"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -433,6 +524,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      action_type: ["create", "update", "delete", "login", "logout"],
       app_role: [
         "pi",
         "postdoc",
@@ -440,6 +532,14 @@ export const Constants = {
         "undergrad_student",
         "manager",
         "user",
+      ],
+      entity_type: [
+        "booking",
+        "equipment",
+        "project",
+        "user",
+        "usage_record",
+        "profile",
       ],
     },
   },

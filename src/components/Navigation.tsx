@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Calendar, Settings, History, Wrench, BarChart3, LogOut, Clock } from "lucide-react";
+import { Home, Calendar, Settings, History, Wrench, BarChart3, LogOut, Clock, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ export const Navigation = () => {
     { path: "/equipment", label: "Equipment", icon: Wrench, requirePermission: 'canManageEquipment' },
     { path: "/analytics", label: "Analytics", icon: BarChart3, requirePermission: 'canViewAnalytics' },
     { path: "/history", label: "History", icon: History },
+    { path: "/activity-log", label: "Activity Log", icon: FileText },
     { path: "/settings", label: "Settings", icon: Settings, requirePermission: 'canManageUsers' },
   ];
 

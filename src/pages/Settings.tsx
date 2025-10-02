@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Project } from "@/lib/types";
-import { Plus, Trash2, Edit, Loader2, Pencil, User, Mail, Smile } from "lucide-react";
+import { Plus, Trash2, Edit, Loader2, Pencil, User, Mail, Smile, Tag } from "lucide-react";
 import * as Icons from "lucide-react";
 import { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -19,12 +19,25 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ROLE_LABELS, ROLE_DESCRIPTIONS, AppRole } from "@/lib/permissions";
+import { format } from "date-fns";
 
 interface UserProfile {
   id: string;
   email: string;
   full_name?: string;
   spirit_animal?: string;
+}
+
+interface AppVersion {
+  id: string;
+  version: string;
+  released_at: string;
+  changes: any;
+  released_by: string | null;
+  profiles?: {
+    full_name: string | null;
+    email: string;
+  };
 }
 
 const SPIRIT_ANIMALS = [
@@ -49,10 +62,12 @@ const Settings = () => {
   const { user: currentUser } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [versions, setVersions] = useState<AppVersion[]>([]);
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
   const [isAddProjectDialogOpen, setIsAddProjectDialogOpen] = useState(false);
   const [isEditUserDialogOpen, setIsEditUserDialogOpen] = useState(false);
   const [isAddUserDialogOpen, setIsAddUserDialogOpen] = useState(false);
+  const [isAddVersionDialogOpen, setIsAddVersionDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -63,6 +78,7 @@ const Settings = () => {
   useEffect(() => {
     fetchProjects();
     fetchUsers();
+    fetchVersions();
     fetchCurrentUserProfile();
   }, [currentUser]);
 
@@ -158,6 +174,74 @@ const Settings = () => {
     } catch (error) {
       console.error("Error updating spirit animal:", error);
       toast.error("Failed to update spirit animal");
+    }
+  };
+
+  const fetchVersions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("app_versions")
+        .select(`
+          *,
+          profiles:released_by (
+            full_name,
+            email
+          )
+        `)
+        .order("released_at", { ascending: false });
+
+      if (error) throw error;
+      setVersions(data || []);
+    } catch (error) {
+      console.error("Error fetching versions:", error);
+      toast.error("Failed to load versions");
+    }
+  };
+
+  const handleAddVersion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+
+    const formData = new FormData(e.target as HTMLFormElement);
+    const version = formData.get("version") as string;
+    const changesText = formData.get("changes") as string;
+
+    // Parse changes - expect each line to be a change
+    const changes = changesText
+      .split("\n")
+      .filter(line => line.trim())
+      .map(line => {
+        const trimmed = line.trim();
+        // Try to detect type from prefix
+        if (trimmed.toLowerCase().startsWith("feature:") || trimmed.toLowerCase().startsWith("feat:")) {
+          return { type: "feature", description: trimmed.replace(/^(feature|feat):\s*/i, "") };
+        } else if (trimmed.toLowerCase().startsWith("fix:") || trimmed.toLowerCase().startsWith("bugfix:")) {
+          return { type: "fix", description: trimmed.replace(/^(fix|bugfix):\s*/i, "") };
+        } else if (trimmed.toLowerCase().startsWith("improvement:") || trimmed.toLowerCase().startsWith("enhance:")) {
+          return { type: "improvement", description: trimmed.replace(/^(improvement|enhance):\s*/i, "") };
+        } else {
+          return { type: "change", description: trimmed };
+        }
+      });
+
+    try {
+      const { error } = await supabase
+        .from("app_versions")
+        .insert({
+          version,
+          changes,
+          released_by: currentUser.id
+        });
+
+      if (error) throw error;
+
+      toast.success("Version released successfully!");
+      setIsAddVersionDialogOpen(false);
+      fetchVersions();
+      (e.target as HTMLFormElement).reset();
+    } catch (error: any) {
+      console.error("Error creating version:", error);
+      toast.error(error.message || "Failed to create version");
     }
   };
 
@@ -616,6 +700,118 @@ const Settings = () => {
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
+                    </div>
+                  </Card>
+                ))
+              )}
+            </div>
+          </Card>
+
+          {/* Version Management Section */}
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-bold mb-1">Version History</h2>
+                <p className="text-sm text-muted-foreground">
+                  Track application releases and changelog
+                </p>
+              </div>
+              <Dialog open={isAddVersionDialogOpen} onOpenChange={setIsAddVersionDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Tag className="w-4 h-4 mr-2" />
+                    Release New Version
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Release New Version</DialogTitle>
+                    <DialogDescription>
+                      Create a new version release with changelog entries
+                    </DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleAddVersion} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="version">Version Number *</Label>
+                      <Input
+                        id="version"
+                        name="version"
+                        placeholder="e.g., 1.2.0"
+                        required
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Follow semantic versioning: MAJOR.MINOR.PATCH
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="changes">Changelog *</Label>
+                      <Textarea
+                        id="changes"
+                        name="changes"
+                        placeholder="Feature: Added new feature&#10;Fix: Fixed bug&#10;Improvement: Enhanced performance"
+                        rows={8}
+                        required
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Enter one change per line. Prefix with Feature:, Fix:, or Improvement: to categorize
+                      </p>
+                    </div>
+                    <DialogFooter>
+                      <Button type="button" variant="outline" onClick={() => setIsAddVersionDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button type="submit">Release Version</Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            <div className="space-y-4">
+              {versions.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  No versions released yet.
+                </p>
+              ) : (
+                versions.map(version => (
+                  <Card key={version.id} className="p-4">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="default" className="text-sm">
+                            v{version.version}
+                          </Badge>
+                          <span className="text-sm text-muted-foreground">
+                            {format(new Date(version.released_at), "MMM d, yyyy")}
+                          </span>
+                        </div>
+                        {version.profiles && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Released by {version.profiles.full_name || version.profiles.email}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      {version.changes && version.changes.length > 0 ? (
+                        version.changes.map((change: any, idx: number) => (
+                          <div key={idx} className="flex items-start gap-2 text-sm">
+                            <Badge 
+                              variant={
+                                change.type === 'feature' ? 'default' : 
+                                change.type === 'fix' ? 'destructive' : 
+                                'secondary'
+                              }
+                              className="text-xs mt-0.5"
+                            >
+                              {change.type}
+                            </Badge>
+                            <span className="flex-1">{change.description}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No changelog entries</p>
+                      )}
                     </div>
                   </Card>
                 ))

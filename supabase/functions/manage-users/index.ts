@@ -83,6 +83,16 @@ Deno.serve(async (req) => {
         })
       }
 
+      // Log activity
+      await supabaseAdmin.from('activity_logs').insert({
+        user_id: authenticatedUserId,
+        action_type: 'delete',
+        entity_type: 'user',
+        entity_id: userId,
+        entity_name: email || 'User',
+        metadata: { action: 'delete_user' }
+      })
+
       console.log('User deleted successfully:', userId)
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -139,6 +149,16 @@ Deno.serve(async (req) => {
           .insert({ user_id: newUser.user.id, role })
       }
 
+      // Log activity
+      await supabaseAdmin.from('activity_logs').insert({
+        user_id: authenticatedUserId,
+        action_type: 'create',
+        entity_type: 'user',
+        entity_id: newUser.user.id,
+        entity_name: fullName || email,
+        metadata: { email, role, action: 'create_user' }
+      })
+
       console.log('User created successfully:', newUser.user.id)
       return new Response(JSON.stringify({ success: true, user: newUser.user, password: generatedPassword }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -163,6 +183,16 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
+
+      // Log activity
+      await supabaseAdmin.from('activity_logs').insert({
+        user_id: authenticatedUserId,
+        action_type: 'update',
+        entity_type: 'user',
+        entity_id: userId,
+        entity_name: 'Role Change',
+        metadata: { new_role: role, action: 'update_user_role' }
+      })
 
       console.log('Role updated successfully for user:', userId)
       return new Response(JSON.stringify({ success: true }), {
