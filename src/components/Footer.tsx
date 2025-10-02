@@ -14,7 +14,7 @@ export const Footer = () => {
               Dutton Lab at UF
             </a>
           </p>
-          <p className="text-xs text-muted-foreground">v1.0.1</p>
+          <p className="text-xs text-muted-foreground">v1.1.0</p>
         </div>
       </div>
     </footer>
