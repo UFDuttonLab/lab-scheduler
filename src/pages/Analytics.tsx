@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { Clock, TrendingUp, Users, FolderKanban, Loader2, Wrench } from "lucide-react";
+import { Clock, TrendingUp, Users, FolderKanban, Loader2, Wrench, Beaker } from "lucide-react";
 import { StatsCard } from "@/components/StatsCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -120,6 +120,47 @@ const Analytics = () => {
     };
   }).filter(s => s.hours > 0).sort((a, b) => b.hours - a.hours);
 
+  // Calculate samples per project
+  const projectSampleData = projects.map(project => {
+    const projectRecords = bookings.filter(b => b.project_id === project.id);
+    const totalSamples = projectRecords.reduce((sum, record) => 
+      sum + (record.samples_processed || 0), 0
+    );
+    const sessionsWithSamples = projectRecords.filter(r => 
+      r.samples_processed && r.samples_processed > 0
+    ).length;
+    
+    return {
+      name: project.name,
+      samples: totalSamples,
+      sessions: sessionsWithSamples,
+      color: project.color || "#8884d8",
+    };
+  }).filter(p => p.samples > 0);
+
+  // Calculate samples per student (including collaborators)
+  const studentSampleData = users.map(user => {
+    const userRecords = bookings.filter(b => {
+      const isOwner = b.user_id === user.id;
+      const isCollaborator = Array.isArray(b.collaborators) && 
+                            b.collaborators.includes(user.id);
+      return isOwner || isCollaborator;
+    });
+    
+    const totalSamples = userRecords.reduce((sum, record) => 
+      sum + (record.samples_processed || 0), 0
+    );
+    const sessionsWithSamples = userRecords.filter(r => 
+      r.samples_processed && r.samples_processed > 0
+    ).length;
+    
+    return {
+      name: user.full_name || user.email,
+      samples: totalSamples,
+      sessions: sessionsWithSamples,
+    };
+  }).filter(s => s.samples > 0).sort((a, b) => b.samples - a.samples);
+
   // Summary stats
   const totalBookings = bookings.length;
   const totalMinutes = bookings.reduce((sum, booking) => {
@@ -138,6 +179,14 @@ const Analytics = () => {
   });
   const activeStudents = uniqueStudents.size;
   const avgBookingDuration = totalBookings > 0 ? Math.round(totalMinutes / totalBookings) : 0;
+  
+  // Calculate total samples
+  const totalSamples = bookings.reduce((sum, record) => 
+    sum + (record.samples_processed || 0), 0
+  );
+  const sessionsWithSamples = bookings.filter(r => 
+    r.samples_processed && r.samples_processed > 0
+  ).length;
 
   // Calculate equipment analytics
   const equipmentTimeData = equipment.map(eq => {
@@ -238,7 +287,7 @@ const Analytics = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
           <StatsCard
             title="Total Bookings"
             value={totalBookings}
@@ -250,6 +299,12 @@ const Analytics = () => {
             value={`${totalHours}h`}
             icon={Clock}
             trend="All equipment"
+          />
+          <StatsCard
+            title="Total Samples"
+            value={totalSamples}
+            icon={Beaker}
+            trend={`${sessionsWithSamples} sessions`}
           />
           <StatsCard
             title="Active Students"
@@ -322,6 +377,25 @@ const Analytics = () => {
               </Card>
 
               <Card className="p-6 lg:col-span-2">
+                <h3 className="font-semibold text-xl mb-4">Samples Processed by Project</h3>
+                {projectSampleData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={projectSampleData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                      <YAxis label={{ value: 'Samples', angle: -90, position: 'insideLeft' }} />
+                      <Tooltip />
+                      <Bar dataKey="samples" fill="hsl(var(--chart-1))" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    No sample data available for projects
+                  </div>
+                )}
+              </Card>
+
+              <Card className="p-6 lg:col-span-2">
                 <h3 className="font-semibold text-xl mb-4">Project Details</h3>
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -330,35 +404,42 @@ const Analytics = () => {
                         <th className="text-left py-3 px-4">Project</th>
                         <th className="text-right py-3 px-4">Total Hours</th>
                         <th className="text-right py-3 px-4">Bookings</th>
+                        <th className="text-right py-3 px-4">Total Samples</th>
                         <th className="text-right py-3 px-4">Avg Duration</th>
                       </tr>
                     </thead>
                     <tbody>
                       {projectTimeData.length > 0 ? (
-                        projectTimeData.map((project) => (
-                          <tr key={project.name} className="border-b hover:bg-muted/50">
-                            <td className="py-3 px-4">
-                              <div className="flex items-center gap-2">
-                                <div 
-                                  className="w-3 h-3 rounded-full" 
-                                  style={{ backgroundColor: project.color }}
-                                />
-                                {project.name}
-                              </div>
-                            </td>
-                            <td className="text-right py-3 px-4">{project.hours}h</td>
-                            <td className="text-right py-3 px-4">{project.bookings}</td>
-                            <td className="text-right py-3 px-4">
-                              {project.bookings > 0 
-                                ? Math.round(project.hours / project.bookings * 60) + 'm'
-                                : '-'
-                              }
-                            </td>
-                          </tr>
-                        ))
+                        projectTimeData.map((project) => {
+                          const sampleData = projectSampleData.find(p => p.name === project.name);
+                          return (
+                            <tr key={project.name} className="border-b hover:bg-muted/50">
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-2">
+                                  <div 
+                                    className="w-3 h-3 rounded-full" 
+                                    style={{ backgroundColor: project.color }}
+                                  />
+                                  {project.name}
+                                </div>
+                              </td>
+                              <td className="text-right py-3 px-4">{project.hours}h</td>
+                              <td className="text-right py-3 px-4">{project.bookings}</td>
+                              <td className="text-right py-3 px-4">
+                                {sampleData ? sampleData.samples : 0}
+                              </td>
+                              <td className="text-right py-3 px-4">
+                                {project.bookings > 0 
+                                  ? Math.round(project.hours / project.bookings * 60) + 'm'
+                                  : '-'
+                                }
+                              </td>
+                            </tr>
+                          );
+                        })
                       ) : (
                         <tr>
-                          <td colSpan={4} className="py-4 text-center text-muted-foreground">
+                          <td colSpan={5} className="py-4 text-center text-muted-foreground">
                             No project data available
                           </td>
                         </tr>
@@ -420,6 +501,25 @@ const Analytics = () => {
               </Card>
 
               <Card className="p-6 lg:col-span-2">
+                <h3 className="font-semibold text-xl mb-4">Samples Processed by Student</h3>
+                {studentSampleData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={studentSampleData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                      <YAxis label={{ value: 'Samples', angle: -90, position: 'insideLeft' }} />
+                      <Tooltip />
+                      <Bar dataKey="samples" fill="hsl(var(--chart-2))" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    No sample data available for students
+                  </div>
+                )}
+              </Card>
+
+              <Card className="p-6 lg:col-span-2">
                 <h3 className="font-semibold text-xl mb-4">Student Details</h3>
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -428,27 +528,34 @@ const Analytics = () => {
                         <th className="text-left py-3 px-4">Student</th>
                         <th className="text-right py-3 px-4">Total Hours</th>
                         <th className="text-right py-3 px-4">Bookings</th>
+                        <th className="text-right py-3 px-4">Total Samples</th>
                         <th className="text-right py-3 px-4">Avg Duration</th>
                       </tr>
                     </thead>
                     <tbody>
                       {studentTimeData.length > 0 ? (
-                        studentTimeData.map((student) => (
-                          <tr key={student.name} className="border-b hover:bg-muted/50">
-                            <td className="py-3 px-4">{student.name}</td>
-                            <td className="text-right py-3 px-4">{student.hours}h</td>
-                            <td className="text-right py-3 px-4">{student.bookings}</td>
-                            <td className="text-right py-3 px-4">
-                              {student.bookings > 0 
-                                ? Math.round(student.hours / student.bookings * 60) + 'm'
-                                : '-'
-                              }
-                            </td>
-                          </tr>
-                        ))
+                        studentTimeData.map((student) => {
+                          const sampleData = studentSampleData.find(s => s.name === student.name);
+                          return (
+                            <tr key={student.name} className="border-b hover:bg-muted/50">
+                              <td className="py-3 px-4">{student.name}</td>
+                              <td className="text-right py-3 px-4">{student.hours}h</td>
+                              <td className="text-right py-3 px-4">{student.bookings}</td>
+                              <td className="text-right py-3 px-4">
+                                {sampleData ? sampleData.samples : 0}
+                              </td>
+                              <td className="text-right py-3 px-4">
+                                {student.bookings > 0 
+                                  ? Math.round(student.hours / student.bookings * 60) + 'm'
+                                  : '-'
+                                }
+                              </td>
+                            </tr>
+                          );
+                        })
                       ) : (
                         <tr>
-                          <td colSpan={4} className="py-4 text-center text-muted-foreground">
+                          <td colSpan={5} className="py-4 text-center text-muted-foreground">
                             No student data available
                           </td>
                         </tr>
