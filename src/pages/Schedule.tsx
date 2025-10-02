@@ -550,6 +550,25 @@ const Schedule = () => {
 
   const { availableCpu, availableGpu } = getAvailableResources();
 
+  const getDaysWithBookings = () => {
+    const daysSet = new Set<string>();
+    bookings.forEach(booking => {
+      const startDate = new Date(booking.startTime);
+      const endDate = new Date(booking.endTime);
+      
+      // Add all days between start and end (inclusive)
+      let currentDate = new Date(startDate);
+      currentDate.setHours(0, 0, 0, 0);
+      
+      while (currentDate <= endDate) {
+        daysSet.add(currentDate.toDateString());
+        currentDate = addDays(currentDate, 1);
+      }
+    });
+    
+    return Array.from(daysSet).map(dateStr => new Date(dateStr));
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
@@ -570,6 +589,12 @@ const Schedule = () => {
               selected={selectedDate}
               onSelect={setSelectedDate}
               className="rounded-md border"
+              modifiers={{
+                hasBookings: getDaysWithBookings()
+              }}
+              modifiersClassNames={{
+                hasBookings: "bg-primary/10 font-semibold text-primary"
+              }}
             />
             
             <div className="mt-6">
