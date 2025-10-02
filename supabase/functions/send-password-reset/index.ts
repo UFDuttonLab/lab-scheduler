@@ -169,7 +169,7 @@ serve(async (req) => {
 
     // Send email via Resend
     const { error } = await resend.emails.send({
-      from: "Dutton Lab Scheduler <onboarding@resend.dev>",
+      from: "Dutton Lab Scheduler <noreply@marariverresearch.org>",
       to: [user.email],
       subject: "Reset Your Password - Dutton Lab Scheduler",
       html: emailHtml,
