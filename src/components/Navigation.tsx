@@ -35,19 +35,19 @@ export const Navigation = () => {
 
   return (
     <nav className="border-b border-border bg-card">
-      <div className="container mx-auto px-6">
-        <div className="flex items-center justify-between h-16">
+      <div className="container mx-auto px-4">
+        <div className="flex items-center justify-between h-14">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-lg bg-gradient-primary flex items-center justify-center">
-              <Wrench className="w-6 h-6 text-primary-foreground" />
+            <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
+              <Wrench className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <span className="font-bold text-xl block">Dutton Lab</span>
+              <span className="font-bold text-lg block">Dutton Lab</span>
               <span className="text-xs text-muted-foreground">University of Florida</span>
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <div className="flex gap-1">
               {navItems.map((item) => {
                 if (item.requirePermission && !permissions[item.requirePermission as keyof typeof permissions]) {
@@ -62,7 +62,7 @@ export const Navigation = () => {
                     key={item.path}
                     to={item.path}
                     className={cn(
-                      "flex items-center gap-2 px-4 py-2 rounded-lg transition-all",
+                      "flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all",
                       isActive
                         ? "bg-primary text-primary-foreground font-medium"
                         : "text-muted-foreground hover:text-foreground hover:bg-muted"
