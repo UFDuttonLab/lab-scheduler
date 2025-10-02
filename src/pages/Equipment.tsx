@@ -19,7 +19,7 @@ import { EquipmentIconPicker } from "@/components/EquipmentIconPicker";
 
 interface EquipmentFormData {
   name: string;
-  type: "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator";
+  type: "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator" | "Sequencer";
   location: string;
   status: "available" | "maintenance";
   description?: string;
@@ -99,7 +99,7 @@ const Equipment = () => {
       const transformedEquipment: EquipmentType[] = (data || []).map(eq => ({
         id: eq.id,
         name: eq.name,
-        type: eq.type as "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator",
+        type: eq.type as "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator" | "Sequencer",
         status: eq.status as "available" | "in-use" | "maintenance",
         location: eq.location,
         description: eq.description || undefined,
@@ -198,6 +198,7 @@ const Equipment = () => {
   const quantification = equipment.filter(e => e.type === "quantification");
   const pcr = equipment.filter(e => e.type === "PCR");
   const hipergator = equipment.filter(e => e.type === "HiPerGator");
+  const sequencers = equipment.filter(e => e.type === "Sequencer");
 
   return (
     <div className="min-h-screen bg-background">
@@ -257,7 +258,7 @@ const Equipment = () => {
                     value={selectedType}
                     onValueChange={(value) => {
                       setSelectedType(value);
-                      setValue("type", value as "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator");
+                      setValue("type", value as "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator" | "Sequencer");
                     }}
                   >
                     <SelectTrigger id="type">
@@ -269,6 +270,7 @@ const Equipment = () => {
                       <SelectItem value="quantification">Quantification</SelectItem>
                       <SelectItem value="PCR">PCR</SelectItem>
                       <SelectItem value="HiPerGator">HiPerGator</SelectItem>
+                      <SelectItem value="Sequencer">Sequencer</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -385,6 +387,9 @@ const Equipment = () => {
             </TabsTrigger>
             <TabsTrigger value="hipergator">
               HiPerGator ({hipergator.length})
+            </TabsTrigger>
+            <TabsTrigger value="sequencer">
+              Sequencers ({sequencers.length})
             </TabsTrigger>
           </TabsList>
 
@@ -515,6 +520,29 @@ const Equipment = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {hipergator.map(item => (
+                  <EquipmentCard 
+                    key={item.id} 
+                    equipment={item}
+                    onEdit={handleEditEquipment}
+                    onDelete={handleDeleteEquipment}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="sequencer" className="space-y-4">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : sequencers.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                No sequencers added yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {sequencers.map(item => (
                   <EquipmentCard 
                     key={item.id} 
                     equipment={item}

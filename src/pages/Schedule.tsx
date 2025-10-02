@@ -133,7 +133,7 @@ const Schedule = () => {
     const transformedEquipment: Equipment[] = (data || []).map(eq => ({
       id: eq.id,
       name: eq.name,
-      type: eq.type as "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator",
+      type: eq.type as "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator" | "Sequencer",
       status: eq.status as "available" | "in-use" | "maintenance",
       location: eq.location,
       description: eq.description || undefined,

@@ -1,7 +1,7 @@
 export interface Equipment {
   id: string;
   name: string;
-  type: "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator";
+  type: "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator" | "Sequencer";
   status: "available" | "in-use" | "maintenance";
   location: string;
   description?: string;
