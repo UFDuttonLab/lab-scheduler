@@ -72,28 +72,41 @@ Deno.serve(async (req) => {
     const { action, email, fullName, role, spiritAnimal, userId } = await req.json()
 
     if (action === 'delete') {
-      // Log activity BEFORE deletion to avoid FK constraint violation
+      // Soft delete: Set user as inactive instead of hard deleting
+      const { error: deactivateError } = await supabaseAdmin
+        .from('profiles')
+        .update({ active: false })
+        .eq('id', userId)
+
+      if (deactivateError) {
+        console.error('User deactivation error:', deactivateError)
+        return new Response(JSON.stringify({ error: deactivateError.message }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Ban the user for 100 years (effectively permanent)
+      const { error: banError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        ban_duration: '876000h' // 100 years in hours
+      })
+
+      if (banError) {
+        console.error('User ban error:', banError)
+        // Continue even if ban fails - the active flag is the primary control
+      }
+
+      // Log activity after successful deactivation
       await supabaseAdmin.from('activity_logs').insert({
         user_id: authenticatedUserId,
         action_type: 'delete',
         entity_type: 'user',
         entity_id: userId,
         entity_name: email || 'User',
-        metadata: { action: 'delete_user' }
+        metadata: { action: 'deactivate_user' }
       })
 
-      // Delete user from auth.users (will cascade to all other tables)
-      const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
-
-      if (deleteError) {
-        console.error('User deletion error:', deleteError)
-        return new Response(JSON.stringify({ error: deleteError.message }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
-      }
-
-      console.log('User deleted successfully:', userId)
+      console.log('User deactivated successfully:', userId)
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
