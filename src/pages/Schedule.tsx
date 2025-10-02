@@ -206,7 +206,16 @@ const Schedule = () => {
   });
 
   const dayBookings = selectedDate 
-    ? bookings.filter(b => isSameDay(b.startTime, selectedDate))
+    ? bookings.filter(b => {
+        // Check if booking spans the selected date
+        const selectedDayStart = new Date(selectedDate);
+        selectedDayStart.setHours(0, 0, 0, 0);
+        const selectedDayEnd = new Date(selectedDate);
+        selectedDayEnd.setHours(23, 59, 59, 999);
+        
+        // Booking spans the selected date if it starts before/on the day end and ends after/on the day start
+        return b.startTime <= selectedDayEnd && b.endTime >= selectedDayStart;
+      })
     : [];
 
   const handleBooking = async (e: React.FormEvent) => {
