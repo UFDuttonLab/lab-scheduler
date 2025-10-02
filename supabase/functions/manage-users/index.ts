@@ -213,6 +213,47 @@ Deno.serve(async (req) => {
       })
     }
 
+    if (action === 'reactivate') {
+      // Reactivate user: Set active to true
+      const { error: reactivateError } = await supabaseAdmin
+        .from('profiles')
+        .update({ active: true })
+        .eq('id', userId)
+
+      if (reactivateError) {
+        console.error('User reactivation error:', reactivateError)
+        return new Response(JSON.stringify({ error: reactivateError.message }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Unban the user by removing the ban duration
+      const { error: unbanError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        ban_duration: 'none'
+      })
+
+      if (unbanError) {
+        console.error('User unban error:', unbanError)
+        // Continue even if unban fails - the active flag is the primary control
+      }
+
+      // Log activity
+      await supabaseAdmin.from('activity_logs').insert({
+        user_id: authenticatedUserId,
+        action_type: 'update',
+        entity_type: 'user',
+        entity_id: userId,
+        entity_name: email || 'User',
+        metadata: { action: 'reactivate_user' }
+      })
+
+      console.log('User reactivated successfully:', userId)
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
     return new Response(JSON.stringify({ error: 'Invalid action' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

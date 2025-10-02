@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { ROLE_LABELS, ROLE_DESCRIPTIONS, AppRole } from "@/lib/permissions";
 import { format } from "date-fns";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface UserProfile {
   id: string;
@@ -74,6 +75,7 @@ const Settings = () => {
   const [projectName, setProjectName] = useState("");
   const [projectDescription, setProjectDescription] = useState("");
   const [projectIcon, setProjectIcon] = useState("🧪");
+  const [userTab, setUserTab] = useState<"active" | "deactivated">("active");
 
   useEffect(() => {
     fetchProjects();
@@ -113,10 +115,10 @@ const Settings = () => {
 
   const fetchUsers = async () => {
     try {
-      // Fetch profiles
+      // Fetch profiles with active field
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
-        .select("*")
+        .select("id, email, full_name, spirit_animal, active")
         .order("email");
 
       if (profilesError) throw profilesError;
@@ -451,6 +453,106 @@ const Settings = () => {
     }
   };
 
+  const handleReactivateUser = async (userId: string) => {
+    if (!confirm("Are you sure you want to reactivate this user? They will regain access to login and create bookings.")) return;
+
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session) {
+        toast.error("You must be logged in");
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('manage-users', {
+        body: {
+          action: 'reactivate',
+          userId
+        }
+      });
+
+      if (error || data?.error) {
+        toast.error(data?.error || "Failed to reactivate user");
+        console.error(error || data?.error);
+        return;
+      }
+
+      toast.success("User reactivated successfully");
+      fetchUsers();
+    } catch (error) {
+      console.error("Error reactivating user:", error);
+      toast.error("Failed to reactivate user");
+    }
+  };
+
+  // Filter users by active status
+  const activeUsers = users.filter(u => (u as any).active !== false);
+  const deactivatedUsers = users.filter(u => (u as any).active === false);
+
+  // Render user card function
+  const renderUserCard = (user: any, isDeactivated: boolean) => (
+    <Card key={user.id} className={`p-4 ${isDeactivated ? 'opacity-60 bg-muted/30' : ''}`}>
+      <div className="flex items-start justify-between">
+        <div className="flex items-start gap-2 flex-1">
+          {user.spirit_animal && (
+            <span className="text-2xl">{user.spirit_animal}</span>
+          )}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold">
+                {user.full_name || "No name set"}
+              </h3>
+              {isDeactivated && (
+                <Badge variant="destructive">Inactive</Badge>
+              )}
+              {user.user_roles?.[0]?.role && (
+                <Badge variant={user.user_roles[0].role === 'manager' ? 'default' : 'secondary'}>
+                  {user.user_roles[0].role}
+                </Badge>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">{user.email}</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {!isDeactivated && (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => {
+                  setEditingUser(user);
+                  setIsEditUserDialogOpen(true);
+                }}
+              >
+                <Pencil className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-destructive hover:text-destructive"
+                onClick={() => handleDeactivateUser(user.id)}
+                title="Deactivate user"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </>
+          )}
+          {isDeactivated && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleReactivateUser(user.id)}
+              title="Reactivate user"
+            >
+              Reactivate
+            </Button>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
@@ -640,9 +742,9 @@ const Settings = () => {
           <Card className="p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="text-2xl font-bold mb-1">Registered Users</h2>
+                <h2 className="text-2xl font-bold mb-1">User Management</h2>
                 <p className="text-sm text-muted-foreground">
-                  View and manage all users registered in the system
+                  View and manage registered and deactivated users
                 </p>
               </div>
               <Button onClick={() => setIsAddUserDialogOpen(true)}>
@@ -651,60 +753,40 @@ const Settings = () => {
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {users.length === 0 ? (
-                <p className="col-span-2 text-center text-muted-foreground py-8">
-                  No users registered yet.
-                </p>
-              ) : (
-                users.map(user => (
-                  <Card key={user.id} className="p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-2 flex-1">
-                        {user.spirit_animal && (
-                          <span className="text-2xl">{user.spirit_animal}</span>
-                        )}
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold">
-                              {user.full_name || "No name set"}
-                            </h3>
-                            {(user as any).user_roles?.[0]?.role && (
-                              <Badge variant={(user as any).user_roles[0].role === 'manager' ? 'default' : 'secondary'}>
-                                {(user as any).user_roles[0].role}
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-sm text-muted-foreground">{user.email}</p>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => {
-                            setEditingUser(user);
-                            setIsEditUserDialogOpen(true);
-                          }}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => handleDeactivateUser(user.id)}
-                          title="Deactivate user"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </Card>
-                ))
-              )}
-            </div>
+            <Tabs value={userTab} onValueChange={(v) => setUserTab(v as "active" | "deactivated")}>
+              <TabsList className="mb-4">
+                <TabsTrigger value="active">
+                  Active Users ({activeUsers.length})
+                </TabsTrigger>
+                <TabsTrigger value="deactivated">
+                  Deactivated Users ({deactivatedUsers.length})
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="active">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {activeUsers.length === 0 ? (
+                    <p className="col-span-2 text-center text-muted-foreground py-8">
+                      No active users registered yet.
+                    </p>
+                  ) : (
+                    activeUsers.map(user => renderUserCard(user, false))
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="deactivated">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {deactivatedUsers.length === 0 ? (
+                    <p className="col-span-2 text-center text-muted-foreground py-8">
+                      No deactivated users.
+                    </p>
+                  ) : (
+                    deactivatedUsers.map(user => renderUserCard(user, true))
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
           </Card>
 
           {/* Version Management Section */}
