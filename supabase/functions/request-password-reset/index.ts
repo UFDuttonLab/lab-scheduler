@@ -69,11 +69,11 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Get the base URL for the reset link
-    const resetUrl = `${Deno.env.get("SUPABASE_URL")?.replace("ypaobygipbnkvnismhyy.supabase.co", "f95bec5c-9e0c-4b9e-af6b-762e8f27693f.lovableproject.com")}/#/reset-password?token=${token}`;
+    const resetUrl = `https://ufduttonlab.github.io/lab-scheduler/#/reset-password?token=${token}`;
 
     // Send email via Resend
     const emailResponse = await resend.emails.send({
-      from: "Dutton Lab <onboarding@resend.dev>",
+      from: "Dutton Lab <noreply@marariverresearch.org>",
       to: [email],
       subject: "Reset Your Password - Dutton Lab Scheduler",
       html: `
