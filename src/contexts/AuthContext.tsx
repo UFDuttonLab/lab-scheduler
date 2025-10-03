@@ -26,6 +26,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
+  const logAuthActivity = async (action: 'login' | 'logout', userId: string) => {
+    try {
+      await supabase.from('activity_logs').insert({
+        user_id: userId,
+        action_type: action,
+        entity_type: 'user',
+        entity_id: userId,
+        entity_name: 'Authentication'
+      });
+    } catch (error) {
+      console.error(`Failed to log ${action}:`, error);
+    }
+  };
+
   const checkUserRole = async (userId: string) => {
     try {
       // First check if user is active
@@ -89,6 +103,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setSession(session);
         setUser(session?.user ?? null);
         
+        // Log authentication events
+        if (event === 'SIGNED_IN' && session?.user) {
+          setTimeout(() => {
+            logAuthActivity('login', session.user.id);
+          }, 0);
+        } else if (event === 'SIGNED_OUT') {
+          // Log logout with the previous user's ID if available
+          if (user?.id) {
+            setTimeout(() => {
+              logAuthActivity('logout', user.id);
+            }, 0);
+          }
+        }
+        
         // Check user role
         if (session?.user) {
           setTimeout(() => {
@@ -118,6 +146,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const signOut = async () => {
+    const currentUserId = user?.id;
+    
     try {
       // Clear local state first
       setSession(null);
