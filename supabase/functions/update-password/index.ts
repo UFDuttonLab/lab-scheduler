@@ -71,6 +71,22 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (updateError) {
       console.error("Error updating password:", updateError);
+      
+      // Handle weak password errors specifically
+      if (updateError.message?.includes("weak") || updateError.message?.includes("pwned")) {
+        return new Response(
+          JSON.stringify({ 
+            error: "Password is too weak",
+            code: "weak_password",
+            details: updateError.message
+          }),
+          {
+            status: 422,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+      
       throw new Error("Failed to update password");
     }
 

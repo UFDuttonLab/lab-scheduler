@@ -69,6 +69,16 @@ const ResetPasswordVerify = () => {
       if (error) throw error;
 
       if (data?.error) {
+        // Handle specific error codes
+        if (data.code === "weak_password") {
+          toast({
+            title: "Weak Password",
+            description: "This password has been compromised in a data breach. Please choose a different, stronger password.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
         throw new Error(data.error);
       }
 
