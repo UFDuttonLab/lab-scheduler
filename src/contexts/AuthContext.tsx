@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -24,6 +24,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [permissions, setPermissions] = useState<RolePermissions>(getRolePermissions(null));
   const [isManager, setIsManager] = useState(false); // Deprecated
   const [loading, setLoading] = useState(true);
+  const lastUserIdRef = useRef<string | null>(null);
   const navigate = useNavigate();
 
   const logAuthActivity = async (action: 'login' | 'logout', userId: string) => {
@@ -100,6 +101,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        // Update ref BEFORE updating state
+        if (session?.user) {
+          lastUserIdRef.current = session.user.id;
+        }
+        
         setSession(session);
         setUser(session?.user ?? null);
         
@@ -109,12 +115,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             logAuthActivity('login', session.user.id);
           }, 0);
         } else if (event === 'SIGNED_OUT') {
-          // Log logout with the previous user's ID if available
-          if (user?.id) {
+          // Use the ref to get the last authenticated user ID
+          const userIdToLog = lastUserIdRef.current;
+          if (userIdToLog) {
             setTimeout(() => {
-              logAuthActivity('logout', user.id);
+              logAuthActivity('logout', userIdToLog);
             }, 0);
           }
+          // Clear the ref after logging
+          lastUserIdRef.current = null;
         }
         
         // Check user role
@@ -148,8 +157,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signOut = async () => {
     const currentUserId = user?.id;
     
+    // Log logout BEFORE clearing state
+    if (currentUserId) {
+      try {
+        await logAuthActivity('logout', currentUserId);
+      } catch (error) {
+        console.error("Failed to log logout activity:", error);
+      }
+    }
+    
     try {
-      // Clear local state first
+      // Clear local state
       setSession(null);
       setUser(null);
       setUserRole(null);
