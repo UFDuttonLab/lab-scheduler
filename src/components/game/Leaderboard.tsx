@@ -15,13 +15,18 @@ interface Score {
   combo_max: number;
   game_duration_seconds: number;
   created_at: string;
+  game_type: string;
   profiles: {
     full_name: string | null;
     spirit_animal: string | null;
   } | null;
 }
 
-export const Leaderboard = () => {
+interface LeaderboardProps {
+  gameType?: string;
+}
+
+export const Leaderboard = ({ gameType = 'microbe_blaster' }: LeaderboardProps) => {
   const { user } = useAuth();
   const [allTimeScores, setAllTimeScores] = useState<Score[]>([]);
   const [weeklyScores, setWeeklyScores] = useState<Score[]>([]);
@@ -34,6 +39,7 @@ export const Leaderboard = () => {
       const { data: allTime, error: allTimeError } = await supabase
         .from("game_scores")
         .select("*, profiles(full_name, spirit_animal)")
+        .eq("game_type", gameType)
         .order("score", { ascending: false })
         .limit(10);
 
@@ -47,6 +53,7 @@ export const Leaderboard = () => {
       const { data: weekly, error: weeklyError } = await supabase
         .from("game_scores")
         .select("*, profiles(full_name, spirit_animal)")
+        .eq("game_type", gameType)
         .gte("created_at", oneWeekAgo.toISOString())
         .order("score", { ascending: false })
         .limit(10);
@@ -60,6 +67,7 @@ export const Leaderboard = () => {
           .from("game_scores")
           .select("*, profiles(full_name, spirit_animal)")
           .eq("user_id", user.id)
+          .eq("game_type", gameType)
           .order("score", { ascending: false })
           .limit(1)
           .single();
@@ -89,11 +97,14 @@ export const Leaderboard = () => {
           table: "game_scores",
         },
         (payload) => {
-          fetchScores();
-          
-          // Show toast for high scores (top 10)
-          if (allTimeScores.length < 10 || (payload.new as Score).score > allTimeScores[9].score) {
-            toast.success("🏆 New high score on the leaderboard!");
+          // Only refresh if the new score is for this game type
+          if ((payload.new as Score).game_type === gameType) {
+            fetchScores();
+            
+            // Show toast for high scores (top 10)
+            if (allTimeScores.length < 10 || (payload.new as Score).score > allTimeScores[9].score) {
+              toast.success("🏆 New high score on the leaderboard!");
+            }
           }
         }
       )
@@ -102,7 +113,7 @@ export const Leaderboard = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, gameType]);
 
   const getRankIcon = (rank: number) => {
     if (rank === 0) return <Trophy className="w-5 h-5 text-yellow-500" />;
@@ -143,7 +154,7 @@ export const Leaderboard = () => {
                   )}
                 </div>
                 <div className="flex gap-4 text-xs text-muted-foreground mt-1">
-                  <span>🦠 {score.microbes_eliminated} eliminated</span>
+                  <span>{gameType === 'zombie_lunch' ? '🧟' : '🦠'} {score.microbes_eliminated} eliminated</span>
                   <span>🎯 {score.accuracy_percentage.toFixed(1)}% accuracy</span>
                   <span>🔥 {score.combo_max}x combo</span>
                   <span>⏱️ {formatDuration(score.game_duration_seconds)}</span>
@@ -215,7 +226,7 @@ export const Leaderboard = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center p-4 bg-primary/5 rounded-lg">
                     <div className="text-2xl font-bold">{personalBest.microbes_eliminated}</div>
-                    <div className="text-sm text-muted-foreground">Microbes Eliminated</div>
+                    <div className="text-sm text-muted-foreground">{gameType === 'zombie_lunch' ? 'Zombies' : 'Microbes'} Eliminated</div>
                   </div>
                   <div className="text-center p-4 bg-primary/5 rounded-lg">
                     <div className="text-2xl font-bold">{personalBest.combo_max}x</div>

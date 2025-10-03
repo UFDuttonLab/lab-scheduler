@@ -10,9 +10,10 @@ interface EquipmentCardProps {
   onSelect?: (equipment: Equipment) => void;
   onEdit?: (equipment: Equipment) => void;
   onDelete?: (equipment: Equipment) => void;
+  onClick?: (equipmentName: string) => void;
 }
 
-export const EquipmentCard = ({ equipment, onSelect, onEdit, onDelete }: EquipmentCardProps) => {
+export const EquipmentCard = ({ equipment, onSelect, onEdit, onDelete, onClick }: EquipmentCardProps) => {
   const statusConfig = {
     available: { label: "Available", className: "bg-success text-success-foreground" },
     "in-use": { label: "In Use", className: "bg-warning text-warning-foreground" },
@@ -27,7 +28,10 @@ export const EquipmentCard = ({ equipment, onSelect, onEdit, onDelete }: Equipme
         "p-4 sm:p-6 hover:shadow-md transition-all cursor-pointer animate-fade-in active:scale-[0.98]",
         onSelect && "hover:border-primary"
       )}
-      onClick={() => onSelect?.(equipment)}
+      onClick={(e) => {
+        onClick?.(equipment.name);
+        onSelect?.(equipment);
+      }}
     >
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
         <div className="flex items-center gap-3">

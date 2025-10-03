@@ -38,6 +38,7 @@ const Equipment = () => {
   const [selectedType, setSelectedType] = useState<string>("robot");
   const [cpuCount, setCpuCount] = useState<number>(32);
   const [gpuCount, setGpuCount] = useState<number>(4);
+  const [secretClicks, setSecretClicks] = useState<string[]>([]);
   
   const { register, handleSubmit, reset, setValue, watch } = useForm<EquipmentFormData>({
     defaultValues: {
@@ -191,6 +192,19 @@ const Equipment = () => {
       console.error("Error deleting equipment:", error);
       toast.error("Failed to delete equipment");
     }
+  };
+
+  const handleEquipmentClick = (equipmentName: string) => {
+    const sequence = ['Glowforge Laser Cutter', 'Ford Escape Vehicle', 'Boat'];
+    const newClicks = [...secretClicks, equipmentName];
+    
+    // Check if last 3 clicks match the sequence
+    if (newClicks.slice(-3).join(',') === sequence.join(',')) {
+      sessionStorage.setItem('zombieLunchUnlocked', 'true');
+      toast.success("🧟 Secret zombie game unlocked! Check the navigation...");
+    }
+    
+    setSecretClicks(newClicks.slice(-3)); // Keep only last 3
   };
 
   const robots = equipment.filter(e => e.type === "robot");
@@ -411,6 +425,7 @@ const Equipment = () => {
                     equipment={item}
                     onEdit={handleEditEquipment}
                     onDelete={handleDeleteEquipment}
+                    onClick={handleEquipmentClick}
                   />
                 ))}
               </div>
@@ -434,6 +449,7 @@ const Equipment = () => {
                     equipment={item}
                     onEdit={handleEditEquipment}
                     onDelete={handleDeleteEquipment}
+                    onClick={handleEquipmentClick}
                   />
                 ))}
               </div>
@@ -457,6 +473,7 @@ const Equipment = () => {
                     equipment={item}
                     onEdit={handleEditEquipment}
                     onDelete={handleDeleteEquipment}
+                    onClick={handleEquipmentClick}
                   />
                 ))}
               </div>
@@ -480,6 +497,7 @@ const Equipment = () => {
                     equipment={item}
                     onEdit={handleEditEquipment}
                     onDelete={handleDeleteEquipment}
+                    onClick={handleEquipmentClick}
                   />
                 ))}
               </div>
@@ -503,6 +521,7 @@ const Equipment = () => {
                     equipment={item}
                     onEdit={handleEditEquipment}
                     onDelete={handleDeleteEquipment}
+                    onClick={handleEquipmentClick}
                   />
                 ))}
               </div>
@@ -526,6 +545,7 @@ const Equipment = () => {
                     equipment={item}
                     onEdit={handleEditEquipment}
                     onDelete={handleDeleteEquipment}
+                    onClick={handleEquipmentClick}
                   />
                 ))}
               </div>
@@ -549,6 +569,7 @@ const Equipment = () => {
                     equipment={item}
                     onEdit={handleEditEquipment}
                     onDelete={handleDeleteEquipment}
+                    onClick={handleEquipmentClick}
                   />
                 ))}
               </div>

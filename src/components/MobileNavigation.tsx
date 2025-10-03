@@ -6,8 +6,9 @@ import { useAuth } from "@/contexts/AuthContext";
 export const MobileNavigation = () => {
   const location = useLocation();
   const { permissions } = useAuth();
+  const isZombieUnlocked = sessionStorage.getItem('zombieLunchUnlocked') === 'true';
 
-  const navItems = [
+  const baseNavItems = [
     { path: "/", label: "Home", icon: Home },
     { path: "/schedule", label: "Schedule", icon: Calendar },
     { path: "/quick-add", label: "Add", icon: Clock },
@@ -17,7 +18,13 @@ export const MobileNavigation = () => {
     { path: "/activity-log", label: "Activity", icon: FileText },
     { path: "/settings", label: "Settings", icon: Settings, requirePermission: 'canManageUsers' },
     { path: "/help", label: "Help", icon: HelpCircle },
-  ].filter(item => !item.requirePermission || permissions[item.requirePermission as keyof typeof permissions]);
+  ];
+
+  if (isZombieUnlocked) {
+    baseNavItems.push({ path: "/zombie-lunch", label: "🧟", icon: HelpCircle });
+  }
+
+  const navItems = baseNavItems.filter(item => !item.requirePermission || permissions[item.requirePermission as keyof typeof permissions]);
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 safe-area-inset-bottom overflow-x-auto">

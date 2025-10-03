@@ -13,6 +13,7 @@ export const Navigation = () => {
   const location = useLocation();
   const { user, userRole, permissions, signOut } = useAuth();
   const isMobile = useIsMobile();
+  const isZombieUnlocked = sessionStorage.getItem('zombieLunchUnlocked') === 'true';
 
   if (isMobile) {
     return (
@@ -34,6 +35,10 @@ export const Navigation = () => {
     { path: "/settings", label: "Settings", icon: Settings, requirePermission: 'canManageUsers' },
     { path: "/help", label: "Help", icon: HelpCircle },
   ];
+
+  if (isZombieUnlocked) {
+    navItems.push({ path: "/zombie-lunch", label: "🧟 Zombie Defense", icon: HelpCircle });
+  }
 
   return (
     <nav className="border-b border-border bg-card">

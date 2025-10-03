@@ -234,6 +234,7 @@ export type Database = {
           combo_max: number
           created_at: string
           game_duration_seconds: number
+          game_type: string
           id: string
           microbes_eliminated: number
           score: number
@@ -244,6 +245,7 @@ export type Database = {
           combo_max?: number
           created_at?: string
           game_duration_seconds?: number
+          game_type?: string
           id?: string
           microbes_eliminated?: number
           score?: number
@@ -254,6 +256,7 @@ export type Database = {
           combo_max?: number
           created_at?: string
           game_duration_seconds?: number
+          game_type?: string
           id?: string
           microbes_eliminated?: number
           score?: number
