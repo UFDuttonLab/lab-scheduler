@@ -116,6 +116,25 @@ const Index = () => {
     return false;
   }).length;
 
+  // Calculate usage percentage for this week
+  const startOfWeek = new Date(today);
+  startOfWeek.setDate(today.getDate() - today.getDay()); // Sunday
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 7);
+  
+  const weekBookings = bookings.filter(b => 
+    b.startTime >= startOfWeek && 
+    b.startTime < endOfWeek && 
+    (b.status === "completed" || b.status === "in-progress")
+  );
+  
+  const totalBookedMinutes = weekBookings.reduce((sum, b) => sum + b.duration, 0);
+  const totalBookedHours = totalBookedMinutes / 60;
+  const totalPossibleHours = totalEquipment * 7 * 24; // 7 days * 24 hours
+  const usagePercentage = totalPossibleHours > 0 
+    ? Math.round((totalBookedHours / totalPossibleHours) * 100) 
+    : 0;
+
   const upcomingBookings = bookings
     .filter(b => b.status === "scheduled" && b.startTime >= new Date())
     .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
@@ -170,10 +189,9 @@ const Index = () => {
           />
           <StatsCard
             title="Usage This Week"
-            value="87%"
+            value={`${usagePercentage}%`}
             icon={TrendingUp}
-            trend="+12% from last week"
-            trendUp
+            trend={`${totalBookedHours.toFixed(1)} hours booked`}
           />
         </div>
 

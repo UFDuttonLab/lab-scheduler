@@ -298,15 +298,8 @@ const Help = () => {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              If you can't find the answer to your question, please reach out to lab management:
-            </p>
-            <div className="space-y-2 text-sm">
-              <p><strong>Lab Email:</strong> duttonlab@ufl.edu</p>
-              <p><strong>Office Hours:</strong> Monday-Friday, 9 AM - 5 PM</p>
-              <p><strong>Emergency Contact:</strong> Available in lab notification emails</p>
-            </div>
+          <CardContent>
+            <p className="text-lg">Ask Tavis 😊</p>
           </CardContent>
         </Card>
       </main>
