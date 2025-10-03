@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { PowerUp } from "./PowerUp";
+import { toast } from "sonner";
 
 interface Zombie {
   id: number;
@@ -39,6 +40,9 @@ interface ZombieCanvasProps {
   onZombiesKilledUpdate: (count: number) => void;
   onTotalClicksUpdate: (count: number) => void;
   onGameOver: () => void;
+  ammo: number;
+  onAmmoUpdate: (ammo: number) => void;
+  isReloading: boolean;
 }
 
 const CANVAS_WIDTH = 800;
@@ -54,6 +58,9 @@ export const ZombieCanvas = ({
   onZombiesKilledUpdate,
   onTotalClicksUpdate,
   onGameOver,
+  ammo,
+  onAmmoUpdate,
+  isReloading,
 }: ZombieCanvasProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [zombies, setZombies] = useState<Zombie[]>([]);
@@ -176,6 +183,12 @@ export const ZombieCanvas = ({
   const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
     if (!canvasRef.current) return;
 
+    // Check ammo first
+    if (ammo === 0) {
+      toast.error("🔫 Out of ammo! Press R to reload!");
+      return;
+    }
+
     const rect = canvasRef.current.getBoundingClientRect();
     const scaleX = CANVAS_WIDTH / rect.width;
     const scaleY = CANVAS_HEIGHT / rect.height;
@@ -229,6 +242,9 @@ export const ZombieCanvas = ({
       }
 
       if (hitZombie) {
+        // Spend ammo
+        onAmmoUpdate(ammo - 1);
+        
         const newHealth = hitZombie.health - 1;
         
         if (newHealth <= 0) {
@@ -277,11 +293,14 @@ export const ZombieCanvas = ({
         }
       }
 
+      // Miss - still spend ammo
+      onAmmoUpdate(ammo - 1);
+      
       setCombo(0);
       onComboUpdate(0);
       return prevZombies;
     });
-  }, [powerUps, activePowerUp, onScoreUpdate, onComboUpdate, onZombiesKilledUpdate, onTotalClicksUpdate, createParticles]);
+  }, [powerUps, activePowerUp, ammo, onAmmoUpdate, onScoreUpdate, onComboUpdate, onZombiesKilledUpdate, onTotalClicksUpdate, createParticles]);
 
   const gameLoop = useCallback(() => {
     const now = Date.now();

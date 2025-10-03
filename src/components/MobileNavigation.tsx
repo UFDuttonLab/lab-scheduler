@@ -20,9 +20,6 @@ export const MobileNavigation = () => {
     { path: "/help", label: "Help", icon: HelpCircle },
   ];
 
-  if (isZombieUnlocked) {
-    baseNavItems.push({ path: "/zombie-lunch", label: "🧟", icon: HelpCircle });
-  }
 
   const navItems = baseNavItems.filter(item => !item.requirePermission || permissions[item.requirePermission as keyof typeof permissions]);
 

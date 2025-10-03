@@ -33,8 +33,8 @@ export const EquipmentCard = ({ equipment, onSelect, onEdit, onDelete, onClick }
         onSelect?.(equipment);
       }}
     >
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
-        <div className="flex items-center gap-3">
+      <div className="flex items-start justify-between gap-2 sm:gap-3 mb-4">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-gradient-primary flex items-center justify-center text-xl sm:text-2xl flex-shrink-0">
             {equipment.icon || "🛠️"}
           </div>
@@ -52,7 +52,7 @@ export const EquipmentCard = ({ equipment, onSelect, onEdit, onDelete, onClick }
             )}
           </div>
         </div>
-        <Badge className={cn(status.className, "self-start")}>{status.label}</Badge>
+        <Badge className={cn(status.className, "flex-shrink-0")}>{status.label}</Badge>
       </div>
       
       {equipment.description && (

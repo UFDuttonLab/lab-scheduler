@@ -36,9 +36,6 @@ export const Navigation = () => {
     { path: "/help", label: "Help", icon: HelpCircle },
   ];
 
-  if (isZombieUnlocked) {
-    navItems.push({ path: "/zombie-lunch", label: "🧟 Zombie Defense", icon: HelpCircle });
-  }
 
   return (
     <nav className="border-b border-border bg-card">

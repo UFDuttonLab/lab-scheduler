@@ -30,6 +30,8 @@ export default function ZombieLunch() {
   const [totalClicks, setTotalClicks] = useState(0);
   const [startTime, setStartTime] = useState<number>(0);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [ammo, setAmmo] = useState(10);
+  const [isReloading, setIsReloading] = useState(false);
 
   const startGame = useCallback(() => {
     setGameState("playing");
@@ -38,6 +40,8 @@ export default function ZombieLunch() {
     setCombo(0);
     setZombiesKilled(0);
     setTotalClicks(0);
+    setAmmo(10);
+    setIsReloading(false);
     setStartTime(Date.now());
     setShowLeaderboard(false);
   }, []);
@@ -49,6 +53,29 @@ export default function ZombieLunch() {
   const resumeGame = useCallback(() => {
     setGameState("playing");
   }, []);
+
+  const handleReload = useCallback(() => {
+    if (isReloading || ammo === 10) return;
+    
+    setIsReloading(true);
+    setTimeout(() => {
+      setAmmo(10);
+      setIsReloading(false);
+      toast.success("🔫 Reloaded! 10 bullets ready");
+    }, 2000);
+  }, [isReloading, ammo]);
+
+  // Keyboard shortcut for reload
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (gameState === "playing" && e.key.toLowerCase() === 'r') {
+        handleReload();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [gameState, handleReload]);
 
   const endGame = useCallback(async () => {
     setGameState("gameover");
@@ -193,6 +220,9 @@ export default function ZombieLunch() {
                     onZombiesKilledUpdate={setZombiesKilled}
                     onTotalClicksUpdate={setTotalClicks}
                     onGameOver={endGame}
+                    ammo={ammo}
+                    onAmmoUpdate={setAmmo}
+                    isReloading={isReloading}
                   />
                 )}
               </Card>
@@ -226,20 +256,38 @@ export default function ZombieLunch() {
                     <div className="text-sm text-muted-foreground mb-1">Zombies Killed</div>
                     <div className="text-2xl font-bold">{zombiesKilled}</div>
                   </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">Ammo</div>
+                    <div className="text-2xl font-bold flex items-center gap-2">
+                      🔫 {ammo}/10
+                    </div>
+                  </div>
                 </div>
               </Card>
 
               {gameState === "playing" && (
-                <Button variant="outline" className="w-full" onClick={pauseGame}>
-                  <Pause className="w-4 h-4 mr-2" />
-                  Pause
-                </Button>
+                <>
+                  <Button 
+                    variant="default" 
+                    className="w-full"
+                    onClick={handleReload}
+                    disabled={isReloading || ammo === 10}
+                  >
+                    {isReloading ? "⏳ Reloading..." : "🔫 Reload (R)"}
+                  </Button>
+                  <Button variant="outline" className="w-full" onClick={pauseGame}>
+                    <Pause className="w-4 h-4 mr-2" />
+                    Pause
+                  </Button>
+                </>
               )}
 
               <Card className="p-6 bg-primary/5">
                 <h3 className="text-lg font-bold mb-3">How to Play</h3>
                 <ul className="text-sm space-y-2 text-muted-foreground">
                   <li>🎯 Click zombies to shoot them</li>
+                  <li>🔫 You have 10 bullets - reload when empty!</li>
+                  <li>⌨️ Press R to reload quickly (2 seconds)</li>
                   <li>🍱 Protect your lunch bag at the center</li>
                   <li>👻 Golden zombies are worth 100 points!</li>
                   <li>⚡ Collect power-ups for special abilities</li>
