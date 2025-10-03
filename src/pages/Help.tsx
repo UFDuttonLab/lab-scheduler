@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import {
@@ -22,6 +23,27 @@ import {
 } from "lucide-react";
 
 const Help = () => {
+  const [isZombieUnlocked, setIsZombieUnlocked] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const checkUnlock = () => {
+      setIsZombieUnlocked(sessionStorage.getItem('zombieLunchUnlocked') === 'true');
+    };
+    
+    checkUnlock();
+    
+    // Listen for storage changes
+    window.addEventListener('storage', checkUnlock);
+    return () => window.removeEventListener('storage', checkUnlock);
+  }, []);
+
+  const handleEmojiClick = () => {
+    if (isZombieUnlocked) {
+      navigate('/zombie-lunch');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background pb-20 sm:pb-0">
       <Navigation />
@@ -299,7 +321,20 @@ const Help = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-lg">Ask Tavis 😊</p>
+            <p className="text-lg">
+              Ask Tavis{" "}
+              <span 
+                onClick={handleEmojiClick}
+                className={isZombieUnlocked ? "cursor-pointer hover:scale-125 transition-transform inline-block animate-pulse" : ""}
+                style={isZombieUnlocked ? { 
+                  filter: 'drop-shadow(0 0 8px rgba(34, 197, 94, 0.6))',
+                  transition: 'all 0.3s ease'
+                } : {}}
+                title={isZombieUnlocked ? "🎮 Click to play Zombie Lunch Defense!" : ""}
+              >
+                {isZombieUnlocked ? "🧟" : "😊"}
+              </span>
+            </p>
           </CardContent>
         </Card>
       </main>

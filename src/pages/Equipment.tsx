@@ -201,7 +201,7 @@ const Equipment = () => {
     // Check if last 3 clicks match the sequence
     if (newClicks.slice(-3).join(',') === sequence.join(',')) {
       sessionStorage.setItem('zombieLunchUnlocked', 'true');
-      toast.success("🧟 Secret zombie game unlocked! Check the navigation...");
+      toast.success("🧟 Secret zombie game unlocked! Head to the Help Center...");
     }
     
     setSecretClicks(newClicks.slice(-3)); // Keep only last 3
