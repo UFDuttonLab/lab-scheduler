@@ -367,16 +367,24 @@ export const GameCanvas = ({
     const centerX = CANVAS_WIDTH / 2;
     const centerY = CANVAS_HEIGHT / 2;
 
+    // Get computed CSS colors
+    const primaryColor = getComputedStyle(document.documentElement)
+      .getPropertyValue('--primary')
+      .trim();
+    const borderColor = getComputedStyle(document.documentElement)
+      .getPropertyValue('--border')
+      .trim();
+
     const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, GAME_AREA_RADIUS);
-    gradient.addColorStop(0, "hsl(var(--primary) / 0.05)");
-    gradient.addColorStop(1, "hsl(var(--primary) / 0.15)");
+    gradient.addColorStop(0, `hsl(${primaryColor} / 0.05)`);
+    gradient.addColorStop(1, `hsl(${primaryColor} / 0.15)`);
 
     ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.arc(centerX, centerY, GAME_AREA_RADIUS, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = "hsl(var(--border))";
+    ctx.strokeStyle = `hsl(${borderColor})`;
     ctx.lineWidth = 3;
     ctx.stroke();
 
