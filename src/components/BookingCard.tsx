@@ -68,17 +68,19 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
   };
 
   const handleDelete = async () => {
+    const tableName = booking.source === 'usage_record' ? 'usage_records' : 'bookings';
+    
     const { error } = await supabase
-      .from('bookings')
+      .from(tableName)
       .delete()
       .eq('id', booking.id);
 
     if (error) {
-      toast.error("Failed to delete booking");
+      toast.error("Failed to delete record");
       return;
     }
 
-    toast.success("Booking deleted successfully");
+    toast.success("Record deleted successfully");
     onDelete?.();
   };
 

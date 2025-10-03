@@ -58,6 +58,7 @@ export interface Booking {
   samplesProcessed?: number; // Number of samples (1-100)
   collaborators?: string[]; // Array of user IDs
   userId?: string; // Owner of the booking
+  source?: 'booking' | 'usage_record'; // Source table for proper deletion
 }
 
 export interface TimeSlot {

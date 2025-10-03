@@ -49,59 +49,61 @@ const History = () => {
       const projectMap = new Map(projectsData?.map(p => [p.id, p]) || []);
       const profileMap = new Map(profilesData?.map(u => [u.id, u]) || []);
 
-      // Transform bookings
-      const transformedBookings: Booking[] = (bookingsData || []).map((booking: any) => {
-        const equipment = equipmentMap.get(booking.equipment_id);
-        const project = projectMap.get(booking.project_id);
-        const profile = profileMap.get(booking.user_id);
+    // Transform bookings
+    const transformedBookings: Booking[] = (bookingsData || []).map((booking: any) => {
+      const equipment = equipmentMap.get(booking.equipment_id);
+      const project = projectMap.get(booking.project_id);
+      const profile = profileMap.get(booking.user_id);
 
-        return {
-          id: booking.id,
-          equipmentId: booking.equipment_id,
-          equipmentName: equipment?.name || 'Unknown',
-          studentName: profile?.full_name || profile?.email?.split('@')[0] || 'Unknown',
-          studentEmail: profile?.email || 'Unknown',
-          studentSpiritAnimal: profile?.spirit_animal || undefined,
-          startTime: new Date(booking.start_time),
-          endTime: new Date(booking.end_time),
-          duration: Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000),
-          projectId: booking.project_id || undefined,
-          projectName: project?.name || undefined,
-          purpose: booking.purpose || undefined,
-          status: booking.status as "scheduled" | "in-progress" | "completed" | "cancelled",
-          cpuCount: booking.cpu_count || undefined,
-          gpuCount: booking.gpu_count || undefined,
-          samplesProcessed: booking.samples_processed || undefined,
-          collaborators: booking.collaborators || undefined,
-          userId: booking.user_id
-        };
-      });
+      return {
+        id: booking.id,
+        equipmentId: booking.equipment_id,
+        equipmentName: equipment?.name || 'Unknown',
+        studentName: profile?.full_name || profile?.email?.split('@')[0] || 'Unknown',
+        studentEmail: profile?.email || 'Unknown',
+        studentSpiritAnimal: profile?.spirit_animal || undefined,
+        startTime: new Date(booking.start_time),
+        endTime: new Date(booking.end_time),
+        duration: Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000),
+        projectId: booking.project_id || undefined,
+        projectName: project?.name || undefined,
+        purpose: booking.purpose || undefined,
+        status: booking.status as "scheduled" | "in-progress" | "completed" | "cancelled",
+        cpuCount: booking.cpu_count || undefined,
+        gpuCount: booking.gpu_count || undefined,
+        samplesProcessed: booking.samples_processed || undefined,
+        collaborators: booking.collaborators || undefined,
+        userId: booking.user_id,
+        source: 'booking' as const
+      };
+    });
 
-      // Transform usage records (all completed by definition)
-      const transformedUsageRecords: Booking[] = (usageData || []).map((usage: any) => {
-        const equipment = equipmentMap.get(usage.equipment_id);
-        const project = projectMap.get(usage.project_id);
-        const profile = profileMap.get(usage.user_id);
+    // Transform usage records (all completed by definition)
+    const transformedUsageRecords: Booking[] = (usageData || []).map((usage: any) => {
+      const equipment = equipmentMap.get(usage.equipment_id);
+      const project = projectMap.get(usage.project_id);
+      const profile = profileMap.get(usage.user_id);
 
-        return {
-          id: usage.id,
-          equipmentId: usage.equipment_id,
-          equipmentName: equipment?.name || 'Unknown',
-          studentName: profile?.full_name || profile?.email?.split('@')[0] || 'Unknown',
-          studentEmail: profile?.email || 'Unknown',
-          studentSpiritAnimal: profile?.spirit_animal || undefined,
-          startTime: new Date(usage.start_time),
-          endTime: new Date(usage.end_time),
-          duration: Math.round((new Date(usage.end_time).getTime() - new Date(usage.start_time).getTime()) / 60000),
-          projectId: usage.project_id || undefined,
-          projectName: project?.name || undefined,
-          purpose: undefined,
-          status: 'completed' as const,
-          samplesProcessed: usage.samples_processed || undefined,
-          collaborators: usage.collaborators || undefined,
-          userId: usage.user_id
-        };
-      });
+      return {
+        id: usage.id,
+        equipmentId: usage.equipment_id,
+        equipmentName: equipment?.name || 'Unknown',
+        studentName: profile?.full_name || profile?.email?.split('@')[0] || 'Unknown',
+        studentEmail: profile?.email || 'Unknown',
+        studentSpiritAnimal: profile?.spirit_animal || undefined,
+        startTime: new Date(usage.start_time),
+        endTime: new Date(usage.end_time),
+        duration: Math.round((new Date(usage.end_time).getTime() - new Date(usage.start_time).getTime()) / 60000),
+        projectId: usage.project_id || undefined,
+        projectName: project?.name || undefined,
+        purpose: undefined,
+        status: 'completed' as const,
+        samplesProcessed: usage.samples_processed || undefined,
+        collaborators: usage.collaborators || undefined,
+        userId: usage.user_id,
+        source: 'usage_record' as const
+      };
+    });
 
       // Merge and sort by start_time descending
       const allRecords = [...transformedBookings, ...transformedUsageRecords]
