@@ -2,7 +2,7 @@ import { Booking } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Clock, User, Mail, Trash2, Cpu, Server, FlaskConical, Users, Edit } from "lucide-react";
+import { Clock, User, Mail, Trash2, Cpu, Server, FlaskConical, Users, Edit, FolderKanban } from "lucide-react";
 import { format, isSameDay } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -148,6 +148,13 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
           <Mail className="w-3 h-3 flex-shrink-0" />
           <span className="truncate">{booking.studentEmail}</span>
         </div>
+        
+        {booking.projectName && (
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+            <FolderKanban className="w-3 h-3 flex-shrink-0" />
+            <span className="truncate font-medium">{booking.projectName}</span>
+          </div>
+        )}
         
         {booking.samplesProcessed && (
           <div className="flex items-center gap-2 text-sm pt-2">
