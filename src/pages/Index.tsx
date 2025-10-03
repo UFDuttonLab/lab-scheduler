@@ -110,11 +110,20 @@ const Index = () => {
   
   const now = new Date();
   const activeBookings = bookings.filter(b => {
-    // Count as active if status is "in-progress" OR if scheduled and currently within time window
-    if (b.status === "in-progress") return true;
-    if (b.status === "scheduled" && b.startTime <= now && b.endTime >= now) return true;
-    return false;
+    return (b.status === "in-progress") || 
+           (b.status === "scheduled" && b.startTime <= now && b.endTime >= now);
   }).length;
+
+  const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+  const endingSoon = bookings.filter(b => 
+    ((b.status === "in-progress") || (b.status === "scheduled" && b.startTime <= now)) &&
+    b.endTime > now && 
+    b.endTime <= oneHourFromNow
+  ).length;
+
+  const activeTrend = endingSoon > 0 
+    ? `${endingSoon} ending soon` 
+    : activeBookings > 0 ? "Running smoothly" : "No active sessions";
 
   // Calculate usage percentage for this week
   const startOfWeek = new Date(today);
@@ -125,7 +134,7 @@ const Index = () => {
   const weekBookings = bookings.filter(b => 
     b.startTime >= startOfWeek && 
     b.startTime < endOfWeek && 
-    (b.status === "completed" || b.status === "in-progress")
+    b.status !== "cancelled"
   );
   
   const totalBookedMinutes = weekBookings.reduce((sum, b) => sum + b.duration, 0);
@@ -185,7 +194,7 @@ const Index = () => {
             title="Active Sessions"
             value={activeBookings}
             icon={Clock}
-            trend="1 ending soon"
+            trend={activeTrend}
           />
           <StatsCard
             title="Usage This Week"

@@ -640,79 +640,28 @@ const Schedule = () => {
                   <TabsContent value="list">
                     {dayBookings.length > 0 ? (
                       <div className="space-y-4">
-                        {dayBookings.map((booking) => {
-                          const project = projects.find(p => p.id === booking.projectId);
-                          return (
-                            <Card key={booking.id} className="p-4 border-l-4" style={{ borderLeftColor: project?.color || '#ccc' }}>
-                              <div className="flex items-start justify-between mb-2">
-                                <div>
-                                   <h4 className="font-semibold">{booking.equipmentName}</h4>
-                                   <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                                     <Clock className="w-3 h-3" />
-                                     <span>
-                                       {isSameDay(booking.startTime, booking.endTime)
-                                         ? `${format(booking.startTime, "MMM d, h:mm a")} - ${format(booking.endTime, "h:mm a")}`
-                                         : `${format(booking.startTime, "MMM d, h:mm a")} - ${format(booking.endTime, "MMM d, h:mm a")}`
-                                       }
-                                     </span>
-                                     <span className="text-xs">({booking.duration} min)</span>
-                                   </div>
-                                </div>
-                                <Badge className="bg-primary text-primary-foreground">
-                                  {booking.status}
-                                </Badge>
-                              </div>
-                              <div className="text-sm">
-                                <div className="flex items-center gap-2">
-                                  {booking.studentSpiritAnimal && (
-                                    <span className="text-lg">{booking.studentSpiritAnimal}</span>
-                                  )}
-                                  <p className="font-medium">{booking.studentName}</p>
-                                 </div>
-                                 <p className="text-muted-foreground">{booking.studentEmail}</p>
-                                  {booking.projectName && (
-                                    <p className="mt-2 text-sm">
-                                      <span className="font-medium">Project:</span> {booking.projectName}
-                                    </p>
-                                  )}
-                                  {booking.collaborators && booking.collaborators.length > 0 && (
-                                    <div className="mt-2 pt-2 border-t">
-                                      <div className="flex items-center gap-2 text-sm mb-1">
-                                        <Users className="w-3 h-3 text-primary" />
-                                        <span className="font-medium">Collaborators:</span>
-                                      </div>
-                                      <div className="flex flex-wrap gap-1">
-                                        {booking.collaborators.map(collabId => {
-                                          const collab = availableUsers.find(u => u.id === collabId);
-                                          return collab ? (
-                                            <Badge key={collabId} variant="secondary" className="text-xs">
-                                              {collab.spirit_animal && <span className="mr-1">{collab.spirit_animal}</span>}
-                                              {collab.full_name || collab.email}
-                                            </Badge>
-                                          ) : null;
-                                        })}
-                                      </div>
-                                    </div>
-                                  )}
-                                  {booking.cpuCount !== undefined && (
-                                    <p className="mt-2 text-sm flex items-center gap-2">
-                                      <Cpu className="w-3 h-3" />
-                                      <span><span className="font-medium">CPUs:</span> {booking.cpuCount}</span>
-                                      {booking.gpuCount !== undefined && (
-                                        <>
-                                          <Server className="w-3 h-3 ml-2" />
-                                          <span><span className="font-medium">GPUs:</span> {booking.gpuCount}</span>
-                                        </>
-                                      )}
-                                    </p>
-                                  )}
-                                  {booking.purpose && (
-                                    <p className="mt-1 text-muted-foreground">{booking.purpose}</p>
-                                  )}
-                              </div>
-                            </Card>
-                          );
-                        })}
+                        {dayBookings.map((booking) => (
+                          <BookingCard 
+                            key={booking.id}
+                            booking={booking}
+                            onDelete={fetchBookings}
+                            onEdit={(booking) => {
+                              setSelectedBooking(booking);
+                              setIsEditDialogOpen(true);
+                              // Pre-fill form
+                              setSelectedProject(booking.projectId || "");
+                              setSelectedEquipment([booking.equipmentId]);
+                              setBookingDate(booking.startTime);
+                              setSelectedTime(format(booking.startTime, "HH:mm"));
+                              setDuration(booking.duration.toString());
+                              setPurpose(booking.purpose || "");
+                              setSamplesCount(booking.samplesProcessed || 1);
+                              setCpuCount(booking.cpuCount || 1);
+                              setGpuCount(booking.gpuCount || 0);
+                              setSelectedCollaborators(booking.collaborators || []);
+                            }}
+                          />
+                        ))}
                       </div>
                     ) : (
                       <div className="text-center py-12 text-muted-foreground">

@@ -46,7 +46,7 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
 
   const status = statusConfig[booking.status];
   const canEdit = user?.id === booking.userId || permissions.canManageBookings;
-  const canDelete = permissions.canManageUsers; // Only PI can delete any booking
+  const canDelete = user?.id === booking.userId || permissions.canManageUsers; // Users can delete their own, PI can delete any
 
   useEffect(() => {
     if (booking.collaborators && booking.collaborators.length > 0) {
@@ -120,9 +120,9 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Delete Booking</AlertDialogTitle>
+                  <AlertDialogTitle>Delete {booking.source === 'usage_record' ? 'Usage Record' : 'Booking'}</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Are you sure you want to delete this booking? This action cannot be undone.
+                    Are you sure you want to delete this {booking.source === 'usage_record' ? 'usage record' : 'booking'}? This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
