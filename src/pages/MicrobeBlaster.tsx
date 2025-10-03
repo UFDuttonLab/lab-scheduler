@@ -1,15 +1,26 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { GameCanvas } from "@/components/game/GameCanvas";
 import { Leaderboard } from "@/components/game/Leaderboard";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Play, Pause, RotateCcw, Trophy } from "lucide-react";
+import { Play, Pause, RotateCcw, Trophy, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 export default function MicrobeBlaster() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+
+  // Check if game is unlocked via sessionStorage
+  useEffect(() => {
+    const isUnlocked = sessionStorage.getItem('microbeBlasterUnlocked') === 'true';
+    if (!isUnlocked) {
+      toast.error("🔒 Secret game locked! Find the hidden trigger...");
+      navigate("/");
+    }
+  }, [navigate]);
   const [gameState, setGameState] = useState<"menu" | "playing" | "paused" | "gameover">("menu");
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
@@ -42,7 +53,7 @@ export default function MicrobeBlaster() {
     setGameState("gameover");
     
     const gameDuration = Math.floor((Date.now() - startTime) / 1000);
-    const accuracy = totalClicks > 0 ? (microbesEliminated / totalClicks) * 100 : 0;
+    const accuracy = totalClicks > 0 ? Math.min(100, (microbesEliminated / totalClicks) * 100) : 0;
     
     // Calculate final score with bonuses
     let finalScore = score;
@@ -79,13 +90,22 @@ export default function MicrobeBlaster() {
             <h1 className="text-4xl font-bold text-foreground mb-2">🦠 Microbe Blaster</h1>
             <p className="text-muted-foreground">Eliminate the multiplying microbes!</p>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => setShowLeaderboard(!showLeaderboard)}
-          >
-            <Trophy className="w-4 h-4 mr-2" />
-            Leaderboard
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/")}
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Scheduler
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowLeaderboard(!showLeaderboard)}
+            >
+              <Trophy className="w-4 h-4 mr-2" />
+              Leaderboard
+            </Button>
+          </div>
         </div>
 
         {showLeaderboard ? (

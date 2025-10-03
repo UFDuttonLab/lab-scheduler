@@ -29,14 +29,15 @@ export const Footer = () => {
     const newCount = clickCount + 1;
     setClickCount(newCount);
 
-    if (newCount >= 5) {
+    if (newCount >= 3) {
+      sessionStorage.setItem('microbeBlasterUnlocked', 'true');
       toast.success("🦠 Secret game unlocked! Redirecting...");
       setTimeout(() => {
         navigate("/microbe-blaster");
         setClickCount(0);
       }, 500);
-    } else if (newCount >= 3) {
-      toast.info(`${5 - newCount} more clicks...`);
+    } else if (newCount >= 2) {
+      toast.info(`${3 - newCount} more click...`);
     }
   };
 
