@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export const Footer = () => {
   const [version, setVersion] = useState<string>("1.1.0");
+  const [clickCount, setClickCount] = useState(0);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchVersion = async () => {
@@ -21,6 +25,21 @@ export const Footer = () => {
     fetchVersion();
   }, []);
 
+  const handleVersionClick = () => {
+    const newCount = clickCount + 1;
+    setClickCount(newCount);
+
+    if (newCount >= 5) {
+      toast.success("🦠 Secret game unlocked! Redirecting...");
+      setTimeout(() => {
+        navigate("/microbe-blaster");
+        setClickCount(0);
+      }, 500);
+    } else if (newCount >= 3) {
+      toast.info(`${5 - newCount} more clicks...`);
+    }
+  };
+
   return (
     <footer className="border-t border-border bg-card mt-8 sm:mt-12 mb-16 sm:mb-0">
       <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
@@ -36,7 +55,12 @@ export const Footer = () => {
               Dutton Lab at UF
             </a>
           </p>
-          <p className="text-xs text-muted-foreground">v{version}</p>
+          <p 
+            className="text-xs text-muted-foreground cursor-pointer hover:text-primary transition-colors select-none"
+            onClick={handleVersionClick}
+          >
+            v{version}
+          </p>
         </div>
       </div>
     </footer>

@@ -228,6 +228,47 @@ export type Database = {
           },
         ]
       }
+      game_scores: {
+        Row: {
+          accuracy_percentage: number
+          combo_max: number
+          created_at: string
+          game_duration_seconds: number
+          id: string
+          microbes_eliminated: number
+          score: number
+          user_id: string
+        }
+        Insert: {
+          accuracy_percentage?: number
+          combo_max?: number
+          created_at?: string
+          game_duration_seconds?: number
+          id?: string
+          microbes_eliminated?: number
+          score?: number
+          user_id: string
+        }
+        Update: {
+          accuracy_percentage?: number
+          combo_max?: number
+          created_at?: string
+          game_duration_seconds?: number
+          id?: string
+          microbes_eliminated?: number
+          score?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_scores_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       password_reset_tokens: {
         Row: {
           created_at: string
