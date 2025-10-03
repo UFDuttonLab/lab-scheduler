@@ -108,7 +108,13 @@ const Index = () => {
     return bookingDate.getTime() === today.getTime() && b.status !== "cancelled";
   }).length;
   
-  const activeBookings = bookings.filter(b => b.status === "in-progress").length;
+  const now = new Date();
+  const activeBookings = bookings.filter(b => {
+    // Count as active if status is "in-progress" OR if scheduled and currently within time window
+    if (b.status === "in-progress") return true;
+    if (b.status === "scheduled" && b.startTime <= now && b.endTime >= now) return true;
+    return false;
+  }).length;
 
   const upcomingBookings = bookings
     .filter(b => b.status === "scheduled" && b.startTime >= new Date())

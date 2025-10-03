@@ -16,6 +16,7 @@ import QuickAdd from "./pages/QuickAdd";
 import ActivityLog from "./pages/ActivityLog";
 import Auth from "./pages/Auth";
 import ResetPasswordVerify from "./pages/ResetPasswordVerify";
+import Help from "./pages/Help";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => (
             <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
             <Route path="/activity-log" element={<ProtectedRoute><ActivityLog /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute requirePermission="canManageUsers"><Settings /></ProtectedRoute>} />
+            <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

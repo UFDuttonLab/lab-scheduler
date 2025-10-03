@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Calendar, Settings, History, Wrench, BarChart3, Clock, FileText } from "lucide-react";
+import { Home, Calendar, Settings, History, Wrench, BarChart3, Clock, FileText, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -16,6 +16,7 @@ export const MobileNavigation = () => {
     { path: "/history", label: "History", icon: History },
     { path: "/activity-log", label: "Activity", icon: FileText },
     { path: "/settings", label: "Settings", icon: Settings, requirePermission: 'canManageUsers' },
+    { path: "/help", label: "Help", icon: HelpCircle },
   ].filter(item => !item.requirePermission || permissions[item.requirePermission as keyof typeof permissions]);
 
   return (
