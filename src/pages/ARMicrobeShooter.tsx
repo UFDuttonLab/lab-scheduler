@@ -34,8 +34,9 @@ const ARMicrobeShooter = () => {
   const { requestPermission: requestOrientationPermission } = useDeviceOrientation();
   const gyro = useGyroscope();
 
-  const handleRequestPermissions = async () => {
+  const handleRequestPermissions = async (): Promise<boolean> => {
     setPermissionStatus("Requesting permissions...");
+    console.log("🔐 Requesting all permissions...");
     
     const motionGranted = await requestMotionPermission();
     const orientationGranted = await requestOrientationPermission();
@@ -47,9 +48,11 @@ const ARMicrobeShooter = () => {
       setPermissionsGranted(true);
       setPermissionStatus("✅ Permissions granted! Ready to play.");
       toast.success("Sensors ready!");
+      return true;
     } else {
       setPermissionStatus("⚠️ Touch controls will be used instead.");
       toast.warning("No sensor permissions granted - using touch controls");
+      return false;
     }
   };
 
@@ -111,14 +114,26 @@ const ARMicrobeShooter = () => {
   }, [navigate, isMobile]);
 
   const startGame = async () => {
+    console.log("🎮 Starting game - requesting permissions first...");
+    
+    // FIX #1: Request permissions BEFORE starting the game
+    const permissionsGranted = await handleRequestPermissions();
+    
+    if (!permissionsGranted) {
+      console.error("❌ Cannot start game - permissions not granted");
+      toast.error("Sensor permissions are required to play");
+      return;
+    }
+    
+    console.log("✅ Permissions granted - initializing game");
     // Initialize game state
-    setGameState("playing");
     setScore(0);
     setLives(3);
     setCombo(0);
     setMicrobesEliminated(0);
     setTotalTaps(0);
     gameStartTimeRef.current = Date.now();
+    setGameState("playing");
   };
 
   const pauseGame = () => {

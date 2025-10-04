@@ -72,8 +72,7 @@ export const ARMicrobeCanvas = ({
   const [showDebug, setShowDebug] = useState(false); // Hidden by default
   const [sensorMode, setSensorMode] = useState<'gyroscope' | 'orientation' | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
-  const [showPermissionOverlay, setShowPermissionOverlay] = useState(true); // Show on game start
-  const [permissionStatus, setPermissionStatus] = useState("Sensors needed for best experience");
+  const [sensorsReady, setSensorsReady] = useState(false); // FIX #5: Track sensor readiness
   const cameraWorldPosRef = useRef({ x: 0, y: 0, z: 0 }); // Camera stays at origin
   const lastComboTimeRef = useRef<number>(Date.now());
   const gameStartTimeRef = useRef<number>(Date.now());
@@ -198,65 +197,32 @@ export const ARMicrobeCanvas = ({
     setPowerUps((prev) => [...prev, powerUp]);
   }, []);
 
-  // Handle permission request from canvas
-  const handleRequestPermissions = async () => {
-    setPermissionStatus("Requesting sensor permissions...");
-    console.log('🔐 Requesting permissions from canvas...');
-    
-    const gyroGranted = await requestGyroPermission();
-    const orientationGranted = await requestOrientationPermission();
+  // FIX #1: Permission handling moved to parent (ARMicrobeShooter.tsx)
 
-    console.log('🔐 Canvas permission results:', { gyroGranted, orientationGranted });
-
-    // Hide overlay immediately after permission handling
-    setShowPermissionOverlay(false);
-    
-    if (gyroGranted || orientationGranted) {
-      toast.success("Sensors active! Look around to see microbes.");
-      // Spawn initial microbes immediately
-      const initialYaw = gyro.current.alpha ? (gyro.current.alpha * Math.PI) / 180 : 0;
-      for (let i = 0; i < 5; i++) {
-        setTimeout(() => spawnMicrobe(initialYaw + (Math.random() - 0.5) * Math.PI), i * 100);
-      }
-    } else {
-      toast.error("Sensors required to play AR Microbe Shooter");
-    }
-  };
-
-  // Determine which sensor mode to use - CHECK REFS instead of permission state
+  // FIX #3: Detect sensor mode and update ref immediately (no race condition)
   useEffect(() => {
-    // Check every 100ms if we have sensor data flowing in the refs
     const checkInterval = setInterval(() => {
+      let newMode: 'gyroscope' | 'orientation' | null = null;
+      
       // Check if orientation data is flowing
       if (orientation.current.alpha !== null && orientation.current.beta !== null) {
-        if (sensorModeRef.current !== 'orientation') {
-          console.log('✅ SENSOR MODE SET: orientation (data detected in ref)');
-          setSensorMode('orientation');
-        }
+        newMode = 'orientation';
       }
       // Fallback to gyroscope if available
       else if (gyro.current.alpha !== null && gyro.current.beta !== null && gyroAvailable) {
-        if (sensorModeRef.current !== 'gyroscope') {
-          console.log('✅ SENSOR MODE SET: gyroscope (data detected in ref)');
-          setSensorMode('gyroscope');
-        }
+        newMode = 'gyroscope';
       }
-      // No sensor data
-      else {
-        if (sensorModeRef.current !== null) {
-          console.log('❌ SENSOR MODE SET: null (no data in refs)');
-          setSensorMode(null);
-        }
+      
+      // Update both state and ref simultaneously (no race)
+      if (newMode !== sensorModeRef.current) {
+        console.log('✅ SENSOR MODE SET:', newMode);
+        setSensorMode(newMode);
+        sensorModeRef.current = newMode;
       }
     }, 100);
 
     return () => clearInterval(checkInterval);
   }, [gyroAvailable]);
-
-  // Sync sensorMode state to ref to avoid stale closures
-  useEffect(() => {
-    sensorModeRef.current = sensorMode;
-  }, [sensorMode]);
 
 
   // Update microbe count ref
@@ -264,19 +230,22 @@ export const ARMicrobeCanvas = ({
     microbeCountRef.current = microbes.length;
   }, [microbes.length]);
 
-  // Spawn logic - stable interval that doesn't recreate constantly
+  // FIX #4 & #5: Spawn logic waits for sensors to be ready
   useEffect(() => {
-    if (isPaused) return;
+    if (isPaused || !sensorsReady) {
+      if (!sensorsReady) {
+        console.log('⏳ Waiting for sensors to be ready before spawning...');
+      }
+      return;
+    }
 
     const spawnInterval = 2000;
-    console.log('🎯 Spawn interval STARTED');
+    console.log('🎯 Spawn interval STARTED (sensors ready)');
     
     const interval = setInterval(() => {
-      console.log('🔴 SPAWN CHECK - Count:', microbeCountRef.current, 'isPaused:', isPaused);
-      // Use ref to get current count without closure issues
       if (microbeCountRef.current < 10) {
         const cameraYaw = sensorDataRef.current.yaw || 0;
-        console.log('🎯 Spawning at count:', microbeCountRef.current, 'yaw:', cameraYaw);
+        console.log('🎯 Spawning microbe - count:', microbeCountRef.current, 'yaw:', cameraYaw.toFixed(2));
         spawnMicrobe(cameraYaw);
       }
     }, spawnInterval);
@@ -285,7 +254,7 @@ export const ARMicrobeCanvas = ({
       console.log('🎯 Spawn interval STOPPED');
       clearInterval(interval);
     };
-  }, [isPaused]);
+  }, [isPaused, sensorsReady]);
 
   // Power-up spawn logic
   useEffect(() => {
@@ -464,41 +433,34 @@ export const ARMicrobeCanvas = ({
         lastLogTimeRef.current = now;
       }
 
-      // One-time initialization: if we have a sensor mode but sensorDataRef is still zero, initialize it
-      if (sensorMode && sensorDataRef.current.yaw === 0 && sensorDataRef.current.pitch === 0) {
-        if (sensorMode === 'orientation' && orientation.current.alpha !== null) {
-          sensorDataRef.current.yaw = ((orientation.current.alpha || 0) * Math.PI) / 180;
-          sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((orientation.current.beta || 0) * Math.PI) / 180));
-          console.log('🎬 INITIALIZED sensorDataRef from orientation:', orientation.current.alpha, orientation.current.beta);
-        } else if (sensorMode === 'gyroscope' && gyro.current.alpha !== null) {
-          sensorDataRef.current.yaw = ((gyro.current.alpha || 0) * Math.PI) / 180;
-          sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((gyro.current.beta || 0) * Math.PI) / 180));
-          console.log('🎬 INITIALIZED sensorDataRef from gyroscope:', gyro.current.alpha, gyro.current.beta);
-        }
+      // FIX #2: Get sensor data and update sensorDataRef
+      let cameraYaw = 0;
+      let cameraPitch = 0;
+
+      if (sensorModeRef.current === "gyroscope" && gyro.current.alpha !== null) {
+        cameraYaw = ((gyro.current.alpha || 0) * Math.PI) / 180;
+        cameraPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((gyro.current.beta || 0) * Math.PI) / 180));
+      } else if (orientation.current.alpha !== null) {
+        cameraYaw = ((orientation.current.alpha || 0) * Math.PI) / 180;
+        cameraPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((orientation.current.beta || 0) * Math.PI) / 180));
       }
 
-      // Update sensorDataRef with latest sensor values - PRIORITIZE DeviceOrientation
-      if (sensorMode === 'orientation' && orientation.current.alpha !== null && orientation.current.beta !== null) {
-        const newYaw = ((orientation.current.alpha || 0) * Math.PI) / 180;
-        const newPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((orientation.current.beta || 0) * Math.PI) / 180));
-        if (shouldLog) {
-          console.log('🔄 UPDATING from ORIENTATION - Yaw:', (newYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (newPitch * 180 / Math.PI).toFixed(1), '°');
-        }
-        sensorDataRef.current.yaw = newYaw;
-        sensorDataRef.current.pitch = newPitch;
-      } else if (sensorMode === 'gyroscope' && gyro.current.alpha !== null && gyro.current.beta !== null) {
-        const newYaw = ((gyro.current.alpha || 0) * Math.PI) / 180;
-        const newPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((gyro.current.beta || 0) * Math.PI) / 180));
-        if (shouldLog) {
-          console.log('🔄 UPDATING from GYROSCOPE - Yaw:', (newYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (newPitch * 180 / Math.PI).toFixed(1), '°');
-        }
-        sensorDataRef.current.yaw = newYaw;
-        sensorDataRef.current.pitch = newPitch;
+      // FIX #2: Update sensorDataRef for use in spawn/tap handlers
+      sensorDataRef.current = { 
+        yaw: cameraYaw, 
+        pitch: cameraPitch 
+      };
+
+      // FIX #5: Check if sensors are ready (non-zero data flowing)
+      if (!sensorsReady && (Math.abs(cameraYaw) > 0.1 || Math.abs(cameraPitch) > 0.1)) {
+        console.log("🚀 SENSORS READY! Data flowing:", { 
+          yaw: (cameraYaw * 180 / Math.PI).toFixed(2), 
+          pitch: (cameraPitch * 180 / Math.PI).toFixed(2) 
+        });
+        setSensorsReady(true);
       }
 
-      // Camera control - use sensor data from ref for consistency
-      const cameraYaw = sensorDataRef.current.yaw;
-      const cameraPitch = sensorDataRef.current.pitch;
+      // Continue with existing rendering logic
       let activeSensorData: any = null;
 
       if (sensorMode === 'gyroscope' && gyro.current.alpha !== null) {
@@ -722,7 +684,8 @@ export const ARMicrobeCanvas = ({
 
   const handleTap = useCallback(
     (e: React.TouchEvent<HTMLCanvasElement>) => {
-      console.log('🔴 handleTap CALLED!', 'isPaused:', isPaused, 'canvas:', !!canvasRef.current);
+      e.preventDefault(); // FIX #6: Prevent default touch behavior
+      console.log('🔴 handleTap CALLED! Touch event received');
       
       if (isPaused || !canvasRef.current) {
         console.log('🔴 EARLY RETURN:', isPaused ? 'PAUSED' : 'NO CANVAS');
@@ -737,16 +700,20 @@ export const ARMicrobeCanvas = ({
       setLaserFiring(Date.now());
       console.log('🔫 LASER FIRED! Checking for hits...');
 
-      // Use sensor data from ref (FRESH absolute values from DeviceOrientation!)
+      // Use sensor data from ref
       const cameraYaw = sensorDataRef.current.yaw;
       const cameraPitch = sensorDataRef.current.pitch;
 
-      // DEFENSIVE LOGGING - verify we have real sensor data
-      if (cameraYaw === 0 && cameraPitch === 0) {
-        console.error('🚨 SENSOR DATA IS ZERO! Sensor not initialized!');
+      // Check sensor data with more lenient threshold
+      if (Math.abs(cameraYaw) < 0.01 && Math.abs(cameraPitch) < 0.01) {
+        console.error('🚨 SENSOR DATA IS ZERO! Sensors not initialized!', sensorDataRef.current);
+        return;
       }
-      console.log('📐 Camera angles from ref - Yaw:', (cameraYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (cameraPitch * 180 / Math.PI).toFixed(1), '°');
-      console.log('📱 Raw sensor - Alpha:', orientation.current.alpha, 'Beta:', orientation.current.beta);
+      
+      console.log('✅ Sensor data valid:', { 
+        yaw: (cameraYaw * 180 / Math.PI).toFixed(2) + '°', 
+        pitch: (cameraPitch * 180 / Math.PI).toFixed(2) + '°' 
+      });
 
       // Track state changes to apply AFTER setMicrobes completes
       let pointsToAdd = 0;
@@ -941,53 +908,30 @@ export const ARMicrobeCanvas = ({
 
   return (
     <>
-      {/* Pre-Mission Check Overlay */}
-      {showPermissionOverlay && (
-        <div className="absolute inset-0 bg-black/90 flex items-center justify-center z-50 pointer-events-auto">
-          <div className="bg-background/95 rounded-lg p-6 max-w-sm mx-4 text-center space-y-4">
-            <h2 className="text-2xl font-bold">🎯 Pre-Mission Check</h2>
-            <p className="text-sm text-muted-foreground">
-              Grant sensor permissions for the best AR experience
-            </p>
-            
-            <div className="bg-muted/50 rounded-lg p-3 text-xs text-left space-y-2">
-              <p className="font-semibold">📱 Sensor Status:</p>
-              <div className="space-y-1 text-muted-foreground">
-                <p>
-                  {gyroAvailable ? "✅" : "❌"} Gyroscope
-                </p>
-                <p>
-                  {orientationPermission ? "✅" : "❌"} Orientation
-                </p>
-              </div>
-            </div>
-            
-            {permissionStatus && (
-              <div className="bg-primary/10 border border-primary/20 rounded-lg p-2 text-xs">
-                {permissionStatus}
-              </div>
-            )}
-            
-            <Button onClick={handleRequestPermissions} className="w-full" size="lg">
-              Grant Permissions
-            </Button>
-          </div>
-        </div>
-      )}
-
+      {/* FIX #6: Canvas with touch-action: none and onTouchStart */}
       <canvas
         ref={canvasRef}
-        onTouchEnd={handleTap}
-        className="absolute inset-0 w-full h-full z-10"
-        style={{ width: "100%", height: "100%" }}
+        onTouchStart={handleTap}
+        className="absolute inset-0 z-10"
+        style={{ touchAction: "none" }}
       />
 
-      {/* Microbe Counter HUD - Always visible */}
-      <div className="absolute top-4 left-4 bg-black/60 text-white px-4 py-2 rounded-lg text-sm font-bold z-40 pointer-events-none">
-        🦠 Microbes Active: {microbes.length}
+      {/* HUD */}
+      <div className="absolute top-4 left-4 text-white text-sm font-mono z-20 pointer-events-none">
+        <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2">
+          🦠 Microbes: {microbes.length}
+        </div>
+        {!sensorsReady && (
+          <div className="mt-2 px-3 py-2 bg-yellow-500/80 backdrop-blur-sm rounded-lg font-bold">
+            ⏳ Initializing sensors...
+          </div>
+        )}
+        {activePowerUp && (
+          <div className="mt-2 px-3 py-2 bg-primary/80 backdrop-blur-sm rounded-lg font-bold">
+            ⚡ {activePowerUp.type.toUpperCase()}
+          </div>
+        )}
       </div>
-      
-      {activePowerUp && <PowerUp type={activePowerUp.type} endTime={activePowerUp.endTime} />}
     </>
   );
 };
