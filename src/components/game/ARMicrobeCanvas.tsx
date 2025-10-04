@@ -717,6 +717,12 @@ export const ARMicrobeCanvas = ({
       console.log('📐 Camera angles from ref - Yaw:', (cameraYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (cameraPitch * 180 / Math.PI).toFixed(1), '°');
       console.log('📱 Raw sensor - Alpha:', orientation.alpha, 'Beta:', orientation.beta);
 
+      // Track state changes to apply AFTER setMicrobes completes
+      let pointsToAdd = 0;
+      let newComboValue = comboRef.current;
+      let microbeDied = false;
+      let currentScoreValue = 0;
+
       // Use setMicrobes with callback to get FRESH microbe data
       setMicrobes((currentMicrobes) => {
         console.log('🔴 TAP DETECTED! Checking', currentMicrobes.length, 'microbes for hits...');
@@ -826,23 +832,13 @@ export const ARMicrobeCanvas = ({
             if (m.id !== microbe.id) return m;
 
             if (newHealth <= 0) {
-              // Microbe eliminated - update score and combo
-              const newCombo = comboRef.current + 1;
-              const comboMultiplier = 1 + Math.floor(newCombo / 5) * 0.5;
-              const pointsEarned = Math.floor(
+              // Microbe eliminated - CALCULATE changes but DON'T apply yet
+              microbeDied = true;
+              newComboValue = comboRef.current + 1;
+              const comboMultiplier = 1 + Math.floor(newComboValue / 5) * 0.5;
+              pointsToAdd = Math.floor(
                 m.points * comboMultiplier * (activePowerUpRef.current?.type === "double" ? 2 : 1)
               );
-
-              setScore((prev) => {
-                const newScore = prev + pointsEarned;
-                onScoreChange(newScore);
-                return newScore;
-              });
-
-              setCombo(newCombo);
-              onComboChange(newCombo);
-              lastComboTimeRef.current = Date.now();
-              onMicrobeEliminated();
 
               // Decrement microbe count!
               microbeCountRef.current = Math.max(0, microbeCountRef.current - 1);
@@ -862,6 +858,24 @@ export const ARMicrobeCanvas = ({
           return currentMicrobes; // No hit, no change
         }
       });
+
+      // Apply score/combo changes AFTER setMicrobes completes (no nested setState!)
+      if (microbeDied) {
+        setScore((prev) => {
+          currentScoreValue = prev + pointsToAdd;
+          return currentScoreValue;
+        });
+        setCombo(newComboValue);
+        
+        // Call callbacks after state is set
+        setTimeout(() => {
+          onScoreChange(currentScoreValue);
+          onComboChange(newComboValue);
+          onMicrobeEliminated();
+        }, 0);
+        
+        lastComboTimeRef.current = Date.now();
+      }
     },
     [isPaused, sensorMode, onScoreChange, onComboChange, onMicrobeEliminated]
   );
