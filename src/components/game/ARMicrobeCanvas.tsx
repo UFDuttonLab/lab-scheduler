@@ -223,7 +223,11 @@ export const ARMicrobeCanvas = ({
       console.log('✅ Using DEVICE ORIENTATION mode (absolute) - alpha:', orientation.alpha, 'beta:', orientation.beta);
       
       // Initialize sensorDataRef with current orientation using ALPHA for 360° yaw
-      sensorDataRef.current.yaw = ((orientation.alpha || 0) * Math.PI) / 180;
+      // Normalize alpha: 0-360° -> -180° to 180° for proper rotation math
+      const normalizedAlpha = ((orientation.alpha || 0) > 180) 
+        ? (orientation.alpha || 0) - 360 
+        : (orientation.alpha || 0);
+      sensorDataRef.current.yaw = (normalizedAlpha * Math.PI) / 180;
       sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((orientation.beta || 0) * Math.PI) / 180));
       console.log('📐 Initialized camera - Yaw:', orientation.alpha.toFixed(1), '° Pitch:', orientation.beta.toFixed(1), '°');
       return;
@@ -252,11 +256,19 @@ export const ARMicrobeCanvas = ({
     // Always prefer orientation over gyroscope if available
     if (sensorMode === 'orientation' && orientation.alpha !== null && orientation.beta !== null) {
       // DeviceOrientation gives ABSOLUTE angles - no drift! Use ALPHA for 360° yaw
-      sensorDataRef.current.yaw = ((orientation.alpha || 0) * Math.PI) / 180;
+      // Normalize alpha: 0-360° -> -180° to 180° for proper rotation math
+      const normalizedAlpha = ((orientation.alpha || 0) > 180) 
+        ? (orientation.alpha || 0) - 360 
+        : (orientation.alpha || 0);
+      sensorDataRef.current.yaw = (normalizedAlpha * Math.PI) / 180;
       sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((orientation.beta || 0) * Math.PI) / 180));
     } else if (sensorMode === 'gyroscope' && gyro.alpha !== null && gyro.beta !== null) {
       // Gyroscope fallback (accumulated angles - may drift) - also use alpha
-      sensorDataRef.current.yaw = ((gyro.alpha || 0) * Math.PI) / 180;
+      // Normalize alpha: 0-360° -> -180° to 180° for proper rotation math
+      const normalizedAlpha = ((gyro.alpha || 0) > 180) 
+        ? (gyro.alpha || 0) - 360 
+        : (gyro.alpha || 0);
+      sensorDataRef.current.yaw = (normalizedAlpha * Math.PI) / 180;
       sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((gyro.beta || 0) * Math.PI) / 180));
     }
   }, [orientation.alpha, orientation.beta, gyro.alpha, gyro.beta, sensorMode]);
@@ -465,11 +477,11 @@ export const ARMicrobeCanvas = ({
         const viewY = microbe.worldY - cameraWorldPosRef.current.y;
         const viewZ = microbe.worldZ - cameraWorldPosRef.current.z;
 
-        // Rotate by camera yaw (around Y axis)
+        // Rotate by camera yaw (around Y axis) - Correct matrix for X=right, -Z=forward
         const cosYaw = Math.cos(cameraYaw);
         const sinYaw = Math.sin(cameraYaw);
-        const rotatedX = viewX * cosYaw - viewZ * sinYaw;
-        const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
+        const rotatedX = viewX * cosYaw + viewZ * sinYaw;
+        const rotatedZ = -viewX * sinYaw + viewZ * cosYaw;
         
         // Apply pitch rotation (around X axis)
         const cosPitch = Math.cos(cameraPitch);
@@ -721,11 +733,11 @@ export const ARMicrobeCanvas = ({
           const viewY = microbe.worldY - cameraWorldPosRef.current.y;
           const viewZ = microbe.worldZ - cameraWorldPosRef.current.z;
 
-          // Rotate by camera yaw (around Y axis)
+          // Rotate by camera yaw (around Y axis) - Correct matrix for X=right, -Z=forward
           const cosYaw = Math.cos(cameraYaw);
           const sinYaw = Math.sin(cameraYaw);
-          const rotatedX = viewX * cosYaw - viewZ * sinYaw;
-          const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
+          const rotatedX = viewX * cosYaw + viewZ * sinYaw;
+          const rotatedZ = -viewX * sinYaw + viewZ * cosYaw;
           
           // Apply pitch rotation (around X axis)
           const cosPitch = Math.cos(cameraPitch);
