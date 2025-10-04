@@ -72,7 +72,7 @@ export const ARMicrobeCanvas = ({
   const [touchRotation, setTouchRotation] = useState({ yaw: 0, pitch: 0 });
   const [lastTouch, setLastTouch] = useState<{ x: number; y: number } | null>(null);
   const [useTouchMode, setUseTouchMode] = useState(false);
-  const [showDebug, setShowDebug] = useState(true);
+  const [showDebug, setShowDebug] = useState(false);
   const [sensorMode, setSensorMode] = useState<'gyroscope' | 'orientation' | 'touch'>('touch');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [cameraWorldPos] = useState({ x: 0, y: 0, z: 0 }); // Camera stays at origin
@@ -174,7 +174,8 @@ export const ARMicrobeCanvas = ({
       worldPos: `(${worldX.toFixed(2)}, ${worldY.toFixed(2)}, ${worldZ.toFixed(2)})`,
       relativeAngle: (relativeAngle * 180 / Math.PI).toFixed(1) + '°',
       cameraYaw: (cameraYaw * 180 / Math.PI).toFixed(1) + '°',
-      type
+      type,
+      distance: distance.toFixed(2)
     });
 
     setMicrobes((prev) => [...prev, microbe]);
@@ -422,7 +423,24 @@ export const ARMicrobeCanvas = ({
 
             // Skip rendering if behind camera (finalZ >= 0 means behind)
             if (finalZ >= 0) {
+              if (showDebug && Math.random() < 0.01) {
+                console.log('❌ Microbe behind camera:', {
+                  id: microbe.id,
+                  worldPos: `(${newWorldX.toFixed(2)}, ${newWorldY.toFixed(2)}, ${newWorldZ.toFixed(2)})`,
+                  finalZ: finalZ.toFixed(2)
+                });
+              }
               return null;
+            }
+            
+            // Debug successful render (log occasionally)
+            if (showDebug && Math.random() < 0.005) {
+              console.log('✅ Rendering microbe:', {
+                id: microbe.id,
+                worldPos: `(${newWorldX.toFixed(2)}, ${newWorldY.toFixed(2)}, ${newWorldZ.toFixed(2)})`,
+                finalZ: finalZ.toFixed(2),
+                screenPos: `(${(centerX + (rotatedX / -finalZ) * 800).toFixed(0)}, ${(centerY + (finalY / -finalZ) * 800).toFixed(0)})`
+              });
             }
 
             // Add wobble for realism
@@ -508,23 +526,35 @@ export const ARMicrobeCanvas = ({
           .filter(Boolean) as Particle[];
       });
 
-      // Render laser beam if firing
+      // Render laser beam if firing - red with tapered effect
       if (laserFiring > 0 && now - laserFiring < 150) {
         const laserAlpha = 1 - (now - laserFiring) / 150;
-        const gradient = ctx.createLinearGradient(centerX, canvas.height, centerX, centerY);
-        gradient.addColorStop(0, `rgba(0, 255, 255, ${laserAlpha * 0.8})`);
-        gradient.addColorStop(0.5, `rgba(100, 200, 255, ${laserAlpha})`);
-        gradient.addColorStop(1, `rgba(255, 255, 255, ${laserAlpha * 0.3})`);
         
-        ctx.strokeStyle = gradient;
-        ctx.lineWidth = 4;
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = "cyan";
+        // Create tapered laser beam (wider at bottom)
+        ctx.save();
+        ctx.globalAlpha = laserAlpha * 0.8;
+        
+        // Main beam as a filled polygon (cone shape)
+        const gradient = ctx.createLinearGradient(centerX, canvas.height, centerX, centerY);
+        gradient.addColorStop(0, `rgba(255, 50, 50, ${laserAlpha})`);
+        gradient.addColorStop(0.5, `rgba(255, 100, 100, ${laserAlpha * 0.8})`);
+        gradient.addColorStop(1, `rgba(255, 150, 150, ${laserAlpha * 0.3})`);
+        
+        ctx.fillStyle = gradient;
         ctx.beginPath();
-        ctx.moveTo(centerX, canvas.height);
-        ctx.lineTo(centerX, centerY);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
+        ctx.moveTo(centerX - 15, canvas.height); // Wide at bottom (left)
+        ctx.lineTo(centerX - 2, centerY); // Narrow at center (left)
+        ctx.lineTo(centerX + 2, centerY); // Narrow at center (right)
+        ctx.lineTo(centerX + 15, canvas.height); // Wide at bottom (right)
+        ctx.closePath();
+        ctx.fill();
+        
+        // Add glow effect
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = "red";
+        ctx.fill();
+        
+        ctx.restore();
       }
 
       // Render crosshair
