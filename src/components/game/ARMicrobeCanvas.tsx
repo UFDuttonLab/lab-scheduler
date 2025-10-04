@@ -4,9 +4,9 @@ import { PowerUp } from "./PowerUp";
 
 interface Microbe {
   id: string;
-  x: number;
-  y: number;
-  z: number;
+  angle: number; // Horizontal rotation (0-360°)
+  elevation: number; // Vertical angle (-90° to 90°)
+  distance: number; // Distance from camera
   type: "basic" | "fast" | "tank" | "golden" | "boss";
   health: number;
   maxHealth: number;
@@ -15,7 +15,7 @@ interface Microbe {
   points: number;
   spawnTime: number;
   opacity: number;
-  angle: number;
+  wobble: number; // For slight movement
 }
 
 interface PowerUpItem {
@@ -61,6 +61,7 @@ export const ARMicrobeCanvas = ({
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
   const [activePowerUp, setActivePowerUp] = useState<{ type: string; endTime: number } | null>(null);
+  const [laserFiring, setLaserFiring] = useState<number>(0); // Timestamp of laser fire
   const lastComboTimeRef = useRef<number>(Date.now());
   const gameStartTimeRef = useRef<number>(Date.now());
   const lastSpawnTimeRef = useRef<number>(Date.now());
@@ -128,9 +129,9 @@ export const ARMicrobeCanvas = ({
 
     const microbe: Microbe = {
       id: `microbe-${Date.now()}-${Math.random()}`,
-      x: (Math.random() - 0.5) * 4,
-      y: (Math.random() - 0.5) * 3,
-      z: -3 - Math.random() * 2,
+      angle: Math.random() * Math.PI * 2, // 0-360° around camera
+      elevation: (Math.random() - 0.5) * Math.PI * 0.6, // -54° to +54° vertical
+      distance: 3 + Math.random() * 2, // 3-5 units away
       type,
       health,
       maxHealth: health,
@@ -139,7 +140,7 @@ export const ARMicrobeCanvas = ({
       points,
       spawnTime: Date.now(),
       opacity: 1,
-      angle: Math.random() * Math.PI * 2,
+      wobble: 0,
     };
 
     setMicrobes((prev) => [...prev, microbe]);
@@ -225,9 +226,9 @@ export const ARMicrobeCanvas = ({
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
 
-      // Calculate camera offset from device orientation
-      const offsetX = (gamma || 0) * 5;
-      const offsetY = (beta ? beta - 45 : 0) * 5;
+      // Device orientation in radians
+      const cameraYaw = ((alpha || 0) * Math.PI) / 180; // Horizontal rotation
+      const cameraPitch = ((beta ? beta - 90 : 0) * Math.PI) / 180; // Vertical tilt
 
       // Update and render microbes
       setMicrobes((prev) => {
@@ -235,14 +236,12 @@ export const ARMicrobeCanvas = ({
           .map((microbe) => {
             const age = (now - microbe.spawnTime) / 1000;
 
-            // Move microbe
-            let newZ = microbe.z + microbe.speed * 0.016;
-            microbe.angle += 0.02;
-            const newX = microbe.x + Math.sin(microbe.angle) * 0.01;
-            const newY = microbe.y + Math.cos(microbe.angle) * 0.01;
+            // Move microbe closer
+            let newDistance = microbe.distance - microbe.speed * 0.016;
+            const newWobble = microbe.wobble + 0.02;
 
             // Check if reached camera or despawned
-            if (newZ > -0.5 || age > 10) {
+            if (newDistance < 0.5 || age > 20) {
               onLifeLost();
               return null;
             }
@@ -258,17 +257,35 @@ export const ARMicrobeCanvas = ({
               const clone: Microbe = {
                 ...microbe,
                 id: `microbe-clone-${Date.now()}-${Math.random()}`,
-                x: microbe.x + (Math.random() - 0.5) * 0.5,
-                y: microbe.y + (Math.random() - 0.5) * 0.5,
+                angle: microbe.angle + (Math.random() - 0.5) * 0.3,
+                elevation: microbe.elevation + (Math.random() - 0.5) * 0.2,
                 spawnTime: now,
               };
               setTimeout(() => setMicrobes((m) => [...m, clone]), 0);
             }
 
+            // Calculate relative angle to camera
+            const relativeAngle = microbe.angle - cameraYaw;
+            const relativeElevation = microbe.elevation - cameraPitch;
+
+            // Add wobble for realism
+            const wobbleOffset = Math.sin(newWobble) * 0.05;
+
+            // Check if microbe is within field of view (~90° horizontal, ~70° vertical)
+            const isInView = Math.abs(relativeAngle) < Math.PI / 2 && Math.abs(relativeElevation) < Math.PI / 2.5;
+            
+            if (!isInView) {
+              // Keep microbe but don't render
+              return { ...microbe, distance: newDistance, wobble: newWobble, opacity };
+            }
+
             // Project to screen space
-            const scale = 1 / -newZ;
-            const screenX = centerX + (newX - offsetX * 0.01) * scale * 300;
-            const screenY = centerY + (newY - offsetY * 0.01) * scale * 300;
+            const fov = 1.2; // Field of view factor
+            const screenX = centerX + (Math.sin(relativeAngle) * newDistance * 150 * fov) + wobbleOffset * 50;
+            const screenY = centerY + (Math.sin(relativeElevation) * newDistance * 150 * fov);
+            
+            // Size based on distance
+            const scale = 3 / newDistance;
             const size = microbe.size * scale;
 
             // Render microbe
@@ -296,20 +313,20 @@ export const ARMicrobeCanvas = ({
 
             ctx.restore();
 
-            return { ...microbe, x: newX, y: newY, z: newZ, opacity };
+            return { ...microbe, distance: newDistance, wobble: newWobble, opacity };
           })
           .filter(Boolean) as Microbe[];
       });
 
-      // Update and render power-ups
+      // Update and render power-ups (keep simple fixed positioning for now)
       setPowerUps((prev) => {
         return prev.filter((powerUp) => {
           const age = (now - powerUp.spawnTime) / 1000;
           if (age > 15) return false;
 
           const scale = 1 / -powerUp.z;
-          const screenX = centerX + (powerUp.x - offsetX * 0.01) * scale * 300;
-          const screenY = centerY + (powerUp.y - offsetY * 0.01) * scale * 300;
+          const screenX = centerX + powerUp.x * scale * 300;
+          const screenY = centerY + powerUp.y * scale * 300;
 
           ctx.font = "40px Arial";
           ctx.textAlign = "center";
@@ -340,6 +357,25 @@ export const ARMicrobeCanvas = ({
           })
           .filter(Boolean) as Particle[];
       });
+
+      // Render laser beam if firing
+      if (laserFiring > 0 && now - laserFiring < 150) {
+        const laserAlpha = 1 - (now - laserFiring) / 150;
+        const gradient = ctx.createLinearGradient(centerX, canvas.height, centerX, centerY);
+        gradient.addColorStop(0, `rgba(0, 255, 255, ${laserAlpha * 0.8})`);
+        gradient.addColorStop(0.5, `rgba(100, 200, 255, ${laserAlpha})`);
+        gradient.addColorStop(1, `rgba(255, 255, 255, ${laserAlpha * 0.3})`);
+        
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = 4;
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = "cyan";
+        ctx.beginPath();
+        ctx.moveTo(centerX, canvas.height);
+        ctx.lineTo(centerX, centerY);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
 
       // Render crosshair
       ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
@@ -375,44 +411,54 @@ export const ARMicrobeCanvas = ({
       if (isPaused || !canvasRef.current) return;
 
       const canvas = canvasRef.current;
-      const rect = canvas.getBoundingClientRect();
-      const touch = e.touches[0] || e.changedTouches[0];
-      const tapX = touch.clientX - rect.left;
-      const tapY = touch.clientY - rect.top;
-
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
-      const offsetX = (gamma || 0) * 5;
-      const offsetY = (beta ? beta - 45 : 0) * 5;
 
-      // Check power-up collision
-      for (const powerUp of powerUps) {
-        const scale = 1 / -powerUp.z;
-        const screenX = centerX + (powerUp.x - offsetX * 0.01) * scale * 300;
-        const screenY = centerY + (powerUp.y - offsetY * 0.01) * scale * 300;
-        const distance = Math.hypot(tapX - screenX, tapY - screenY);
+      // Fire laser beam
+      setLaserFiring(Date.now());
 
-        if (distance < 40) {
-          setPowerUps((prev) => prev.filter((p) => p.id !== powerUp.id));
-          const duration = powerUp.type === "double" ? 10000 : powerUp.type === "shield" ? 8000 : 5000;
-          setActivePowerUp({ type: powerUp.type, endTime: Date.now() + duration });
-          return;
-        }
-      }
+      // Device orientation in radians
+      const cameraYaw = ((alpha || 0) * Math.PI) / 180;
+      const cameraPitch = ((beta ? beta - 90 : 0) * Math.PI) / 180;
 
-      // Check microbe collision
+      // Check microbe collision at crosshair (center of screen)
       let hitMicrobe = false;
-      setMicrobes((prev) => {
-        return prev.map((microbe) => {
-          const scale = 1 / -microbe.z;
-          const screenX = centerX + (microbe.x - offsetX * 0.01) * scale * 300;
-          const screenY = centerY + (microbe.y - offsetY * 0.01) * scale * 300;
-          const size = microbe.size * scale;
-          const distance = Math.hypot(tapX - screenX, tapY - screenY);
+      let closestMicrobe: { microbe: Microbe; screenX: number; screenY: number; size: number } | null = null;
+      let minDistance = Infinity;
 
-          if (distance < size / 2 && !hitMicrobe) {
-            hitMicrobe = true;
-            const newHealth = microbe.health - 1;
+      // Find closest microbe to crosshair
+      microbes.forEach((microbe) => {
+        const relativeAngle = microbe.angle - cameraYaw;
+        const relativeElevation = microbe.elevation - cameraPitch;
+        
+        const isInView = Math.abs(relativeAngle) < Math.PI / 2 && Math.abs(relativeElevation) < Math.PI / 2.5;
+        if (!isInView) return;
+
+        const fov = 1.2;
+        const wobbleOffset = Math.sin(microbe.wobble) * 0.05;
+        const screenX = centerX + (Math.sin(relativeAngle) * microbe.distance * 150 * fov) + wobbleOffset * 50;
+        const screenY = centerY + (Math.sin(relativeElevation) * microbe.distance * 150 * fov);
+        const scale = 3 / microbe.distance;
+        const size = microbe.size * scale;
+
+        const distance = Math.hypot(screenX - centerX, screenY - centerY);
+        
+        // Check if within crosshair area (40px radius)
+        if (distance < 40 && distance < minDistance) {
+          minDistance = distance;
+          closestMicrobe = { microbe, screenX, screenY, size };
+        }
+      });
+
+      if (closestMicrobe) {
+        hitMicrobe = true;
+        const { microbe, screenX, screenY } = closestMicrobe;
+        
+        setMicrobes((prev) => {
+          return prev.map((m) => {
+            if (m.id !== microbe.id) return m;
+
+            const newHealth = m.health - 1;
 
             // Create hit particles
             const newParticles: Particle[] = Array.from({ length: 10 }, () => ({
@@ -421,7 +467,7 @@ export const ARMicrobeCanvas = ({
               vx: (Math.random() - 0.5) * 5,
               vy: (Math.random() - 0.5) * 5,
               life: 1,
-              color: getMicrobeColor(microbe.type),
+              color: getMicrobeColor(m.type),
             }));
             setParticles((prev) => [...prev, ...newParticles]);
 
@@ -430,7 +476,7 @@ export const ARMicrobeCanvas = ({
               const newCombo = combo + 1;
               const comboMultiplier = 1 + Math.floor(newCombo / 5) * 0.5;
               const pointsEarned = Math.floor(
-                microbe.points * comboMultiplier * (activePowerUp?.type === "double" ? 2 : 1)
+                m.points * comboMultiplier * (activePowerUp?.type === "double" ? 2 : 1)
               );
 
               setScore((prev) => {
@@ -447,14 +493,12 @@ export const ARMicrobeCanvas = ({
               return null;
             }
 
-            return { ...microbe, health: newHealth };
-          }
-
-          return microbe;
-        }).filter(Boolean) as Microbe[];
-      });
+            return { ...m, health: newHealth };
+          }).filter(Boolean) as Microbe[];
+        });
+      }
     },
-    [isPaused, gamma, beta, powerUps, combo, activePowerUp, onScoreChange, onComboChange, onMicrobeEliminated]
+    [isPaused, alpha, beta, microbes, combo, activePowerUp, onScoreChange, onComboChange, onMicrobeEliminated]
   );
 
   // Handle active power-up expiration
