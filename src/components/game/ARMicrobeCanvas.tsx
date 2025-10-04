@@ -7,6 +7,7 @@ interface Microbe {
   angle: number; // Horizontal angle relative to camera (radians)
   elevation: number; // Vertical angle relative to camera (radians)
   distance: number; // Distance from camera
+  spawnCameraYaw: number; // Camera yaw when microbe spawned
   type: "basic" | "fast" | "tank" | "golden" | "boss";
   health: number;
   maxHealth: number;
@@ -90,7 +91,7 @@ export const ARMicrobeCanvas = ({
     }
   };
 
-  const spawnMicrobe = useCallback(() => {
+  const spawnMicrobe = useCallback((cameraYaw: number) => {
     const gameTime = (Date.now() - gameStartTimeRef.current) / 1000;
     
     // Determine microbe type based on spawn rate and game time
@@ -127,8 +128,8 @@ export const ARMicrobeCanvas = ({
       size = 30;
     }
 
-    // Generate spawn position in camera-relative spherical coordinates
-    const angle = Math.random() * Math.PI * 2;
+    // Generate spawn position in forward-facing cone (-60° to +60°)
+    const angle = (Math.random() - 0.5) * Math.PI * 2/3;
     const elevation = (Math.random() - 0.5) * Math.PI * 0.6;
     const distance = 3 + Math.random() * 2;
 
@@ -137,6 +138,7 @@ export const ARMicrobeCanvas = ({
       angle,
       elevation,
       distance,
+      spawnCameraYaw: cameraYaw,
       type,
       health,
       maxHealth: health,
@@ -173,7 +175,8 @@ export const ARMicrobeCanvas = ({
 
     const spawnInterval = setInterval(() => {
       if (microbes.length < 10) {
-        spawnMicrobe();
+        const cameraYaw = ((alpha || 0) * Math.PI) / 180;
+        spawnMicrobe(cameraYaw);
       }
     }, 2000);
 
@@ -266,18 +269,22 @@ export const ARMicrobeCanvas = ({
                 id: `microbe-clone-${Date.now()}-${Math.random()}`,
                 angle: microbe.angle + (Math.random() - 0.5) * 0.3,
                 elevation: microbe.elevation + (Math.random() - 0.5) * 0.2,
+                spawnCameraYaw: microbe.spawnCameraYaw,
                 spawnTime: now,
               };
               setTimeout(() => setMicrobes((m) => [...m, clone]), 0);
             }
 
-            // Convert camera-relative spherical to camera-relative Cartesian
-            const relX = Math.sin(microbe.angle) * Math.cos(microbe.elevation) * newDistance;
+            // Adjust angle based on camera rotation since spawn
+            const deltaYaw = cameraYaw - microbe.spawnCameraYaw;
+            const adjustedAngle = microbe.angle + deltaYaw;
+            
+            // Convert to camera-relative Cartesian with adjusted angle
+            const relX = Math.sin(adjustedAngle) * Math.cos(microbe.elevation) * newDistance;
             const relY = Math.sin(microbe.elevation) * newDistance;
-            const relZ = -Math.cos(microbe.angle) * Math.cos(microbe.elevation) * newDistance;
+            const relZ = -Math.cos(adjustedAngle) * Math.cos(microbe.elevation) * newDistance;
 
-            // These coordinates are ALREADY in camera-relative space
-            // No additional rotation needed - use them directly for view space
+            // These are now in camera-relative view space
             const viewX = relX;
             const viewY = relY;
             const viewZ = relZ;
@@ -440,12 +447,16 @@ export const ARMicrobeCanvas = ({
 
       // Find closest microbe to crosshair
       microbes.forEach((microbe) => {
-        // Convert camera-relative spherical to camera-relative Cartesian
-        const relX = Math.sin(microbe.angle) * Math.cos(microbe.elevation) * microbe.distance;
+        // Adjust angle based on camera rotation since spawn
+        const deltaYaw = cameraYaw - microbe.spawnCameraYaw;
+        const adjustedAngle = microbe.angle + deltaYaw;
+        
+        // Convert to camera-relative Cartesian with adjusted angle
+        const relX = Math.sin(adjustedAngle) * Math.cos(microbe.elevation) * microbe.distance;
         const relY = Math.sin(microbe.elevation) * microbe.distance;
-        const relZ = -Math.cos(microbe.angle) * Math.cos(microbe.elevation) * microbe.distance;
+        const relZ = -Math.cos(adjustedAngle) * Math.cos(microbe.elevation) * microbe.distance;
 
-        // These coordinates are ALREADY in camera-relative space
+        // These are now in camera-relative view space
         const viewX = relX;
         const viewY = relY;
         const viewZ = relZ;
