@@ -145,9 +145,9 @@ export const ARMicrobeCanvas = ({
       size = 30;
     }
 
-    // Generate spawn position in forward-facing cone relative to current camera direction
-    const relativeAngle = (Math.random() - 0.5) * Math.PI * 0.8; // -72° to +72°
-    const elevation = (Math.random() - 0.5) * Math.PI * 0.5; // -45° to +45°
+    // Generate spawn position in full 360° sphere around player (requires looking around)
+    const relativeAngle = Math.random() * Math.PI * 2; // Full 360° horizontal
+    const elevation = (Math.random() - 0.5) * Math.PI; // Full 180° vertical
     const distance = 40 + Math.random() * 20; // Spawn 40-60 units away for 10-20 second approach
 
     // Convert to world coordinates (spawn in front of where camera is currently pointing)
@@ -473,8 +473,8 @@ export const ARMicrobeCanvas = ({
         const scale = 300 / depth;
         const size = microbe.size * scale;
 
-        // Only render microbes in front of camera within visible range (5-70 units)
-        if (finalZ < 0 && depth >= 5 && depth <= 70) {
+        // Render microbes in any direction within visible range (5-70 units)
+        if (depth >= 5 && depth <= 70) {
           // Render microbe
           ctx.save();
           ctx.globalAlpha = microbe.opacity;
@@ -729,9 +729,6 @@ export const ARMicrobeCanvas = ({
         const sinPitch = Math.sin(cameraPitch);
         const finalY = viewY * cosPitch - rotatedZ * sinPitch;
         const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
-
-        // Skip if behind camera
-        if (finalZ >= 0) return;
 
         // Skip if out of visible range (must match rendering range 5-70 units)
         const depth = Math.abs(finalZ);
