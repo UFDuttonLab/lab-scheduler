@@ -217,31 +217,18 @@ export const ARMicrobeCanvas = ({
 
   // Determine which sensor mode to use
   useEffect(() => {
-    // FORCE DeviceOrientation API for absolute positioning (no drift)
-    if (orientationPermission && orientation.current.alpha !== null && orientation.current.beta !== null) {
+    // Set sensor mode based on permissions (not ref values which don't trigger re-renders)
+    if (orientationPermission) {
       setSensorMode('orientation');
-      console.log('✅ Using DEVICE ORIENTATION mode (absolute) - alpha:', orientation.current.alpha, 'beta:', orientation.current.beta);
-      
-      // Initialize sensorDataRef with current orientation using ALPHA for 360° yaw (use directly, no normalization)
-      sensorDataRef.current.yaw = ((orientation.current.alpha || 0) * Math.PI) / 180;
-      sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((orientation.current.beta || 0) * Math.PI) / 180));
-      console.log('📐 Initialized camera - Yaw:', orientation.current.alpha.toFixed(1), '° Pitch:', orientation.current.beta.toFixed(1), '°');
-      return;
-    }
-    
-    // Fallback to Gyroscope only if orientation unavailable
-    if (gyroPermission && gyroAvailable && gyro.current.alpha !== null && gyro.current.beta !== null) {
+      console.log('✅ ORIENTATION permission granted, using orientation mode');
+    } else if (gyroPermission && gyroAvailable) {
       setSensorMode('gyroscope');
-      console.log('⚠️ Using GYROSCOPE API mode (fallback - may drift) - alpha:', gyro.current.alpha, 'beta:', gyro.current.beta);
-      return;
-    }
-    
-    // No sensors available
-    if ((gyroPermission === false || !gyroAvailable) && orientationPermission === false) {
+      console.log('✅ GYROSCOPE permission granted, using gyroscope mode');
+    } else {
       setSensorMode(null);
-      console.log('❌ No sensors available');
+      console.log('❌ No sensor permissions available');
     }
-  }, [gyroPermission, gyroAvailable, gyro, orientation, orientationPermission]);
+  }, [orientationPermission, gyroPermission, gyroAvailable]);
 
   // Refs to access current sensor values without causing re-renders
   const sensorDataRef = useRef({ yaw: 0, pitch: 0 });
@@ -434,6 +421,19 @@ export const ARMicrobeCanvas = ({
       const now = Date.now();
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
+
+      // One-time initialization: if we have a sensor mode but sensorDataRef is still zero, initialize it
+      if (sensorMode && sensorDataRef.current.yaw === 0 && sensorDataRef.current.pitch === 0) {
+        if (sensorMode === 'orientation' && orientation.current.alpha !== null) {
+          sensorDataRef.current.yaw = ((orientation.current.alpha || 0) * Math.PI) / 180;
+          sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((orientation.current.beta || 0) * Math.PI) / 180));
+          console.log('🎬 INITIALIZED sensorDataRef from orientation:', orientation.current.alpha, orientation.current.beta);
+        } else if (sensorMode === 'gyroscope' && gyro.current.alpha !== null) {
+          sensorDataRef.current.yaw = ((gyro.current.alpha || 0) * Math.PI) / 180;
+          sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((gyro.current.beta || 0) * Math.PI) / 180));
+          console.log('🎬 INITIALIZED sensorDataRef from gyroscope:', gyro.current.alpha, gyro.current.beta);
+        }
+      }
 
       // Update sensorDataRef with latest sensor values - PRIORITIZE DeviceOrientation
       if (sensorMode === 'orientation' && orientation.current.alpha !== null && orientation.current.beta !== null) {
