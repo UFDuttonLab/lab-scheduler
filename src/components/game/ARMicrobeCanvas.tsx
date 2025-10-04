@@ -269,7 +269,7 @@ export const ARMicrobeCanvas = ({
 
   // Spawn logic - stable interval that doesn't recreate constantly
   useEffect(() => {
-    if (isPaused || !sensorMode) return;
+    if (isPaused) return;
 
     const spawnInterval = 2000;
     console.log('🎯 Spawn interval STARTED');
@@ -278,7 +278,7 @@ export const ARMicrobeCanvas = ({
       console.log('🔴 SPAWN CHECK - Count:', microbeCountRef.current, 'isPaused:', isPaused);
       // Use ref to get current count without closure issues
       if (microbeCountRef.current < 10) {
-        const cameraYaw = sensorDataRef.current.yaw;
+        const cameraYaw = sensorDataRef.current.yaw || 0;
         console.log('🎯 Spawning at count:', microbeCountRef.current, 'yaw:', cameraYaw);
         spawnMicrobe(cameraYaw);
       }
@@ -288,7 +288,7 @@ export const ARMicrobeCanvas = ({
       console.log('🎯 Spawn interval STOPPED');
       clearInterval(interval);
     };
-  }, [isPaused, sensorMode, spawnMicrobe]);
+  }, [isPaused, spawnMicrobe]);
 
   // Power-up spawn logic
   useEffect(() => {
