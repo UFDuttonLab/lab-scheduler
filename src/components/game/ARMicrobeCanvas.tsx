@@ -588,24 +588,17 @@ export const ARMicrobeCanvas = ({
         }
       });
 
-      // Update and render power-ups (keep simple fixed positioning for now)
-      setPowerUps((prev) => {
-        return prev.filter((powerUp) => {
-          const age = (now - powerUp.spawnTime) / 1000;
-          if (age > 15) return false;
+      // Render power-ups (filtering happens in separate useEffect)
+      powerUps.forEach((powerUp) => {
+        const scale = 1 / -powerUp.z;
+        const screenX = centerX + powerUp.x * scale * 300;
+        const screenY = centerY + powerUp.y * scale * 300;
 
-          const scale = 1 / -powerUp.z;
-          const screenX = centerX + powerUp.x * scale * 300;
-          const screenY = centerY + powerUp.y * scale * 300;
-
-          ctx.font = "40px Arial";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          const emoji = { freeze: "❄️", rapid: "⚡", double: "✨", shield: "🛡️" }[powerUp.type];
-          ctx.fillText(emoji, screenX, screenY);
-
-          return true;
-        });
+        ctx.font = "40px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const emoji = { freeze: "❄️", rapid: "⚡", double: "✨", shield: "🛡️" }[powerUp.type];
+        ctx.fillText(emoji, screenX, screenY);
       });
 
       // Update and render particles in-place (no reassignment!)
@@ -720,20 +713,10 @@ export const ARMicrobeCanvas = ({
 
     animationFrameRef.current = requestAnimationFrame(render);
 
-    // Handle window resize
-    const handleResize = () => {
-      if (canvas) {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-      }
-    };
-    window.addEventListener('resize', handleResize);
-
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
-      window.removeEventListener('resize', handleResize);
     };
   }, [isPaused]); // ONLY isPaused - everything else uses refs or fresh reads
 
@@ -941,21 +924,20 @@ export const ARMicrobeCanvas = ({
     return () => clearInterval(checkExpiration);
   }, [activePowerUp]);
 
+  // Power-up expiration check (moved from render loop)
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (isPaused) return;
 
-    // Set canvas size to window size
-    const handleResize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
+    const expirationInterval = setInterval(() => {
+      const now = Date.now();
+      setPowerUps((prev) => prev.filter((powerUp) => {
+        const age = (now - powerUp.spawnTime) / 1000;
+        return age <= 15; // Remove after 15 seconds
+      }));
+    }, 1000); // Check every second
 
-    handleResize();
-    window.addEventListener("resize", handleResize);
-
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
+    return () => clearInterval(expirationInterval);
+  }, [isPaused]);
 
   return (
     <>
