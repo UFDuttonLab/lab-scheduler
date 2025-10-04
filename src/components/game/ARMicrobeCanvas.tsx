@@ -786,36 +786,40 @@ export const ARMicrobeCanvas = ({
         const { microbe, screenX, screenY } = closestMicrobe;
         console.log('🎯 HIT! Microbe:', microbe.type, 'at screen:', screenX.toFixed(0), screenY.toFixed(0), 'Distance from crosshair:', minDistance.toFixed(1), 'px');
         
+        // Collect particles to add AFTER state update
+        let particlesToAdd: Particle[] = [];
+        let microbeEliminated = false;
+        
         setMicrobes((prev) => {
           return prev.map((m) => {
             if (m.id !== microbe.id) return m;
 
             const newHealth = m.health - 1;
 
-            // Create hit particles
-            const newParticles: Particle[] = Array.from({ length: 10 }, () => ({
+            // Collect hit particles (don't set state yet!)
+            particlesToAdd.push(...Array.from({ length: 10 }, () => ({
               x: screenX,
               y: screenY,
               vx: (Math.random() - 0.5) * 5,
               vy: (Math.random() - 0.5) * 5,
               life: 1,
               color: getMicrobeColor(m.type),
-            }));
-            setParticles((prev) => [...prev, ...newParticles]);
+            })));
 
             if (newHealth <= 0) {
-              // Create BIG explosion particles on death
-              const explosionParticles: Particle[] = Array.from({ length: 40 }, () => ({
+              microbeEliminated = true;
+              
+              // Collect BIG explosion particles (50 total for big explosion effect!)
+              particlesToAdd.push(...Array.from({ length: 40 }, () => ({
                 x: screenX,
                 y: screenY,
                 vx: (Math.random() - 0.5) * 12,
                 vy: (Math.random() - 0.5) * 12,
                 life: 1.5,
                 color: getMicrobeColor(m.type),
-              }));
-              setParticles((prev) => [...prev, ...explosionParticles]);
+              })));
 
-              // Microbe eliminated
+              // Microbe eliminated - update score and combo
               const newCombo = combo + 1;
               const comboMultiplier = 1 + Math.floor(newCombo / 5) * 0.5;
               const pointsEarned = Math.floor(
@@ -833,12 +837,18 @@ export const ARMicrobeCanvas = ({
               lastComboTimeRef.current = Date.now();
               onMicrobeEliminated();
 
-              return null;
+              return null; // Remove microbe
             }
 
             return { ...m, health: newHealth };
           }).filter(Boolean) as Microbe[];
         });
+        
+        // NOW add all particles AFTER microbe state is updated
+        if (particlesToAdd.length > 0) {
+          setParticles(prev => [...prev, ...particlesToAdd]);
+          console.log('💥 Added', particlesToAdd.length, 'particles!', microbeEliminated ? '(BIG EXPLOSION!)' : '(hit)');
+        }
       } else {
         console.log('❌ NO HIT - Microbes:', microbes.length, 'Center:', centerX, centerY, 'Yaw:', (cameraYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (cameraPitch * 180 / Math.PI).toFixed(1), '°');
       }
