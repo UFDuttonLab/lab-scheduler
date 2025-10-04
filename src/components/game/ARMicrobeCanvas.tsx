@@ -458,35 +458,91 @@ export const ARMicrobeCanvas = ({
         console.log('🎨 Render loop active - Microbes:', microbes.length, 'Visible on canvas');
       }
 
-      // SIMPLIFIED TEST: Draw static circles at fixed positions
-      const testPositions = [
-        { x: centerX, y: centerY, color: '#ff0000' }, // Center - Red
-        { x: centerX - 150, y: centerY - 150, color: '#00ff00' }, // Top-left - Green
-        { x: centerX + 150, y: centerY - 150, color: '#0000ff' }, // Top-right - Blue
-        { x: centerX - 150, y: centerY + 150, color: '#ffff00' }, // Bottom-left - Yellow
-        { x: centerX + 150, y: centerY + 150, color: '#ff00ff' }, // Bottom-right - Magenta
-      ];
+      // Debug counters
+      let totalMicrobes = microbes.length;
+      let passedDepthCheck = 0;
+      let passedBoundsCheck = 0;
+      let rendered = 0;
 
-      testPositions.forEach(pos => {
-        // Draw dark background circle for contrast
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 28, 0, Math.PI * 2);
-        ctx.fill();
+      // Render microbes with bounds checking
+      microbes.forEach((microbe) => {
+        // Transform world position to camera-relative view space
+        const viewX = microbe.worldX - cameraWorldPosRef.current.x;
+        const viewY = microbe.worldY - cameraWorldPosRef.current.y;
+        const viewZ = microbe.worldZ - cameraWorldPosRef.current.z;
+
+        // Rotate world space to camera view space
+        const cosYaw = Math.cos(cameraYaw);
+        const sinYaw = Math.sin(cameraYaw);
+        const rotatedX = viewX * cosYaw - viewZ * sinYaw;
+        const rotatedZ = viewX * sinYaw + viewZ * cosYaw;
         
-        // Draw main colored circle
-        ctx.fillStyle = pos.color;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 25, 0, Math.PI * 2);
-        ctx.fill();
+        // Apply pitch rotation
+        const cosPitch = Math.cos(cameraPitch);
+        const sinPitch = Math.sin(cameraPitch);
+        const finalY = viewY * cosPitch - rotatedZ * sinPitch;
+        const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
+
+        // Add wobble
+        const wobbleOffset = Math.sin(microbe.wobble) * 0.05;
+
+        // Project to screen
+        const depth = Math.abs(finalZ);
+        const fov = 1200;
+        const screenX = centerX + (rotatedX / depth) * fov + wobbleOffset * 50;
+        const screenY = centerY + (finalY / depth) * fov;
         
-        // Add white outline
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 25, 0, Math.PI * 2);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 3;
-        ctx.stroke();
+        const scale = Math.min(300 / depth, 8);
+        const size = microbe.size * scale;
+
+        // Check depth range
+        if (depth >= 5 && depth <= 130) {
+          passedDepthCheck++;
+          
+          // Check bounds (with 100px margin)
+          if (screenX >= -100 && screenX <= canvas.width + 100 && 
+              screenY >= -100 && screenY <= canvas.height + 100) {
+            passedBoundsCheck++;
+            
+            const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
+            
+            // Draw dark background circle
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, (size / 2) + 4, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw main colored circle
+            const circleColor = distanceFromCrosshair < 120 ? 'rgba(0, 255, 0, 1.0)' : 
+                                distanceFromCrosshair < 150 ? 'rgba(255, 255, 0, 1.0)' : 
+                                'rgba(255, 0, 0, 1.0)';
+            ctx.fillStyle = circleColor;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Add white outline
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            rendered++;
+          }
+        }
       });
+
+      // Draw debug info
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '16px monospace';
+      ctx.fillText(`Total: ${totalMicrobes} | Depth: ${passedDepthCheck} | Bounds: ${passedBoundsCheck} | Rendered: ${rendered}`, 10, 30);
+      
+      // Draw test circle at center for reference
+      ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 25, 0, Math.PI * 2);
+      ctx.fill();
 
       // Update and render power-ups (keep simple fixed positioning for now)
       setPowerUps((prev) => {
