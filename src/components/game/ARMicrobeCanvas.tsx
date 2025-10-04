@@ -74,6 +74,8 @@ export const ARMicrobeCanvas = ({
   const [showDebug] = useState(true); // Enabled for debugging
   const [sensorMode, setSensorMode] = useState<'gyroscope' | 'orientation' | 'touch'>('touch');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [showPermissionOverlay, setShowPermissionOverlay] = useState(true);
+  const [permissionStatus, setPermissionStatus] = useState("");
   const [cameraWorldPos] = useState({ x: 0, y: 0, z: 0 }); // Camera stays at origin
   const lastComboTimeRef = useRef<number>(Date.now());
   const gameStartTimeRef = useRef<number>(Date.now());
@@ -196,6 +198,33 @@ export const ARMicrobeCanvas = ({
     setPowerUps((prev) => [...prev, powerUp]);
   }, []);
 
+  // Handle permission request from canvas
+  const handleRequestPermissions = async () => {
+    setPermissionStatus("Requesting sensor permissions...");
+    console.log('🔐 Requesting permissions from canvas...');
+    
+    const gyroGranted = await gyro.requestPermission();
+    const orientationGranted = await orientation.requestPermission();
+
+    console.log('🔐 Canvas permission results:', { gyroGranted, orientationGranted });
+
+    if (gyroGranted || orientationGranted) {
+      setPermissionStatus("✅ Permissions granted! Sensors active.");
+      // Wait for sensor data to flow before hiding overlay
+      setTimeout(() => {
+        if (gyro.alpha !== null || orientation.alpha !== null) {
+          setShowPermissionOverlay(false);
+        } else {
+          setPermissionStatus("⚠️ Sensors not responding. Using touch controls.");
+          setTimeout(() => setShowPermissionOverlay(false), 2000);
+        }
+      }, 1000);
+    } else {
+      setPermissionStatus("⚠️ Touch controls enabled.");
+      setTimeout(() => setShowPermissionOverlay(false), 2000);
+    }
+  };
+
   // Determine which sensor mode to use with smart fallback
   useEffect(() => {
     const now = Date.now();
@@ -204,7 +233,7 @@ export const ARMicrobeCanvas = ({
     if (gyro.permissionGranted && gyro.sensorAvailable && gyro.alpha !== null) {
       setSensorMode('gyroscope');
       setUseTouchMode(false);
-      console.log('✅ Using GYROSCOPE API mode');
+      console.log('✅ Using GYROSCOPE API mode - alpha:', gyro.alpha);
       lastDataCheckRef.current = now;
       return;
     }
@@ -213,7 +242,7 @@ export const ARMicrobeCanvas = ({
     if (orientation.permissionGranted && orientation.alpha !== null) {
       setSensorMode('orientation');
       setUseTouchMode(false);
-      console.log('✅ Using DEVICE ORIENTATION mode');
+      console.log('✅ Using DEVICE ORIENTATION mode - alpha:', orientation.alpha);
       lastDataCheckRef.current = now;
       return;
     }
@@ -330,29 +359,45 @@ export const ARMicrobeCanvas = ({
       cameraWorldPos.x = Math.sin(cameraYaw) * 0.1;
       cameraWorldPos.z = -Math.cos(cameraYaw) * 0.1;
 
-      // Debug logging every second
-      if (showDebug && now % 1000 < 16) {
-        const visibleCount = microbes.filter(m => {
+      // ENHANCED DEBUG LOGGING - Log all microbe finalZ values
+      if (showDebug) {
+        const microbeDebugData = microbes.map(m => {
           const viewX = m.worldX - cameraWorldPos.x;
           const viewY = m.worldY - cameraWorldPos.y;
           const viewZ = m.worldZ - cameraWorldPos.z;
           
           const cosYaw = Math.cos(-cameraYaw);
           const sinYaw = Math.sin(-cameraYaw);
-          const rotatedZ = viewZ * cosYaw - viewX * sinYaw;
+          const rotatedX = viewX * cosYaw - viewZ * sinYaw;
+          const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
           
-          return rotatedZ < 0; // In front of camera
-        }).length;
+          const cosPitch = Math.cos(-cameraPitch);
+          const sinPitch = Math.sin(-cameraPitch);
+          const finalY = viewY * cosPitch - rotatedZ * sinPitch;
+          const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
+          
+          return {
+            id: m.id.substring(8, 16),
+            worldPos: `(${m.worldX.toFixed(2)}, ${m.worldY.toFixed(2)}, ${m.worldZ.toFixed(2)})`,
+            finalZ: finalZ.toFixed(2),
+            inFront: finalZ < 0
+          };
+        });
         
-        console.log('📊 AR Debug:', {
+        const visibleCount = microbeDebugData.filter(m => m.inFront).length;
+        
+        console.log('📊 ENHANCED AR Debug:', {
           sensorMode: activeSensorData?.type || 'None',
+          sensorRawData: activeSensorData,
           camera: {
             yaw: (cameraYaw * 180 / Math.PI).toFixed(1) + '°',
-            pitch: (cameraPitch * 180 / Math.PI).toFixed(1) + '°'
+            pitch: (cameraPitch * 180 / Math.PI).toFixed(1) + '°',
+            worldPos: `(${cameraWorldPos.x.toFixed(2)}, ${cameraWorldPos.y.toFixed(2)}, ${cameraWorldPos.z.toFixed(2)})`
           },
           microbes: {
             total: microbes.length,
-            visible: visibleCount
+            visible: visibleCount,
+            details: microbeDebugData
           }
         });
       }
@@ -426,13 +471,15 @@ export const ARMicrobeCanvas = ({
 
             // Skip rendering if behind camera (negative Z = in front, positive Z = behind)
             if (finalZ >= 0) {
-              if (showDebug && Math.random() < 0.01) {
-                console.log('❌ Microbe behind camera:', {
-                  id: microbe.id,
-                  worldPos: `(${newWorldX.toFixed(2)}, ${newWorldY.toFixed(2)}, ${newWorldZ.toFixed(2)})`,
-                  finalZ: finalZ.toFixed(2)
-                });
-              }
+              console.log('❌ Microbe CULLED (behind camera):', {
+                id: microbe.id.substring(8, 16),
+                worldPos: `(${newWorldX.toFixed(2)}, ${newWorldY.toFixed(2)}, ${newWorldZ.toFixed(2)})`,
+                viewPos: `(${viewX.toFixed(2)}, ${viewY.toFixed(2)}, ${viewZ.toFixed(2)})`,
+                afterYawRot: `(${rotatedX.toFixed(2)}, ${rotatedZ.toFixed(2)})`,
+                finalZ: finalZ.toFixed(2),
+                cameraYaw: (cameraYaw * 180 / Math.PI).toFixed(1) + '°',
+                cameraPitch: (cameraPitch * 180 / Math.PI).toFixed(1) + '°'
+              });
               return null;
             }
             
@@ -449,16 +496,17 @@ export const ARMicrobeCanvas = ({
             const scale = 1000 / depth;
             const size = microbe.size * scale;
 
-            // Debug successful render (log occasionally)
-            if (Math.random() < 0.05) {
-              console.log('✅ Rendering microbe:', {
-                id: microbe.id,
-                worldPos: `(${newWorldX.toFixed(2)}, ${newWorldY.toFixed(2)}, ${newWorldZ.toFixed(2)})`,
-                finalZ: finalZ.toFixed(2),
-                depth: depth.toFixed(2),
-                screenPos: `(${screenX.toFixed(0)}, ${screenY.toFixed(0)})`
-              });
-            }
+            // Debug successful render (log ALL renders now)
+            console.log('✅ RENDERING microbe:', {
+              id: microbe.id.substring(8, 16),
+              worldPos: `(${newWorldX.toFixed(2)}, ${newWorldY.toFixed(2)}, ${newWorldZ.toFixed(2)})`,
+              viewPos: `(${viewX.toFixed(2)}, ${viewY.toFixed(2)}, ${viewZ.toFixed(2)})`,
+              afterYawRot: `(${rotatedX.toFixed(2)}, ${rotatedZ.toFixed(2)})`,
+              finalZ: finalZ.toFixed(2),
+              depth: depth.toFixed(2),
+              screenPos: `(${screenX.toFixed(0)}, ${screenY.toFixed(0)})`,
+              size: size.toFixed(1)
+            });
 
             // Render microbe
             ctx.save();
@@ -820,6 +868,49 @@ export const ARMicrobeCanvas = ({
 
   return (
     <>
+      {/* Permission Request Overlay */}
+      {showPermissionOverlay && (
+        <div className="absolute inset-0 bg-black/90 flex items-center justify-center z-50 pointer-events-auto">
+          <div className="bg-background/95 rounded-lg p-8 max-w-md mx-4 text-center space-y-4">
+            <h2 className="text-2xl font-bold">🎯 Ready to Play?</h2>
+            <p className="text-muted-foreground">
+              Request sensor permissions for the best experience, or use touch controls.
+            </p>
+            
+            {permissionStatus && (
+              <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-sm">
+                {permissionStatus}
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Button onClick={handleRequestPermissions} className="w-full" size="lg">
+                Request Sensor Permissions
+              </Button>
+              <Button 
+                onClick={() => {
+                  setShowPermissionOverlay(false);
+                  setUseTouchMode(true);
+                  setSensorMode('touch');
+                }} 
+                variant="outline" 
+                className="w-full"
+              >
+                Use Touch Controls
+              </Button>
+            </div>
+            
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p>Gyroscope: {gyro.sensorAvailable ? "✅" : "❌"}</p>
+              <p>Gyroscope Perm: {gyro.permissionGranted ? "✅" : "❌"}</p>
+              <p>Gyroscope Data: {gyro.alpha !== null ? "✅ " + gyro.alpha.toFixed(1) + "°" : "❌"}</p>
+              <p>Orientation Perm: {orientation.permissionGranted ? "✅" : "❌"}</p>
+              <p>Orientation Data: {orientation.alpha !== null ? "✅ " + orientation.alpha.toFixed(1) + "°" : "❌"}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <canvas
         ref={canvasRef}
         onTouchStart={handleTouchMove}
@@ -831,8 +922,40 @@ export const ARMicrobeCanvas = ({
         className="absolute inset-0 w-full h-full touch-none"
         style={{ width: "100%", height: "100%" }}
       />
+
+      {/* Real-time Debug Overlay - Always Visible */}
+      {showDebug && !showPermissionOverlay && (
+        <div className="absolute top-4 left-4 bg-black/80 text-white p-3 rounded-lg text-xs font-mono max-w-xs z-40 pointer-events-none">
+          <h3 className="font-bold mb-2 text-yellow-400">Live Sensor Data</h3>
+          <div className="space-y-1">
+            <p className="text-green-400">Active: {sensorMode.toUpperCase()}</p>
+            {sensorMode === 'gyroscope' && (
+              <>
+                <p>Gyro α: {gyro.alpha?.toFixed(1) ?? "null"}°</p>
+                <p>Gyro β: {gyro.beta?.toFixed(1) ?? "null"}°</p>
+                <p>Gyro γ: {gyro.gamma?.toFixed(1) ?? "null"}°</p>
+              </>
+            )}
+            {sensorMode === 'orientation' && (
+              <>
+                <p>Orient α: {orientation.alpha?.toFixed(1) ?? "null"}°</p>
+                <p>Orient β: {orientation.beta?.toFixed(1) ?? "null"}°</p>
+                <p>Orient γ: {orientation.gamma?.toFixed(1) ?? "null"}°</p>
+              </>
+            )}
+            {sensorMode === 'touch' && (
+              <>
+                <p>Yaw: {(touchRotation.yaw * 180 / Math.PI).toFixed(1)}°</p>
+                <p>Pitch: {(touchRotation.pitch * 180 / Math.PI).toFixed(1)}°</p>
+              </>
+            )}
+            <p className="text-blue-400 mt-2">Microbes: {microbes.length}</p>
+            <p className="text-purple-400">Score: {score}</p>
+          </div>
+        </div>
+      )}
       
-      {/* Sensor diagnostics panel */}
+      {/* Sensor diagnostics panel (expandable) */}
       {showDiagnostics && (
         <div className="absolute top-4 right-4 bg-black/90 text-white p-4 rounded-lg text-sm max-w-sm z-50">
           <div className="flex items-center justify-between mb-3">
@@ -893,6 +1016,14 @@ export const ARMicrobeCanvas = ({
       
       {/* Control buttons */}
       <div className="absolute bottom-24 left-4 flex flex-col gap-2 z-40">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setShowDiagnostics(!showDiagnostics)}
+          className="opacity-70 hover:opacity-100"
+        >
+          {showDiagnostics ? "Hide" : "Show"} Full Diagnostics
+        </Button>
         <Button
           size="sm"
           variant="secondary"
