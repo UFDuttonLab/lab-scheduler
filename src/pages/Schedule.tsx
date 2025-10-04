@@ -7,6 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -40,6 +50,8 @@ const Schedule = () => {
   // Shake detection for AR game unlock
   const [shakeProgress, setShakeProgress] = useState(0);
   const shakeStartTimeRef = useRef<number | null>(null);
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+  const [isShakeDetectionActive, setIsShakeDetectionActive] = useState(true);
   const { isShaking, requestPermission: requestMotionPermission } = useDeviceMotion(15);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [bookingDate, setBookingDate] = useState<Date | undefined>(new Date());
@@ -74,8 +86,12 @@ const Schedule = () => {
     requestMotionPermission();
   }, []);
 
+  const isARUnlocked = sessionStorage.getItem('arMicrobeUnlocked') === 'true';
+
   // Shake detection logic
   useEffect(() => {
+    if (!isShakeDetectionActive || isARUnlocked) return;
+
     if (isShaking) {
       if (shakeStartTimeRef.current === null) {
         shakeStartTimeRef.current = Date.now();
@@ -87,16 +103,10 @@ const Schedule = () => {
       
       if (progress >= 100) {
         sessionStorage.setItem('arMicrobeUnlocked', 'true');
-        toast.success('🦠 AR Microbe Shooter Unlocked!', {
-          description: 'Tap to play now!',
-          action: {
-            label: 'Play Now',
-            onClick: () => navigate('/ar-microbe-shooter')
-          },
-          duration: 10000,
-        });
+        setShowUnlockDialog(true);
         setShakeProgress(0);
         shakeStartTimeRef.current = null;
+        setIsShakeDetectionActive(false);
       }
     } else {
       // Reset if user stops shaking
@@ -110,7 +120,7 @@ const Schedule = () => {
         }
       }
     }
-  }, [isShaking, navigate]);
+  }, [isShaking, navigate, isShakeDetectionActive, isARUnlocked]);
 
   // Pre-select equipment if passed via URL, but don't auto-open dialog
   useEffect(() => {
@@ -645,12 +655,37 @@ const Schedule = () => {
       {isARGameUnlocked && (
         <Button
           onClick={() => navigate('/ar-microbe-shooter')}
-          className="fixed bottom-20 right-4 z-40 h-14 w-14 rounded-full shadow-lg animate-pulse"
+          className="fixed bottom-20 right-4 z-40 h-16 w-16 rounded-full shadow-2xl animate-pulse bg-gradient-to-r from-primary to-primary/80 hover:from-primary hover:to-primary/90 border-2 border-primary-foreground/20"
           size="icon"
         >
-          <span className="text-2xl">🦠</span>
+          <span className="text-3xl">🦠</span>
         </Button>
       )}
+      
+      {/* AR Game Unlock Dialog */}
+      <AlertDialog open={showUnlockDialog} onOpenChange={setShowUnlockDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-2xl text-center">
+              🦠 Secret AR Game Unlocked!
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-center text-base">
+              You've discovered the AR Microbe Shooter game! Use your device's camera and motion sensors to blast microbes in augmented reality.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel onClick={() => setShowUnlockDialog(false)}>
+              Play Later
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              setShowUnlockDialog(false);
+              navigate('/ar-microbe-shooter');
+            }}>
+              Play Now
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       
       <Navigation />
       
