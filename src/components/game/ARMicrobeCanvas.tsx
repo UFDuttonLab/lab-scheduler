@@ -248,19 +248,6 @@ export const ARMicrobeCanvas = ({
   const microbeCountRef = useRef(0);
   const removedMicrobesRef = useRef<Set<string>>(new Set());
 
-  // Update refs when sensor data changes - PRIORITIZE DeviceOrientation for absolute positioning
-  useEffect(() => {
-    // Always prefer orientation over gyroscope if available
-    if (sensorMode === 'orientation' && orientation.current.alpha !== null && orientation.current.beta !== null) {
-      // DeviceOrientation gives ABSOLUTE angles - no drift! Use ALPHA for 360° yaw (use directly, no normalization)
-      sensorDataRef.current.yaw = ((orientation.current.alpha || 0) * Math.PI) / 180;
-      sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((orientation.current.beta || 0) * Math.PI) / 180));
-    } else if (sensorMode === 'gyroscope' && gyro.current.alpha !== null && gyro.current.beta !== null) {
-      // Gyroscope fallback (accumulated angles - may drift) - also use alpha (use directly, no normalization)
-      sensorDataRef.current.yaw = ((gyro.current.alpha || 0) * Math.PI) / 180;
-      sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((gyro.current.beta || 0) * Math.PI) / 180));
-    }
-  }, [orientation, gyro, sensorMode]);
 
   // Update microbe count ref
   useEffect(() => {
@@ -447,6 +434,15 @@ export const ARMicrobeCanvas = ({
       const now = Date.now();
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
+
+      // Update sensorDataRef with latest sensor values - PRIORITIZE DeviceOrientation
+      if (sensorMode === 'orientation' && orientation.current.alpha !== null && orientation.current.beta !== null) {
+        sensorDataRef.current.yaw = ((orientation.current.alpha || 0) * Math.PI) / 180;
+        sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((orientation.current.beta || 0) * Math.PI) / 180));
+      } else if (sensorMode === 'gyroscope' && gyro.current.alpha !== null && gyro.current.beta !== null) {
+        sensorDataRef.current.yaw = ((gyro.current.alpha || 0) * Math.PI) / 180;
+        sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((gyro.current.beta || 0) * Math.PI) / 180));
+      }
 
       // Camera control - use sensor data from ref for consistency
       const cameraYaw = sensorDataRef.current.yaw;
