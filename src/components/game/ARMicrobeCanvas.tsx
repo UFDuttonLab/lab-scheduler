@@ -72,7 +72,7 @@ export const ARMicrobeCanvas = ({
   const [touchRotation, setTouchRotation] = useState({ yaw: 0, pitch: 0 });
   const [lastTouch, setLastTouch] = useState<{ x: number; y: number } | null>(null);
   const [useTouchMode, setUseTouchMode] = useState(false);
-  const [showDebug, setShowDebug] = useState(true); // Enabled for debugging
+  const [showDebug, setShowDebug] = useState(false); // Hidden by default
   const [sensorMode, setSensorMode] = useState<'gyroscope' | 'orientation' | 'touch'>('touch');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [showPermissionOverlay, setShowPermissionOverlay] = useState(true); // Show on game start
@@ -201,26 +201,18 @@ export const ARMicrobeCanvas = ({
 
     console.log('🔐 Canvas permission results:', { gyroGranted, orientationGranted });
 
-    // Force hide overlay after 3 seconds max to prevent stuck state
-    setTimeout(() => {
-      console.log('⏰ Force hiding permission overlay after timeout');
-      setShowPermissionOverlay(false);
-    }, 3000);
-
+    // Hide overlay immediately after permission handling
+    setShowPermissionOverlay(false);
+    
     if (gyroGranted || orientationGranted) {
-      setPermissionStatus("✅ Permissions granted! Sensors active.");
-      // Wait for sensor data to flow before hiding overlay
-      setTimeout(() => {
-        if (gyro.alpha !== null || orientation.alpha !== null) {
-          setShowPermissionOverlay(false);
-        } else {
-          setPermissionStatus("⚠️ Sensors not responding. Using touch controls.");
-          setTimeout(() => setShowPermissionOverlay(false), 2000);
-        }
-      }, 1000);
+      toast.success("Sensors active! Look around to see microbes.");
+      // Spawn initial microbes immediately
+      const initialYaw = gyro.alpha ? (gyro.alpha * Math.PI) / 180 : 0;
+      for (let i = 0; i < 5; i++) {
+        setTimeout(() => spawnMicrobe(initialYaw + (Math.random() - 0.5) * Math.PI), i * 100);
+      }
     } else {
-      setPermissionStatus("⚠️ Touch controls enabled.");
-      setTimeout(() => setShowPermissionOverlay(false), 2000);
+      toast.info("Using touch controls - drag to look around");
     }
   };
 
@@ -379,47 +371,9 @@ export const ARMicrobeCanvas = ({
       cameraWorldPos.x = Math.sin(cameraYaw) * 0.1;
       cameraWorldPos.z = -Math.cos(cameraYaw) * 0.1;
 
-      // ENHANCED DEBUG LOGGING - Log all microbe finalZ values
-      if (showDebug) {
-        const microbeDebugData = microbes.map(m => {
-          const viewX = m.worldX - cameraWorldPos.x;
-          const viewY = m.worldY - cameraWorldPos.y;
-          const viewZ = m.worldZ - cameraWorldPos.z;
-          
-          const cosYaw = Math.cos(-cameraYaw);
-          const sinYaw = Math.sin(-cameraYaw);
-          const rotatedX = viewX * cosYaw - viewZ * sinYaw;
-          const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
-          
-          const cosPitch = Math.cos(-cameraPitch);
-          const sinPitch = Math.sin(-cameraPitch);
-          const finalY = viewY * cosPitch - rotatedZ * sinPitch;
-          const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
-          
-          return {
-            id: m.id.substring(8, 16),
-            worldPos: `(${m.worldX.toFixed(2)}, ${m.worldY.toFixed(2)}, ${m.worldZ.toFixed(2)})`,
-            finalZ: finalZ.toFixed(2),
-            inFront: finalZ < 0
-          };
-        });
-        
-        const visibleCount = microbeDebugData.filter(m => m.inFront).length;
-        
-        console.log('📊 ENHANCED AR Debug:', {
-          sensorMode: activeSensorData?.type || 'None',
-          sensorRawData: activeSensorData,
-          camera: {
-            yaw: (cameraYaw * 180 / Math.PI).toFixed(1) + '°',
-            pitch: (cameraPitch * 180 / Math.PI).toFixed(1) + '°',
-            worldPos: `(${cameraWorldPos.x.toFixed(2)}, ${cameraWorldPos.y.toFixed(2)}, ${cameraWorldPos.z.toFixed(2)})`
-          },
-          microbes: {
-            total: microbes.length,
-            visible: visibleCount,
-            details: microbeDebugData
-          }
-        });
+      // Render loop verification logging (reduced frequency)
+      if (now % 3000 < 16) { // Log every 3 seconds
+        console.log('🎨 Render loop active - Microbes:', microbes.length, 'Visible on canvas');
       }
 
       // Update and render microbes with world-space movement
@@ -503,17 +457,11 @@ export const ARMicrobeCanvas = ({
             const scale = 1000 / depth;
             const size = microbe.size * scale;
 
-            // Debug successful render (log ALL renders now)
-            console.log('✅ RENDERING microbe:', {
-              id: microbe.id.substring(8, 16),
-              worldPos: `(${newWorldX.toFixed(2)}, ${newWorldY.toFixed(2)}, ${newWorldZ.toFixed(2)})`,
-              viewPos: `(${viewX.toFixed(2)}, ${viewY.toFixed(2)}, ${viewZ.toFixed(2)})`,
-              afterYawRot: `(${rotatedX.toFixed(2)}, ${rotatedZ.toFixed(2)})`,
-              finalZ: finalZ.toFixed(2),
-              depth: depth.toFixed(2),
-              screenPos: `(${screenX.toFixed(0)}, ${screenY.toFixed(0)})`,
-              size: size.toFixed(1)
-            });
+            // Only render microbes in front of camera
+            if (finalZ >= 0) {
+              console.log('⚠️ Microbe behind camera, skipping render');
+              return { ...microbe, worldX: newWorldX, worldY: newWorldY, worldZ: newWorldZ, wobble: newWobble, opacity };
+            }
 
             // Render microbe
             ctx.save();
@@ -886,12 +834,12 @@ export const ARMicrobeCanvas = ({
             
             <div className="bg-muted/50 rounded-lg p-3 text-xs text-left space-y-2">
               <p className="font-semibold">📱 Sensor Status:</p>
-              <div className="space-y-1">
-                <p className={gyro.sensorAvailable ? "text-green-500" : "text-yellow-500"}>
-                  {gyro.sensorAvailable ? "✅" : "⏳"} Gyroscope
+              <div className="space-y-1 text-muted-foreground">
+                <p>
+                  {gyro.sensorAvailable ? "✅" : "❌"} Gyroscope
                 </p>
-                <p className={orientation.permissionGranted ? "text-green-500" : "text-yellow-500"}>
-                  {orientation.permissionGranted ? "✅" : "⏳"} Orientation
+                <p>
+                  {orientation.permissionGranted ? "✅" : "❌"} Orientation
                 </p>
               </div>
             </div>
@@ -912,6 +860,10 @@ export const ARMicrobeCanvas = ({
                   setUseTouchMode(true);
                   setSensorMode('touch');
                   toast.info("Using touch controls - drag to look around");
+                  // Spawn initial microbes immediately
+                  for (let i = 0; i < 5; i++) {
+                    setTimeout(() => spawnMicrobe(0), i * 100);
+                  }
                 }} 
                 variant="outline" 
                 className="w-full"
@@ -935,127 +887,9 @@ export const ARMicrobeCanvas = ({
         style={{ width: "100%", height: "100%" }}
       />
 
-      {/* Real-time Debug Overlay - Toggle to show/hide */}
-      {showDebug && (
-        <div className="absolute top-4 left-4 bg-black/80 text-white p-3 rounded-lg text-xs font-mono max-w-xs z-40 pointer-events-none">
-          <h3 className="font-bold mb-2 text-yellow-400">Live Sensor Data</h3>
-          <div className="space-y-1">
-            <p className="text-green-400">Active: {sensorMode.toUpperCase()}</p>
-            {sensorMode === 'gyroscope' && (
-              <>
-                <p>Gyro α: {gyro.alpha?.toFixed(1) ?? "null"}°</p>
-                <p>Gyro β: {gyro.beta?.toFixed(1) ?? "null"}°</p>
-                <p>Gyro γ: {gyro.gamma?.toFixed(1) ?? "null"}°</p>
-              </>
-            )}
-            {sensorMode === 'orientation' && (
-              <>
-                <p>Orient α: {orientation.alpha?.toFixed(1) ?? "null"}°</p>
-                <p>Orient β: {orientation.beta?.toFixed(1) ?? "null"}°</p>
-                <p>Orient γ: {orientation.gamma?.toFixed(1) ?? "null"}°</p>
-              </>
-            )}
-            {sensorMode === 'touch' && (
-              <>
-                <p>Yaw: {(touchRotation.yaw * 180 / Math.PI).toFixed(1)}°</p>
-                <p>Pitch: {(touchRotation.pitch * 180 / Math.PI).toFixed(1)}°</p>
-              </>
-            )}
-            <p className="text-blue-400 mt-2">Microbes: {microbes.length}</p>
-            <p className="text-purple-400">Score: {score}</p>
-          </div>
-        </div>
-      )}
-      
-      {/* Sensor diagnostics panel (expandable) */}
-      {showDiagnostics && (
-        <div className="absolute top-4 right-4 bg-black/90 text-white p-4 rounded-lg text-sm max-w-sm z-50">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold">📱 Sensor Diagnostics</h3>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setShowDiagnostics(false)}
-              className="h-6 w-6 p-0"
-            >
-              ✕
-            </Button>
-          </div>
-          
-          <div className="space-y-2 font-mono text-xs">
-            <div className="border-b border-white/20 pb-2">
-              <div className="font-bold text-green-400">Active: {sensorMode.toUpperCase()}</div>
-            </div>
-            
-            <div>
-              <div className="font-semibold">Gyroscope API:</div>
-              <div>Available: {gyro.sensorAvailable ? '✅ Yes' : '❌ No'}</div>
-              <div>Permission: {gyro.permissionGranted === true ? '✅ Granted' : gyro.permissionGranted === false ? '❌ Denied' : '⏳ Unknown'}</div>
-              <div>Data: α={gyro.alpha?.toFixed(1) ?? 'null'} β={gyro.beta?.toFixed(1) ?? 'null'} γ={gyro.gamma?.toFixed(1) ?? 'null'}</div>
-            </div>
-            
-            <div>
-              <div className="font-semibold">DeviceOrientation:</div>
-              <div>Permission: {orientation.permissionGranted === true ? '✅ Granted' : orientation.permissionGranted === false ? '❌ Denied' : '⏳ Unknown'}</div>
-              <div>Data: α={orientation.alpha?.toFixed(1) ?? 'null'} β={orientation.beta?.toFixed(1) ?? 'null'} γ={orientation.gamma?.toFixed(1) ?? 'null'}</div>
-            </div>
-            
-            <div>
-              <div className="font-semibold">Touch Controls:</div>
-              <div>Yaw: {(touchRotation.yaw * 180 / Math.PI).toFixed(1)}°</div>
-              <div>Pitch: {(touchRotation.pitch * 180 / Math.PI).toFixed(1)}°</div>
-            </div>
-            
-            <div className="border-t border-white/20 pt-2">
-              <div>Browser: {navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Other'}</div>
-              <div>HTTPS: {window.isSecureContext ? '✅' : '❌'}</div>
-              <div>Protocol: {window.location.protocol}</div>
-            </div>
-            
-            <Button
-              size="sm"
-              onClick={async () => {
-                await gyro.requestPermission();
-                await orientation.requestPermission();
-              }}
-              className="w-full mt-2"
-            >
-              🔄 Request Permissions
-            </Button>
-          </div>
-        </div>
-      )}
-      
-      {/* Control buttons */}
-      <div className="absolute bottom-24 left-4 flex flex-col gap-2 z-40">
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => setShowDebug(!showDebug)}
-          className="opacity-70 hover:opacity-100"
-        >
-          {showDebug ? "Hide" : "Show"} Sensor Data
-        </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => setShowDiagnostics(!showDiagnostics)}
-          className="opacity-70 hover:opacity-100"
-        >
-          {showDiagnostics ? "Hide" : "Show"} Full Diagnostics
-        </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => {
-            const newTouchMode = !useTouchMode;
-            setUseTouchMode(newTouchMode);
-            setSensorMode(newTouchMode ? 'touch' : (gyro.sensorAvailable ? 'gyroscope' : 'orientation'));
-          }}
-          className="opacity-70 hover:opacity-100"
-        >
-          {sensorMode === 'touch' ? '📱 Touch' : sensorMode === 'gyroscope' ? '🎯 Gyro' : '🔄 Orient'}
-        </Button>
+      {/* Microbe Counter HUD - Always visible */}
+      <div className="absolute top-4 left-4 bg-black/60 text-white px-4 py-2 rounded-lg text-sm font-bold z-40 pointer-events-none">
+        🦠 Microbes Active: {microbes.length}
       </div>
       
       {activePowerUp && <PowerUp type={activePowerUp.type} endTime={activePowerUp.endTime} />}
