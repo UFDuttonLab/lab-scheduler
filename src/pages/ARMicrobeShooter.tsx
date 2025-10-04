@@ -130,18 +130,12 @@ const ARMicrobeShooter = () => {
   }, [navigate, isMobile]);
 
   const startGame = async () => {
-    console.log("🎮 Starting game - requesting permissions first...");
-    
-    // FIX #1: Request permissions BEFORE starting the game
-    const permissionsGranted = await handleRequestPermissions();
-    
     if (!permissionsGranted) {
-      console.error("❌ Cannot start game - permissions not granted");
-      toast.error("Sensor permissions are required to play");
+      toast.error("Please grant permissions first");
       return;
     }
     
-    console.log("✅ Permissions granted - initializing game");
+    console.log("✅ Starting game with permissions already granted");
     // Initialize game state
     setScore(0);
     setLives(3);
@@ -260,13 +254,27 @@ const ARMicrobeShooter = () => {
               <li>Camera access for AR view</li>
               <li>Device orientation for aiming (or use touch controls)</li>
             </ul>
+            {permissionStatus && (
+              <p className="mt-2 font-medium text-center">{permissionStatus}</p>
+            )}
           </div>
           
           <div className="space-y-3">
-            <Button onClick={startGame} size="lg" className="w-full">
-              <Play className="mr-2 h-5 w-5" />
-              Start Game
-            </Button>
+            {!permissionsGranted ? (
+              <Button 
+                onClick={handleRequestPermissions} 
+                size="lg" 
+                className="w-full"
+                disabled={requestingPermissions}
+              >
+                {requestingPermissions ? "⏳ Requesting..." : "🔐 Grant Permissions"}
+              </Button>
+            ) : (
+              <Button onClick={startGame} size="lg" className="w-full">
+                <Play className="mr-2 h-5 w-5" />
+                Start Game
+              </Button>
+            )}
             <Button onClick={() => setShowLeaderboard(!showLeaderboard)} variant="outline" className="w-full">
               <Trophy className="mr-2 h-4 w-4" />
               {showLeaderboard ? "Hide Leaderboard" : "View Leaderboard"}
@@ -405,14 +413,14 @@ const ARMicrobeShooter = () => {
         )}
       </div>
 
-      {/* Controls */}
-      <div className="absolute bottom-4 right-4 flex gap-2 pointer-events-auto z-20">
+      {/* Controls - PHASE 2 FIX: Higher z-index than canvas to receive clicks */}
+      <div className="absolute bottom-4 right-4 flex gap-2 pointer-events-auto z-40">
         <Button onClick={pauseGame} size="icon" variant="secondary" className="rounded-full h-12 w-12">
           <Pause className="h-6 w-6" />
         </Button>
       </div>
 
-      <div className="absolute bottom-4 left-4 pointer-events-auto z-20">
+      <div className="absolute bottom-4 left-4 pointer-events-auto z-40">
         <div className="bg-black/60 backdrop-blur-sm rounded-lg p-2 text-white text-sm">
           <p>🦠 {microbesEliminated}</p>
         </div>

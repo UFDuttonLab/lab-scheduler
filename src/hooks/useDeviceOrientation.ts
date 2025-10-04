@@ -56,50 +56,7 @@ export const useDeviceOrientation = () => {
     }
   }, []);
 
-  // FIX #1: Auto-detect implicit permission - NO INFINITE LOOP
-  useEffect(() => {
-    // Early return if we've already detected data
-    if (hasDetectedDataRef.current) {
-      console.log('✅ Data already detected, skipping listener setup');
-      return;
-    }
-    
-    const detectDataFlow = (event: DeviceOrientationEvent) => {
-      if (event.alpha !== null || event.beta !== null || event.gamma !== null) {
-        // Force update data immediately
-        orientationRef.current = {
-          alpha: event.alpha,
-          beta: event.beta,
-          gamma: event.gamma,
-        };
-        
-        // Set permission to true ONLY ONCE
-        if (!hasDetectedDataRef.current) {
-          console.log('🚀 FORCE: DeviceOrientation data detected, setting permission to TRUE');
-          hasDetectedDataRef.current = true;
-          setPermissionGranted(true);
-        }
-      }
-    };
-
-    // Only run if permission is not yet determined
-    if (permissionGranted === null) {
-      console.log('👂 FORCE: Implicit detection listener added');
-      window.addEventListener("deviceorientation", detectDataFlow);
-      
-      // Check after 500ms if we got data
-      const timeout = setTimeout(() => {
-        if (!hasDetectedDataRef.current) {
-          console.log('⏱️ FORCE: No automatic sensor data after 500ms, explicit permission required');
-        }
-      }, 500);
-
-      return () => {
-        clearTimeout(timeout);
-        window.removeEventListener("deviceorientation", detectDataFlow);
-      };
-    }
-  }, []); // Empty dependency array - run ONCE on mount
+  // PHASE 1 FIX: Removed implicit detection - permission ONLY granted via explicit requestPermission()
 
   useEffect(() => {
     if (permissionGranted !== true) return;

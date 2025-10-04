@@ -72,7 +72,7 @@ export const ARMicrobeCanvas = ({
   const [showDebug, setShowDebug] = useState(false); // Hidden by default
   const [sensorMode, setSensorMode] = useState<'gyroscope' | 'orientation' | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
-  const [sensorsReady, setSensorsReady] = useState(false); // FIX #5: Track sensor readiness
+  // PHASE 3 FIX: Removed sensorsReady - sensors are ready immediately after permission
   const cameraWorldPosRef = useRef({ x: 0, y: 0, z: 0 }); // Camera stays at origin
   const lastComboTimeRef = useRef<number>(Date.now());
   const gameStartTimeRef = useRef<number>(Date.now());
@@ -233,14 +233,9 @@ export const ARMicrobeCanvas = ({
     microbeCountRef.current = microbes.length;
   }, [microbes.length]);
 
-  // FIX #4 & #5: Spawn logic waits for sensors to be ready
+  // PHASE 3: Spawn logic simplified - no sensor readiness check needed
   useEffect(() => {
-    if (isPaused || !sensorsReady) {
-      if (!sensorsReady) {
-        console.log('⏳ Waiting for sensors to be ready before spawning...');
-      }
-      return;
-    }
+    if (isPaused) return;
 
     const spawnInterval = 2000;
     console.log('🎯 Spawn interval STARTED (sensors ready)');
@@ -257,7 +252,7 @@ export const ARMicrobeCanvas = ({
       console.log('🎯 Spawn interval STOPPED');
       clearInterval(interval);
     };
-  }, [isPaused, sensorsReady]);
+  }, [isPaused]);
 
   // Power-up spawn logic
   useEffect(() => {
@@ -448,33 +443,13 @@ export const ARMicrobeCanvas = ({
         cameraPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((orientation.current.beta || 0) * Math.PI) / 180));
       }
 
-      // FIX #2: Update sensorDataRef for use in spawn/tap handlers
+      // Update sensorDataRef for use in spawn/tap handlers
       sensorDataRef.current = { 
         yaw: cameraYaw, 
         pitch: cameraPitch 
       };
 
-      // FIX #3: More lenient sensor readiness check
-      if (!sensorsReady) {
-        const hasValidData = (
-          Math.abs(cameraYaw) > 0.01 || 
-          Math.abs(cameraPitch) > 0.01 ||
-          (sensorDataRef.current.yaw !== cameraYaw || sensorDataRef.current.pitch !== cameraPitch)
-        );
-        
-        if (hasValidData) {
-          validReadingsRef.current++;
-          if (validReadingsRef.current >= 2) { // Reduced from 3 to 2
-            console.log("🚀 SENSORS READY! 2 consecutive valid readings:", { 
-              yaw: (cameraYaw * 180 / Math.PI).toFixed(2), 
-              pitch: (cameraPitch * 180 / Math.PI).toFixed(2) 
-            });
-            setSensorsReady(true);
-          }
-        } else {
-          validReadingsRef.current = 0; // Reset counter if invalid reading
-        }
-      }
+      // PHASE 3 FIX: Removed sensor readiness check - sensors work immediately after permission
 
       // Continue with existing rendering logic
       let activeSensorData: any = null;
@@ -928,20 +903,7 @@ export const ARMicrobeCanvas = ({
     return () => clearInterval(expirationInterval);
   }, [isPaused]);
 
-  // FIX #6: Fallback timeout for sensor initialization
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (!sensorsReady) {
-        console.warn('⚠️ FORCING sensors ready after 5s timeout');
-        toast.warning('Sensor initialization slow - starting anyway', {
-          description: 'You can still play using touch controls'
-        });
-        setSensorsReady(true);
-      }
-    }, 5000);
-    
-    return () => clearTimeout(timeout);
-  }, [sensorsReady]);
+  // PHASE 3 FIX: Removed sensor readiness timeout - not needed anymore
 
   return (
     <>
@@ -956,19 +918,12 @@ export const ARMicrobeCanvas = ({
 
       {/* HUD - moved to bottom-left to avoid overlap with score/lives */}
       <div className="absolute bottom-4 left-4 text-white text-sm font-mono z-20 pointer-events-none">
-        {!sensorsReady && (
-          <div className="px-3 py-2 bg-yellow-500/90 backdrop-blur-sm rounded-lg font-bold animate-pulse">
-            ⏳ Initializing sensors...
+        <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2">
+          🦠 Microbes: {microbes.length}
+          <div className="mt-1 text-xs text-green-400">
+            📡 {sensorMode === 'gyroscope' ? 'Gyroscope' : sensorMode === 'orientation' ? 'DeviceOrientation' : 'No Sensor'}
           </div>
-        )}
-        {sensorsReady && (
-          <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2">
-            🦠 Microbes: {microbes.length}
-            <div className="mt-1 text-xs text-green-400">
-              📡 {sensorMode === 'gyroscope' ? 'Gyroscope' : sensorMode === 'orientation' ? 'DeviceOrientation' : 'No Sensor'}
-            </div>
-          </div>
-        )}
+        </div>
         {activePowerUp && (
           <div className="mt-2 px-3 py-2 bg-primary/80 backdrop-blur-sm rounded-lg font-bold">
             ⚡ {activePowerUp.type.toUpperCase()} ({Math.ceil((activePowerUp.endTime - Date.now()) / 1000)}s)
