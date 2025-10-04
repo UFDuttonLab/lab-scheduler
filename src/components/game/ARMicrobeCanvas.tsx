@@ -215,20 +215,35 @@ export const ARMicrobeCanvas = ({
     }
   };
 
-  // Determine which sensor mode to use
+  // Determine which sensor mode to use - CHECK REFS instead of permission state
   useEffect(() => {
-    // Set sensor mode based on permissions (not ref values which don't trigger re-renders)
-    if (orientationPermission) {
-      setSensorMode('orientation');
-      console.log('✅ ORIENTATION permission granted, using orientation mode');
-    } else if (gyroPermission && gyroAvailable) {
-      setSensorMode('gyroscope');
-      console.log('✅ GYROSCOPE permission granted, using gyroscope mode');
-    } else {
-      setSensorMode(null);
-      console.log('❌ No sensor permissions available');
-    }
-  }, [orientationPermission, gyroPermission, gyroAvailable]);
+    // Check every 100ms if we have sensor data flowing in the refs
+    const checkInterval = setInterval(() => {
+      // Check if orientation data is flowing
+      if (orientation.current.alpha !== null && orientation.current.beta !== null) {
+        if (sensorMode !== 'orientation') {
+          console.log('✅ SENSOR MODE SET: orientation (data detected in ref)');
+          setSensorMode('orientation');
+        }
+      }
+      // Fallback to gyroscope if available
+      else if (gyro.current.alpha !== null && gyro.current.beta !== null && gyroAvailable) {
+        if (sensorMode !== 'gyroscope') {
+          console.log('✅ SENSOR MODE SET: gyroscope (data detected in ref)');
+          setSensorMode('gyroscope');
+        }
+      }
+      // No sensor data
+      else {
+        if (sensorMode !== null) {
+          console.log('❌ SENSOR MODE SET: null (no data in refs)');
+          setSensorMode(null);
+        }
+      }
+    }, 100);
+
+    return () => clearInterval(checkInterval);
+  }, [sensorMode, gyroAvailable]);
 
   // Refs to access current sensor values without causing re-renders
   const sensorDataRef = useRef({ yaw: 0, pitch: 0 });
