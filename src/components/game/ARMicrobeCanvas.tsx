@@ -475,6 +475,16 @@ export const ARMicrobeCanvas = ({
 
         // Render microbes in any direction within visible range (5-130 units)
         if (depth >= 5 && depth <= 130) {
+          // Debug: Draw hit detection circle around microbe
+          const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
+          if (distanceFromCrosshair < 150) {
+            ctx.strokeStyle = distanceFromCrosshair < 120 ? '#00ff00' : '#ffff00';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          
           // Render microbe
           ctx.save();
           ctx.globalAlpha = microbe.opacity;
@@ -589,6 +599,15 @@ export const ARMicrobeCanvas = ({
       ctx.moveTo(centerX + 25, centerY);
       ctx.lineTo(centerX + 15, centerY);
       ctx.stroke();
+      
+      // Debug: Draw hit detection zone (120px radius)
+      ctx.strokeStyle = "rgba(0, 255, 0, 0.3)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 120, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
 
       // Enhanced debug overlay
       if (showDebug) {
@@ -750,8 +769,13 @@ export const ARMicrobeCanvas = ({
 
         const distance = Math.hypot(screenX - centerX, screenY - centerY);
         
-        // Check if within crosshair area (60px radius)
-        if (distance < 60 && distance < minDistance) {
+        // Log near misses for debugging
+        if (distance < 150 && distance >= 120) {
+          console.log('🔸 Near miss! Microbe type:', microbe.type, 'Distance:', distance.toFixed(0), 'px');
+        }
+        
+        // Check if within crosshair area (120px radius - doubled for easier hits)
+        if (distance < 120 && distance < minDistance) {
           minDistance = distance;
           closestMicrobe = { microbe, screenX, screenY, size };
         }
