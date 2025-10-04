@@ -116,39 +116,39 @@ export const ARMicrobeCanvas = ({
     let type: Microbe["type"] = "basic";
     let health = 1;
     let points = 10;
-    let speed = 0.6; // Reduced for closer spawn distance (15-30 units)
+    let speed = 3.3; // 50 units / 15 seconds for 10-20 second approach time
     let size = 40;
 
     if (gameTime > 90 && rand < 5) {
       type = "boss";
       health = 10;
       points = 250;
-      speed = 0.35; // Reduced for closer spawn distance
+      speed = 2.8; // 50 units / 18 seconds for menacing approach
       size = 80;
     } else if (rand < 5) {
       type = "golden";
       health = 1;
       points = 100;
-      speed = 0.9; // Reduced for closer spawn distance
+      speed = 4.2; // 50 units / 12 seconds for quick reward opportunity
       size = 35;
     } else if (gameTime > 60 && rand < 15) {
       type = "tank";
       health = 3;
       points = 50;
-      speed = 0.3; // Reduced for closer spawn distance
+      speed = 2.5; // 50 units / 20 seconds for slow but tanky approach
       size = 60;
     } else if (gameTime > 30 && rand < 30) {
       type = "fast";
       health = 1;
       points = 25;
-      speed = 1.2; // Reduced for closer spawn distance
+      speed = 5.0; // 50 units / 10 seconds for quick threat
       size = 30;
     }
 
     // Generate spawn position in forward-facing cone relative to current camera direction
     const relativeAngle = (Math.random() - 0.5) * Math.PI * 0.8; // -72° to +72°
     const elevation = (Math.random() - 0.5) * Math.PI * 0.5; // -45° to +45°
-    const distance = 15 + Math.random() * 15; // Spawn 15-30 units away (closer to camera)
+    const distance = 40 + Math.random() * 20; // Spawn 40-60 units away for 10-20 second approach
 
     // Convert to world coordinates (spawn in front of where camera is currently pointing)
     const worldAngle = cameraYaw + relativeAngle;
@@ -339,7 +339,7 @@ export const ARMicrobeCanvas = ({
             const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
             // Check if reached camera or despawned
-            if (distance < 0.5 || age > 20) {
+            if (distance < 0.5 || age > 25) {
               onLifeLost();
               return null;
             }
@@ -473,8 +473,8 @@ export const ARMicrobeCanvas = ({
         const scale = 300 / depth;
         const size = microbe.size * scale;
 
-        // Only render microbes in front of camera AND not too close
-        if (finalZ < 0 && depth >= 8) {
+        // Only render microbes in front of camera within visible range (5-70 units)
+        if (finalZ < 0 && depth >= 5 && depth <= 70) {
           // Render microbe
           ctx.save();
           ctx.globalAlpha = microbe.opacity;
@@ -733,10 +733,10 @@ export const ARMicrobeCanvas = ({
         // Skip if behind camera
         if (finalZ >= 0) return;
 
-        // Skip if too close (same culling as rendering)
+        // Skip if out of visible range (must match rendering range 5-70 units)
         const depth = Math.abs(finalZ);
-        if (depth < 8) {
-          console.log('⏭️ Skipping microbe - too close, depth:', depth.toFixed(1));
+        if (depth < 5 || depth > 70) {
+          console.log('⏭️ Skipping microbe - out of range, depth:', depth.toFixed(1));
           return;
         }
 
