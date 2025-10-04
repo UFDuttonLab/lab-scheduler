@@ -150,6 +150,14 @@ export const ARMicrobeCanvas = ({
       wobble: 0,
     };
 
+    console.log('🎯 Spawning microbe:', {
+      angle: (angle * 180 / Math.PI).toFixed(1) + '°',
+      elevation: (elevation * 180 / Math.PI).toFixed(1) + '°',
+      distance: distance.toFixed(2),
+      cameraYaw: (cameraYaw * 180 / Math.PI).toFixed(1) + '°',
+      type
+    });
+
     setMicrobes((prev) => [...prev, microbe]);
   }, []);
 
@@ -181,7 +189,7 @@ export const ARMicrobeCanvas = ({
     }, 2000);
 
     return () => clearInterval(spawnInterval);
-  }, [isPaused, microbes.length, spawnMicrobe]);
+  }, [isPaused, microbes.length, spawnMicrobe, alpha]);
 
   // Power-up spawn logic
   useEffect(() => {
@@ -237,6 +245,25 @@ export const ARMicrobeCanvas = ({
       // Device orientation in radians
       const cameraYaw = ((alpha || 0) * Math.PI) / 180; // Horizontal rotation
       const cameraPitch = ((beta ? beta - 90 : 0) * Math.PI) / 180; // Vertical tilt
+
+      // Debug logging every 60 frames (~1 second)
+      if (now % 1000 < 16) {
+        console.log('📊 AR Debug:', {
+          orientation: {
+            alpha: alpha?.toFixed(1) || 'null',
+            beta: beta?.toFixed(1) || 'null',
+            gamma: gamma?.toFixed(1) || 'null'
+          },
+          cameraYaw: (cameraYaw * 180 / Math.PI).toFixed(1) + '°',
+          microbeCount: microbes.length,
+          visibleMicrobes: microbes.filter(m => {
+            const deltaYaw = cameraYaw - m.spawnCameraYaw;
+            const adjustedAngle = m.angle + deltaYaw;
+            const relZ = -Math.cos(adjustedAngle) * Math.cos(m.elevation) * m.distance;
+            return relZ < 0;
+          }).length
+        });
+      }
 
       // Update and render microbes
       setMicrobes((prev) => {
