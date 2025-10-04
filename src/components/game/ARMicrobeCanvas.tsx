@@ -432,14 +432,14 @@ export const ARMicrobeCanvas = ({
             const viewZ = newWorldZ - cameraWorldPos.z;
 
             // Rotate by camera yaw (around Y axis)
-            const cosYaw = Math.cos(-cameraYaw);
-            const sinYaw = Math.sin(-cameraYaw);
+            const cosYaw = Math.cos(cameraYaw);
+            const sinYaw = Math.sin(cameraYaw);
             const rotatedX = viewX * cosYaw - viewZ * sinYaw;
             const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
             
             // Apply pitch rotation (around X axis)
-            const cosPitch = Math.cos(-cameraPitch);
-            const sinPitch = Math.sin(-cameraPitch);
+            const cosPitch = Math.cos(cameraPitch);
+            const sinPitch = Math.sin(cameraPitch);
             const finalY = viewY * cosPitch - rotatedZ * sinPitch;
             const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
 
@@ -707,14 +707,14 @@ export const ARMicrobeCanvas = ({
         const viewZ = microbe.worldZ - cameraWorldPos.z;
 
         // Rotate by camera yaw (around Y axis)
-        const cosYaw = Math.cos(-cameraYaw);
-        const sinYaw = Math.sin(-cameraYaw);
+        const cosYaw = Math.cos(cameraYaw);
+        const sinYaw = Math.sin(cameraYaw);
         const rotatedX = viewX * cosYaw - viewZ * sinYaw;
         const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
         
         // Apply pitch rotation (around X axis)
-        const cosPitch = Math.cos(-cameraPitch);
-        const sinPitch = Math.sin(-cameraPitch);
+        const cosPitch = Math.cos(cameraPitch);
+        const sinPitch = Math.sin(cameraPitch);
         const finalY = viewY * cosPitch - rotatedZ * sinPitch;
         const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
 
@@ -723,7 +723,10 @@ export const ARMicrobeCanvas = ({
 
         // Skip if too close (same culling as rendering)
         const depth = Math.abs(finalZ);
-        if (depth < 20) return;
+        if (depth < 8) {
+          console.log('⏭️ Skipping microbe - too close, depth:', depth.toFixed(1));
+          return;
+        }
 
         const wobbleOffset = Math.sin(microbe.wobble) * 0.05;
         const fov = 1200; // Match rendering FOV
