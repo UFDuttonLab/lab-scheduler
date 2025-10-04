@@ -458,65 +458,34 @@ export const ARMicrobeCanvas = ({
         console.log('🎨 Render loop active - Microbes:', microbes.length, 'Visible on canvas');
       }
 
-      // Render microbes (READ-ONLY - no state updates!)
-      microbes.forEach((microbe) => {
-        // Transform world position to camera-relative view space
-        const viewX = microbe.worldX - cameraWorldPosRef.current.x;
-        const viewY = microbe.worldY - cameraWorldPosRef.current.y;
-        const viewZ = microbe.worldZ - cameraWorldPosRef.current.z;
+      // SIMPLIFIED TEST: Draw static circles at fixed positions
+      const testPositions = [
+        { x: centerX, y: centerY, color: '#ff0000' }, // Center - Red
+        { x: centerX - 150, y: centerY - 150, color: '#00ff00' }, // Top-left - Green
+        { x: centerX + 150, y: centerY - 150, color: '#0000ff' }, // Top-right - Blue
+        { x: centerX - 150, y: centerY + 150, color: '#ffff00' }, // Bottom-left - Yellow
+        { x: centerX + 150, y: centerY + 150, color: '#ff00ff' }, // Bottom-right - Magenta
+      ];
 
-        // Rotate world space to camera view space (at yaw=0, camera looks toward -Z)
-        const cosYaw = Math.cos(cameraYaw);
-        const sinYaw = Math.sin(cameraYaw);
-        const rotatedX = viewX * cosYaw - viewZ * sinYaw;
-        const rotatedZ = viewX * sinYaw + viewZ * cosYaw;
+      testPositions.forEach(pos => {
+        // Draw dark background circle for contrast
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, 28, 0, Math.PI * 2);
+        ctx.fill();
         
-        // Apply pitch rotation (around X axis)
-        const cosPitch = Math.cos(cameraPitch);
-        const sinPitch = Math.sin(cameraPitch);
-        const finalY = viewY * cosPitch - rotatedZ * sinPitch;
-        const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
-
-        // Add wobble for realism
-        const wobbleOffset = Math.sin(microbe.wobble) * 0.05;
-
-        // Project to screen with perspective using absolute depth
-        const depth = Math.abs(finalZ);
-        const fov = 1200; // Narrower FOV for better sizing
-        const screenX = centerX + (rotatedX / depth) * fov + wobbleOffset * 50;
-        const screenY = centerY + (finalY / depth) * fov;
+        // Draw main colored circle
+        ctx.fillStyle = pos.color;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, 25, 0, Math.PI * 2);
+        ctx.fill();
         
-        // Size based on camera-relative depth
-      const scale = Math.min(300 / depth, 8); // Cap at 8x max scale
-        const size = microbe.size * scale;
-
-        // Render microbes in any direction within visible range (5-130 units)
-        if (depth >= 5 && depth <= 130) {
-          // Draw hit detection circle as the primary game element
-            const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
-            
-            // Draw dark background circle for contrast
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, (size / 2) + 4, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Draw main colored circle (FULLY OPAQUE)
-            const circleColor = distanceFromCrosshair < 120 ? 'rgba(0, 255, 0, 1.0)' : 
-                                distanceFromCrosshair < 150 ? 'rgba(255, 255, 0, 1.0)' : 
-                                'rgba(255, 0, 0, 1.0)';
-            ctx.fillStyle = circleColor;
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Add white outline for maximum clarity (need to redraw arc for stroke)
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 3;
-            ctx.stroke();
-        }
+        // Add white outline
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, 25, 0, Math.PI * 2);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.stroke();
       });
 
       // Update and render power-ups (keep simple fixed positioning for now)
