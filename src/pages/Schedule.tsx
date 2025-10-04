@@ -702,19 +702,25 @@ const Schedule = () => {
             </p>
           </div>
           
-          {shakeProgress >= 100 && (
-            <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            {shakeProgress >= 100 ? (
+              <>
+                <AlertDialogCancel onClick={() => setShowUnlockDialog(false)}>
+                  Play Later
+                </AlertDialogCancel>
+                <AlertDialogAction onClick={() => {
+                  setShowUnlockDialog(false);
+                  navigate('/ar-microbe-shooter');
+                }}>
+                  Play Now
+                </AlertDialogAction>
+              </>
+            ) : (
               <AlertDialogCancel onClick={() => setShowUnlockDialog(false)}>
-                Play Later
+                Cancel
               </AlertDialogCancel>
-              <AlertDialogAction onClick={() => {
-                setShowUnlockDialog(false);
-                navigate('/ar-microbe-shooter');
-              }}>
-                Play Now
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          )}
+            )}
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
       
