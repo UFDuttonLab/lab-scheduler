@@ -46,28 +46,54 @@ export const useDeviceOrientation = () => {
     if (permissionGranted !== true) return;
 
     let eventReceived = false;
+    let lastEventTime = 0;
 
     const handleOrientation = (event: DeviceOrientationEvent) => {
+      const now = Date.now();
       eventReceived = true;
+      lastEventTime = now;
+      
       setOrientation({
         alpha: event.alpha,
         beta: event.beta,
         gamma: event.gamma,
       });
+      
+      // Log first event
+      if (!eventReceived) {
+        console.log('✅ Device orientation events working:', {
+          alpha: event.alpha,
+          beta: event.beta,
+          gamma: event.gamma
+        });
+      }
     };
 
     window.addEventListener("deviceorientation", handleOrientation);
 
-    // Verify that orientation events actually fire within 500ms
+    // Verify that orientation events actually fire within 1 second
     const verificationTimeout = setTimeout(() => {
       if (!eventReceived) {
-        console.warn("❌ Device orientation permission granted but no events received - falling back to touch controls");
+        console.warn("❌ Device orientation permission granted but no events received after 1s");
+        console.log("📱 Device info:", {
+          userAgent: navigator.userAgent,
+          isSecureContext: window.isSecureContext,
+          protocol: window.location.protocol
+        });
         setPermissionGranted(false);
       }
-    }, 500);
+    }, 1000);
+
+    // Periodic check for stale data
+    const staleCheckInterval = setInterval(() => {
+      if (eventReceived && Date.now() - lastEventTime > 2000) {
+        console.warn("⚠️ Device orientation events stopped updating");
+      }
+    }, 2000);
 
     return () => {
       clearTimeout(verificationTimeout);
+      clearInterval(staleCheckInterval);
       window.removeEventListener("deviceorientation", handleOrientation);
     };
   }, [permissionGranted]);

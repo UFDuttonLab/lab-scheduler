@@ -4,10 +4,9 @@ import { PowerUp } from "./PowerUp";
 
 interface Microbe {
   id: string;
-  angle: number; // Horizontal angle relative to camera (radians)
-  elevation: number; // Vertical angle relative to camera (radians)
-  distance: number; // Distance from camera
-  spawnCameraYaw: number; // Camera yaw when microbe spawned
+  worldX: number; // World position X
+  worldY: number; // World position Y
+  worldZ: number; // World position Z (negative = in front)
   type: "basic" | "fast" | "tank" | "golden" | "boss";
   health: number;
   maxHealth: number;
@@ -16,7 +15,7 @@ interface Microbe {
   points: number;
   spawnTime: number;
   opacity: number;
-  wobble: number; // For slight movement
+  wobble: number;
 }
 
 interface PowerUpItem {
@@ -66,6 +65,8 @@ export const ARMicrobeCanvas = ({
   const [touchRotation, setTouchRotation] = useState({ yaw: 0, pitch: 0 });
   const [lastTouch, setLastTouch] = useState<{ x: number; y: number } | null>(null);
   const [useTouchMode, setUseTouchMode] = useState(false);
+  const [showDebug, setShowDebug] = useState(true);
+  const [cameraWorldPos] = useState({ x: 0, y: 0, z: 0 }); // Camera stays at origin
   const lastComboTimeRef = useRef<number>(Date.now());
   const gameStartTimeRef = useRef<number>(Date.now());
   const lastSpawnTimeRef = useRef<number>(Date.now());
@@ -132,17 +133,22 @@ export const ARMicrobeCanvas = ({
       size = 30;
     }
 
-    // Generate spawn position in forward-facing cone (-60° to +60°)
-    const angle = (Math.random() - 0.5) * Math.PI * 2/3;
-    const elevation = (Math.random() - 0.5) * Math.PI * 0.6;
+    // Generate spawn position in forward-facing cone relative to current camera direction
+    const relativeAngle = (Math.random() - 0.5) * Math.PI * 0.8; // -72° to +72°
+    const elevation = (Math.random() - 0.5) * Math.PI * 0.5; // -45° to +45°
     const distance = 3 + Math.random() * 2;
+
+    // Convert to world coordinates (spawn in front of where camera is currently pointing)
+    const worldAngle = cameraYaw + relativeAngle;
+    const worldX = Math.sin(worldAngle) * Math.cos(elevation) * distance;
+    const worldY = Math.sin(elevation) * distance;
+    const worldZ = -Math.cos(worldAngle) * Math.cos(elevation) * distance;
 
     const microbe: Microbe = {
       id: `microbe-${Date.now()}-${Math.random()}`,
-      angle,
-      elevation,
-      distance,
-      spawnCameraYaw: cameraYaw,
+      worldX,
+      worldY,
+      worldZ,
       type,
       health,
       maxHealth: health,
@@ -155,9 +161,8 @@ export const ARMicrobeCanvas = ({
     };
 
     console.log('🎯 Spawning microbe:', {
-      angle: (angle * 180 / Math.PI).toFixed(1) + '°',
-      elevation: (elevation * 180 / Math.PI).toFixed(1) + '°',
-      distance: distance.toFixed(2),
+      worldPos: `(${worldX.toFixed(2)}, ${worldY.toFixed(2)}, ${worldZ.toFixed(2)})`,
+      relativeAngle: (relativeAngle * 180 / Math.PI).toFixed(1) + '°',
       cameraYaw: (cameraYaw * 180 / Math.PI).toFixed(1) + '°',
       type
     });
@@ -181,11 +186,12 @@ export const ARMicrobeCanvas = ({
     setPowerUps((prev) => [...prev, powerUp]);
   }, []);
 
-  // Spawn logic
+  // Spawn logic - faster in touch mode
   useEffect(() => {
     if (isPaused) return;
 
-    const spawnInterval = setInterval(() => {
+    const spawnInterval = useTouchMode ? 1500 : 2000; // Faster spawn in touch mode
+    const interval = setInterval(() => {
       if (microbes.length < 10) {
         const useOrientation = permissionGranted && alpha !== null && beta !== null && !useTouchMode;
         const cameraYaw = useOrientation 
@@ -193,9 +199,9 @@ export const ARMicrobeCanvas = ({
           : touchRotation.yaw;
         spawnMicrobe(cameraYaw);
       }
-    }, 2000);
+    }, spawnInterval);
 
-    return () => clearInterval(spawnInterval);
+    return () => clearInterval(interval);
   }, [isPaused, microbes.length, spawnMicrobe, alpha, beta, touchRotation, permissionGranted, useTouchMode]);
 
   // Power-up spawn logic
@@ -272,46 +278,67 @@ export const ARMicrobeCanvas = ({
         ? ((beta ? beta - 90 : 0) * Math.PI) / 180 
         : touchRotation.pitch;
 
-      // Debug logging every 60 frames (~1 second)
-      if (now % 1000 < 16) {
+      // Debug logging every second
+      if (showDebug && now % 1000 < 16) {
+        const visibleCount = microbes.filter(m => {
+          const viewX = m.worldX - cameraWorldPos.x;
+          const viewY = m.worldY - cameraWorldPos.y;
+          const viewZ = m.worldZ - cameraWorldPos.z;
+          
+          const cosYaw = Math.cos(-cameraYaw);
+          const sinYaw = Math.sin(-cameraYaw);
+          const rotatedZ = viewZ * cosYaw - viewX * sinYaw;
+          
+          return rotatedZ < 0; // In front of camera
+        }).length;
+        
         console.log('📊 AR Debug:', {
           mode: useOrientation ? 'Orientation' : 'Touch',
           orientation: {
             alpha: alpha?.toFixed(1) || 'null',
             beta: beta?.toFixed(1) || 'null',
-            gamma: gamma?.toFixed(1) || 'null'
+            gamma: gamma?.toFixed(1) || 'null',
+            permissionGranted
           },
-          touchRotation: {
-            yaw: (touchRotation.yaw * 180 / Math.PI).toFixed(1) + '°',
-            pitch: (touchRotation.pitch * 180 / Math.PI).toFixed(1) + '°'
+          camera: {
+            yaw: (cameraYaw * 180 / Math.PI).toFixed(1) + '°',
+            pitch: (cameraPitch * 180 / Math.PI).toFixed(1) + '°'
           },
-          cameraYaw: (cameraYaw * 180 / Math.PI).toFixed(1) + '°',
-          microbeCount: microbes.length,
-          visibleMicrobes: microbes.filter(m => {
-            const deltaYaw = cameraYaw - m.spawnCameraYaw;
-            const adjustedAngle = m.angle + deltaYaw;
-            const relZ = -Math.cos(adjustedAngle) * Math.cos(m.elevation) * m.distance;
-            return relZ < 0;
-          }).length
+          microbes: {
+            total: microbes.length,
+            visible: visibleCount
+          }
         });
       }
 
-      // Update and render microbes
+      // Update and render microbes with world-space movement
       setMicrobes((prev) => {
         return prev
           .map((microbe) => {
             const age = (now - microbe.spawnTime) / 1000;
-
             const newWobble = microbe.wobble + 0.02;
 
+            // Calculate distance to camera in world space
+            const dx = microbe.worldX - cameraWorldPos.x;
+            const dy = microbe.worldY - cameraWorldPos.y;
+            const dz = microbe.worldZ - cameraWorldPos.z;
+            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
             // Check if reached camera or despawned
-            if (microbe.distance < 0.5 || age > 20) {
+            if (distance < 0.5 || age > 20) {
               onLifeLost();
               return null;
             }
 
-            // Move microbe toward camera - just decrease distance
-            const newDistance = microbe.distance - microbe.speed * 0.016;
+            // Move microbe toward camera in world space
+            const dirX = -dx / distance;
+            const dirY = -dy / distance;
+            const dirZ = -dz / distance;
+            const moveAmount = microbe.speed * 0.016;
+            
+            const newWorldX = microbe.worldX + dirX * moveAmount;
+            const newWorldY = microbe.worldY + dirY * moveAmount;
+            const newWorldZ = microbe.worldZ + dirZ * moveAmount;
 
             // Camouflage effect for tank/boss
             let opacity = microbe.opacity;
@@ -321,47 +348,51 @@ export const ARMicrobeCanvas = ({
 
             // Multiplication for basic microbes
             if (microbe.type === "basic" && age > 15 && Math.random() < 0.001) {
-              // Clone slightly offset in angle
+              const offsetAngle = (Math.random() - 0.5) * 0.5;
+              const offsetDist = 0.3;
               const clone: Microbe = {
                 ...microbe,
                 id: `microbe-clone-${Date.now()}-${Math.random()}`,
-                angle: microbe.angle + (Math.random() - 0.5) * 0.3,
-                elevation: microbe.elevation + (Math.random() - 0.5) * 0.2,
-                spawnCameraYaw: microbe.spawnCameraYaw,
+                worldX: newWorldX + Math.sin(offsetAngle) * offsetDist,
+                worldY: newWorldY + (Math.random() - 0.5) * 0.2,
+                worldZ: newWorldZ + Math.cos(offsetAngle) * offsetDist,
                 spawnTime: now,
               };
               setTimeout(() => setMicrobes((m) => [...m, clone]), 0);
             }
 
-            // Adjust angle based on camera rotation since spawn
-            const deltaYaw = cameraYaw - microbe.spawnCameraYaw;
-            const adjustedAngle = microbe.angle + deltaYaw;
+            // Transform world position to camera-relative view space
+            const viewX = newWorldX - cameraWorldPos.x;
+            const viewY = newWorldY - cameraWorldPos.y;
+            const viewZ = newWorldZ - cameraWorldPos.z;
+
+            // Rotate by camera yaw (around Y axis)
+            const cosYaw = Math.cos(-cameraYaw);
+            const sinYaw = Math.sin(-cameraYaw);
+            const rotatedX = viewX * cosYaw - viewZ * sinYaw;
+            const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
             
-            // Convert to camera-relative Cartesian with adjusted angle
-            const relX = Math.sin(adjustedAngle) * Math.cos(microbe.elevation) * newDistance;
-            const relY = Math.sin(microbe.elevation) * newDistance;
-            const relZ = -Math.cos(adjustedAngle) * Math.cos(microbe.elevation) * newDistance;
+            // Apply pitch rotation (around X axis)
+            const cosPitch = Math.cos(-cameraPitch);
+            const sinPitch = Math.sin(-cameraPitch);
+            const finalY = viewY * cosPitch - rotatedZ * sinPitch;
+            const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
 
-            // These are now in camera-relative view space
-            const viewX = relX;
-            const viewY = relY;
-            const viewZ = relZ;
-
-            // Only render if in front of camera (negative Z in view space)
-            if (viewZ > 0) {
-              // Keep microbe but don't render (behind camera)
-              return { ...microbe, distance: newDistance, wobble: newWobble, opacity };
+            // Only render if in front of camera
+            if (finalZ >= 0) {
+              return { ...microbe, worldX: newWorldX, worldY: newWorldY, worldZ: newWorldZ, wobble: newWobble, opacity };
             }
 
             // Add wobble for realism
             const wobbleOffset = Math.sin(newWobble) * 0.05;
 
             // Project to screen with perspective
-            const fov = 800; // Field of view factor
-            const screenX = centerX + (viewX / -viewZ) * fov + wobbleOffset * 50;
-            const screenY = centerY + (viewY / -viewZ) * fov;
+            const fov = 800;
+            const screenX = centerX + (rotatedX / -finalZ) * fov + wobbleOffset * 50;
+            const screenY = centerY + (finalY / -finalZ) * fov;
             
             // Size based on distance
+            const newDistance = Math.sqrt(newWorldX * newWorldX + newWorldY * newWorldY + newWorldZ * newWorldZ);
             const scale = 3 / newDistance;
             const size = microbe.size * scale;
 
@@ -390,7 +421,7 @@ export const ARMicrobeCanvas = ({
 
             ctx.restore();
 
-            return { ...microbe, distance: newDistance, wobble: newWobble, opacity };
+            return { ...microbe, worldX: newWorldX, worldY: newWorldY, worldZ: newWorldZ, wobble: newWobble, opacity };
           })
           .filter(Boolean) as Microbe[];
       });
@@ -471,16 +502,43 @@ export const ARMicrobeCanvas = ({
       ctx.lineTo(centerX + 15, centerY);
       ctx.stroke();
 
-      // Draw debug info
-      const useOrientationDisplay = alpha !== null && beta !== null;
-      ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-      ctx.fillRect(10, canvas.height - 80, 200, 70);
-      ctx.fillStyle = useOrientationDisplay ? "#00ff00" : "#ffaa00";
-      ctx.font = "12px monospace";
-      ctx.fillText(useOrientationDisplay ? "📱 Orientation Mode" : "👆 Touch Mode", 20, canvas.height - 60);
-      ctx.fillStyle = "#ffffff";
-      ctx.fillText(`Yaw: ${(cameraYaw * 180 / Math.PI).toFixed(0)}°`, 20, canvas.height - 40);
-      ctx.fillText(`Microbes: ${microbes.length}`, 20, canvas.height - 20);
+      // Enhanced debug overlay
+      if (showDebug) {
+        const useOrientationDisplay = alpha !== null && beta !== null && !useTouchMode;
+        ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
+        ctx.fillRect(10, canvas.height - 140, 280, 130);
+        
+        // Mode indicator
+        ctx.fillStyle = useOrientationDisplay ? "#00ff00" : "#ffaa00";
+        ctx.font = "14px monospace";
+        ctx.fillText(useOrientationDisplay ? "📱 Orientation Mode" : "👆 Touch Mode", 20, canvas.height - 120);
+        
+        // Camera info
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "12px monospace";
+        ctx.fillText(`Yaw: ${(cameraYaw * 180 / Math.PI).toFixed(0)}°`, 20, canvas.height - 100);
+        ctx.fillText(`Pitch: ${(cameraPitch * 180 / Math.PI).toFixed(0)}°`, 20, canvas.height - 82);
+        
+        // Microbe count
+        const visibleCount = microbes.filter(m => {
+          const viewZ = m.worldZ - cameraWorldPos.z;
+          const viewX = m.worldX - cameraWorldPos.x;
+          const cosYaw = Math.cos(-cameraYaw);
+          const sinYaw = Math.sin(-cameraYaw);
+          const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
+          return rotatedZ < 0;
+        }).length;
+        ctx.fillText(`Microbes: ${microbes.length} (${visibleCount} visible)`, 20, canvas.height - 64);
+        
+        // Sensor status
+        if (!useOrientationDisplay) {
+          ctx.fillStyle = "#ffaa00";
+          ctx.font = "10px monospace";
+          ctx.fillText("Drag to look around", 20, canvas.height - 46);
+          ctx.fillText(`Permission: ${permissionGranted ? 'OK' : 'Denied'}`, 20, canvas.height - 32);
+          ctx.fillText(`Alpha: ${alpha?.toFixed(0) || 'null'}`, 20, canvas.height - 18);
+        }
+      }
 
       animationFrameRef.current = requestAnimationFrame(render);
     };
@@ -496,7 +554,7 @@ export const ARMicrobeCanvas = ({
 
   // Handle touch drag for camera control (primary when orientation unavailable)
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
-    // Use touch controls if: permission denied, no orientation data, or forced touch mode
+    e.preventDefault();
     const shouldUseTouchControl = permissionGranted === false || alpha === null || beta === null || useTouchMode;
     if (!shouldUseTouchControl) return;
     
@@ -510,8 +568,8 @@ export const ARMicrobeCanvas = ({
     const deltaY = touch.clientY - lastTouch.y;
 
     setTouchRotation(prev => ({
-      yaw: prev.yaw + (deltaX * 0.005), // Sensitivity
-      pitch: Math.max(-Math.PI / 3, Math.min(Math.PI / 3, prev.pitch + (deltaY * 0.005)))
+      yaw: prev.yaw + (deltaX * 0.01), // Increased sensitivity from 0.005
+      pitch: Math.max(-Math.PI / 3, Math.min(Math.PI / 3, prev.pitch + (deltaY * 0.01)))
     }));
 
     setLastTouch({ x: touch.clientX, y: touch.clientY });
@@ -550,31 +608,35 @@ export const ARMicrobeCanvas = ({
       let closestMicrobe: { microbe: Microbe; screenX: number; screenY: number; size: number } | null = null;
       let minDistance = Infinity;
 
-      // Find closest microbe to crosshair
+      // Find closest microbe to crosshair using world coordinates
       microbes.forEach((microbe) => {
-        // Adjust angle based on camera rotation since spawn
-        const deltaYaw = cameraYaw - microbe.spawnCameraYaw;
-        const adjustedAngle = microbe.angle + deltaYaw;
-        
-        // Convert to camera-relative Cartesian with adjusted angle
-        const relX = Math.sin(adjustedAngle) * Math.cos(microbe.elevation) * microbe.distance;
-        const relY = Math.sin(microbe.elevation) * microbe.distance;
-        const relZ = -Math.cos(adjustedAngle) * Math.cos(microbe.elevation) * microbe.distance;
+        // Transform world position to camera-relative view space
+        const viewX = microbe.worldX - cameraWorldPos.x;
+        const viewY = microbe.worldY - cameraWorldPos.y;
+        const viewZ = microbe.worldZ - cameraWorldPos.z;
 
-        // These are now in camera-relative view space
-        const viewX = relX;
-        const viewY = relY;
-        const viewZ = relZ;
+        // Rotate by camera yaw (around Y axis)
+        const cosYaw = Math.cos(-cameraYaw);
+        const sinYaw = Math.sin(-cameraYaw);
+        const rotatedX = viewX * cosYaw - viewZ * sinYaw;
+        const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
+        
+        // Apply pitch rotation (around X axis)
+        const cosPitch = Math.cos(-cameraPitch);
+        const sinPitch = Math.sin(-cameraPitch);
+        const finalY = viewY * cosPitch - rotatedZ * sinPitch;
+        const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
 
         // Skip if behind camera
-        if (viewZ > 0) return;
+        if (finalZ >= 0) return;
 
         const wobbleOffset = Math.sin(microbe.wobble) * 0.05;
         const fov = 800;
-        const screenX = centerX + (viewX / -viewZ) * fov + wobbleOffset * 50;
-        const screenY = centerY + (viewY / -viewZ) * fov;
+        const screenX = centerX + (rotatedX / -finalZ) * fov + wobbleOffset * 50;
+        const screenY = centerY + (finalY / -finalZ) * fov;
         
-        const scale = 3 / microbe.distance;
+        const worldDistance = Math.sqrt(microbe.worldX * microbe.worldX + microbe.worldY * microbe.worldY + microbe.worldZ * microbe.worldZ);
+        const scale = 3 / worldDistance;
         const size = microbe.size * scale;
 
         const distance = Math.hypot(screenX - centerX, screenY - centerY);
