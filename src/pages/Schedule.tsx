@@ -99,12 +99,14 @@ const Schedule = () => {
         setShowUnlockDialog(true);
       }
       
-      // Accumulate shake time
+      const now = Date.now();
+      
       if (lastFrameTimeRef.current === null) {
+        // First shake - just initialize
         console.log('Starting shake timer');
-        lastFrameTimeRef.current = Date.now();
+        lastFrameTimeRef.current = now;
       } else {
-        const now = Date.now();
+        // Accumulate the time delta
         const frameDelta = now - lastFrameTimeRef.current;
         totalShakeTimeRef.current += frameDelta;
         lastFrameTimeRef.current = now;
@@ -118,9 +120,6 @@ const Schedule = () => {
           setIsShakeDetectionActive(false);
         }
       }
-    } else {
-      // Paused - reset frame timer but keep total time and dialog open
-      lastFrameTimeRef.current = null;
     }
   }, [isShaking, navigate, isShakeDetectionActive, isARUnlocked]);
 
