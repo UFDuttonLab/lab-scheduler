@@ -457,40 +457,33 @@ export const ARMicrobeCanvas = ({
             const scale = 300 / depth;
             const size = microbe.size * scale;
 
-            // Only render microbes in front of camera
-            if (finalZ >= 0) {
-              return { ...microbe, worldX: newWorldX, worldY: newWorldY, worldZ: newWorldZ, wobble: newWobble, opacity };
+            // Only render microbes in front of camera AND not too close
+            if (finalZ < 0 && depth >= 20) {
+              // Render microbe
+              ctx.save();
+              ctx.globalAlpha = opacity;
+              ctx.font = `${size}px Arial`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.fillText(getMicrobeEmoji(microbe.type), screenX, screenY);
+
+              // Health bar for tank/boss
+              if ((microbe.type === "tank" || microbe.type === "boss") && microbe.health < microbe.maxHealth) {
+                const barWidth = size * 1.5;
+                const barHeight = 5;
+                ctx.fillStyle = "#333";
+                ctx.fillRect(screenX - barWidth / 2, screenY + size / 2 + 5, barWidth, barHeight);
+                ctx.fillStyle = getMicrobeColor(microbe.type);
+                ctx.fillRect(
+                  screenX - barWidth / 2,
+                  screenY + size / 2 + 5,
+                  (barWidth * microbe.health) / microbe.maxHealth,
+                  barHeight
+                );
+              }
+
+              ctx.restore();
             }
-
-            // Skip rendering if too close (prevents giant microbes)
-            if (depth < 20) {
-              return { ...microbe, worldX: newWorldX, worldY: newWorldY, worldZ: newWorldZ, wobble: newWobble, opacity };
-            }
-
-            // Render microbe
-            ctx.save();
-            ctx.globalAlpha = opacity;
-            ctx.font = `${size}px Arial`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(getMicrobeEmoji(microbe.type), screenX, screenY);
-
-            // Health bar for tank/boss
-            if ((microbe.type === "tank" || microbe.type === "boss") && microbe.health < microbe.maxHealth) {
-              const barWidth = size * 1.5;
-              const barHeight = 5;
-              ctx.fillStyle = "#333";
-              ctx.fillRect(screenX - barWidth / 2, screenY + size / 2 + 5, barWidth, barHeight);
-              ctx.fillStyle = getMicrobeColor(microbe.type);
-              ctx.fillRect(
-                screenX - barWidth / 2,
-                screenY + size / 2 + 5,
-                (barWidth * microbe.health) / microbe.maxHealth,
-                barHeight
-              );
-            }
-
-            ctx.restore();
 
             return { ...microbe, worldX: newWorldX, worldY: newWorldY, worldZ: newWorldZ, wobble: newWobble, opacity };
           })
