@@ -55,7 +55,7 @@ export const ARMicrobeCanvas = ({
   isPaused,
 }: ARMicrobeCanvasProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { alpha, beta, gamma } = useDeviceOrientation();
+  const { alpha, beta, gamma, permissionGranted } = useDeviceOrientation();
   const [microbes, setMicrobes] = useState<Microbe[]>([]);
   const [powerUps, setPowerUps] = useState<PowerUpItem[]>([]);
   const [particles, setParticles] = useState<Particle[]>([]);
@@ -65,11 +65,13 @@ export const ARMicrobeCanvas = ({
   const [laserFiring, setLaserFiring] = useState<number>(0); // Timestamp of laser fire
   const [touchRotation, setTouchRotation] = useState({ yaw: 0, pitch: 0 });
   const [lastTouch, setLastTouch] = useState<{ x: number; y: number } | null>(null);
+  const [useTouchMode, setUseTouchMode] = useState(false);
   const lastComboTimeRef = useRef<number>(Date.now());
   const gameStartTimeRef = useRef<number>(Date.now());
   const lastSpawnTimeRef = useRef<number>(Date.now());
   const lastPowerUpSpawnRef = useRef<number>(Date.now());
   const animationFrameRef = useRef<number>();
+  const orientationCheckRef = useRef<number>(Date.now());
 
   const getMicrobeEmoji = (type: string): string => {
     switch (type) {
@@ -223,6 +225,20 @@ export const ARMicrobeCanvas = ({
     return () => clearInterval(comboResetInterval);
   }, [combo, onComboChange]);
 
+  // Runtime check: if orientation permission granted but no data after 2 seconds, switch to touch
+  useEffect(() => {
+    if (permissionGranted === true && !useTouchMode) {
+      const checkTimeout = setTimeout(() => {
+        if (alpha === null || beta === null) {
+          console.warn("⚠️ Orientation permission granted but no data received - switching to touch mode");
+          setUseTouchMode(true);
+        }
+      }, 2000);
+
+      return () => clearTimeout(checkTimeout);
+    }
+  }, [permissionGranted, alpha, beta, useTouchMode]);
+
   // Game loop
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -244,8 +260,8 @@ export const ARMicrobeCanvas = ({
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
 
-      // Use device orientation OR touch fallback
-      const useOrientation = alpha !== null && beta !== null;
+      // Determine control mode: orientation works if permission granted AND data is available AND not forced touch mode
+      const useOrientation = (permissionGranted === true) && (alpha !== null && beta !== null) && !useTouchMode;
       const cameraYaw = useOrientation 
         ? ((alpha || 0) * Math.PI) / 180 
         : touchRotation.yaw; // Fallback to touch rotation
@@ -473,11 +489,13 @@ export const ARMicrobeCanvas = ({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isPaused, alpha, beta, gamma, touchRotation, microbes, onLifeLost]);
+  }, [isPaused, alpha, beta, gamma, touchRotation, microbes, onLifeLost, permissionGranted, useTouchMode]);
 
-  // Handle touch drag for camera control (fallback when orientation unavailable)
+  // Handle touch drag for camera control (primary when orientation unavailable)
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (alpha !== null && beta !== null) return; // Only use touch when orientation unavailable
+    // Use touch controls if: permission denied, no orientation data, or forced touch mode
+    const shouldUseTouchControl = permissionGranted === false || alpha === null || beta === null || useTouchMode;
+    if (!shouldUseTouchControl) return;
     
     const touch = e.touches[0];
     if (!lastTouch) {
@@ -494,7 +512,7 @@ export const ARMicrobeCanvas = ({
     }));
 
     setLastTouch({ x: touch.clientX, y: touch.clientY });
-  }, [alpha, beta, lastTouch]);
+  }, [permissionGranted, alpha, beta, useTouchMode, lastTouch]);
 
   const handleTouchEnd = useCallback(() => {
     setLastTouch(null);
@@ -519,8 +537,8 @@ export const ARMicrobeCanvas = ({
       // Fire laser beam
       setLaserFiring(Date.now());
 
-      // Use device orientation OR touch fallback
-      const useOrientation = alpha !== null && beta !== null;
+      // Use device orientation OR touch fallback (same logic as render loop)
+      const useOrientation = (permissionGranted === true) && (alpha !== null && beta !== null) && !useTouchMode;
       const cameraYaw = useOrientation ? ((alpha || 0) * Math.PI) / 180 : touchRotation.yaw;
       const cameraPitch = useOrientation ? ((beta ? beta - 90 : 0) * Math.PI) / 180 : touchRotation.pitch;
 
@@ -613,7 +631,7 @@ export const ARMicrobeCanvas = ({
         });
       }
     },
-    [isPaused, alpha, beta, touchRotation, lastTouch, microbes, combo, activePowerUp, onScoreChange, onComboChange, onMicrobeEliminated]
+    [isPaused, alpha, beta, touchRotation, lastTouch, microbes, combo, activePowerUp, permissionGranted, useTouchMode, onScoreChange, onComboChange, onMicrobeEliminated]
   );
 
   // Handle active power-up expiration

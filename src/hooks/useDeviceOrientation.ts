@@ -45,7 +45,10 @@ export const useDeviceOrientation = () => {
   useEffect(() => {
     if (permissionGranted !== true) return;
 
+    let eventReceived = false;
+
     const handleOrientation = (event: DeviceOrientationEvent) => {
+      eventReceived = true;
       setOrientation({
         alpha: event.alpha,
         beta: event.beta,
@@ -55,7 +58,16 @@ export const useDeviceOrientation = () => {
 
     window.addEventListener("deviceorientation", handleOrientation);
 
+    // Verify that orientation events actually fire within 500ms
+    const verificationTimeout = setTimeout(() => {
+      if (!eventReceived) {
+        console.warn("❌ Device orientation permission granted but no events received - falling back to touch controls");
+        setPermissionGranted(false);
+      }
+    }, 500);
+
     return () => {
+      clearTimeout(verificationTimeout);
       window.removeEventListener("deviceorientation", handleOrientation);
     };
   }, [permissionGranted]);
