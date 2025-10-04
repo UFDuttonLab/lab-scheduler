@@ -29,30 +29,46 @@ const ARMicrobeShooter = () => {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<string>("");
+  const [requestingPermissions, setRequestingPermissions] = useState(false); // FIX #3: Prevent double requests
   const gameStartTimeRef = useRef<number>(0);
   const { requestPermission: requestMotionPermission } = useDeviceMotion();
   const { requestPermission: requestOrientationPermission } = useDeviceOrientation();
   const gyro = useGyroscope();
 
   const handleRequestPermissions = async (): Promise<boolean> => {
+    // Prevent double requests
+    if (requestingPermissions) {
+      console.log('⏳ Already requesting permissions...');
+      return false;
+    }
+
+    setRequestingPermissions(true);
     setPermissionStatus("Requesting permissions...");
     console.log("🔐 Requesting all permissions...");
     
-    const motionGranted = await requestMotionPermission();
-    const orientationGranted = await requestOrientationPermission();
-    const gyroGranted = await gyro.requestPermission();
+    try {
+      const motionGranted = await requestMotionPermission();
+      const orientationGranted = await requestOrientationPermission();
+      const gyroGranted = await gyro.requestPermission();
 
-    console.log('🔐 Permission results:', { motionGranted, orientationGranted, gyroGranted });
+      console.log('🔐 Permission results:', { motionGranted, orientationGranted, gyroGranted });
 
-    if (motionGranted || orientationGranted || gyroGranted) {
-      setPermissionsGranted(true);
-      setPermissionStatus("✅ Permissions granted! Ready to play.");
-      toast.success("Sensors ready!");
-      return true;
-    } else {
-      setPermissionStatus("⚠️ Touch controls will be used instead.");
-      toast.warning("No sensor permissions granted - using touch controls");
-      return false;
+      if (motionGranted || orientationGranted || gyroGranted) {
+        setPermissionsGranted(true);
+        setPermissionStatus("✅ Permissions granted! Stabilizing sensors...");
+        
+        // FIX #3: Wait for sensors to stabilize (500ms)
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        toast.success("Sensors ready!");
+        return true;
+      } else {
+        setPermissionStatus("⚠️ Touch controls will be used instead.");
+        toast.warning("No sensor permissions granted - using touch controls");
+        return false;
+      }
+    } finally {
+      setRequestingPermissions(false);
     }
   };
 

@@ -91,6 +91,7 @@ export const ARMicrobeCanvas = ({
   const removedMicrobesRef = useRef<Set<string>>(new Set());
   const cloneTimeoutsRef = useRef<number[]>([]); // Track timeouts to prevent memory leaks
   const lastLogTimeRef = useRef<number>(0); // Throttle console logs
+  const validReadingsRef = useRef(0); // FIX #4: Count consecutive valid readings
 
   const getMicrobeEmoji = (type: string): string => {
     switch (type) {
@@ -451,13 +452,20 @@ export const ARMicrobeCanvas = ({
         pitch: cameraPitch 
       };
 
-      // FIX #5: Check if sensors are ready (non-zero data flowing)
-      if (!sensorsReady && (Math.abs(cameraYaw) > 0.1 || Math.abs(cameraPitch) > 0.1)) {
-        console.log("🚀 SENSORS READY! Data flowing:", { 
-          yaw: (cameraYaw * 180 / Math.PI).toFixed(2), 
-          pitch: (cameraPitch * 180 / Math.PI).toFixed(2) 
-        });
-        setSensorsReady(true);
+      // FIX #4: Check if sensors are ready - require 3 consecutive valid readings
+      if (!sensorsReady) {
+        if (Math.abs(cameraYaw) > 0.1 || Math.abs(cameraPitch) > 0.1) {
+          validReadingsRef.current++;
+          if (validReadingsRef.current >= 3) {
+            console.log("🚀 SENSORS READY! 3 consecutive valid readings:", { 
+              yaw: (cameraYaw * 180 / Math.PI).toFixed(2), 
+              pitch: (cameraPitch * 180 / Math.PI).toFixed(2) 
+            });
+            setSensorsReady(true);
+          }
+        } else {
+          validReadingsRef.current = 0; // Reset counter if invalid reading
+        }
       }
 
       // Continue with existing rendering logic
@@ -920,6 +928,11 @@ export const ARMicrobeCanvas = ({
       <div className="absolute top-4 left-4 text-white text-sm font-mono z-20 pointer-events-none">
         <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2">
           🦠 Microbes: {microbes.length}
+          {sensorsReady && (
+            <div className="mt-1 text-xs text-green-400">
+              📡 {sensorMode === 'gyroscope' ? 'Gyroscope' : sensorMode === 'orientation' ? 'DeviceOrientation' : 'No Sensor'}
+            </div>
+          )}
         </div>
         {!sensorsReady && (
           <div className="mt-2 px-3 py-2 bg-yellow-500/80 backdrop-blur-sm rounded-lg font-bold">
@@ -928,7 +941,7 @@ export const ARMicrobeCanvas = ({
         )}
         {activePowerUp && (
           <div className="mt-2 px-3 py-2 bg-primary/80 backdrop-blur-sm rounded-lg font-bold">
-            ⚡ {activePowerUp.type.toUpperCase()}
+            ⚡ {activePowerUp.type.toUpperCase()} ({Math.ceil((activePowerUp.endTime - Date.now()) / 1000)}s)
           </div>
         )}
       </div>

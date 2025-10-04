@@ -55,8 +55,10 @@ export const useDeviceOrientation = () => {
     }
   }, []);
 
-  // FORCE: Auto-detect implicit permission - runs immediately and always
+  // FIX #1: Auto-detect implicit permission with proper flag to prevent infinite loop
   useEffect(() => {
+    const hasDetectedData = useRef(false);
+    
     const detectDataFlow = (event: DeviceOrientationEvent) => {
       if (event.alpha !== null || event.beta !== null || event.gamma !== null) {
         // Force update data immediately
@@ -66,29 +68,33 @@ export const useDeviceOrientation = () => {
           gamma: event.gamma,
         };
         
-        // Set permission to true if not already
-        if (permissionGranted !== true) {
+        // Set permission to true ONLY ONCE
+        if (permissionGranted !== true && !hasDetectedData.current) {
           console.log('🚀 FORCE: DeviceOrientation data detected, setting permission to TRUE');
+          hasDetectedData.current = true;
           setPermissionGranted(true);
         }
       }
     };
 
-    console.log('👂 FORCE: Implicit detection listener added on mount');
-    window.addEventListener("deviceorientation", detectDataFlow);
-    
-    // Check after 500ms if we got data
-    const timeout = setTimeout(() => {
-      if (permissionGranted === null) {
-        console.log('⏱️ FORCE: No automatic sensor data after 500ms, explicit permission required');
-      }
-    }, 500);
+    // Only run if permission is not yet determined
+    if (permissionGranted === null) {
+      console.log('👂 FORCE: Implicit detection listener added');
+      window.addEventListener("deviceorientation", detectDataFlow);
+      
+      // Check after 500ms if we got data
+      const timeout = setTimeout(() => {
+        if (permissionGranted === null && !hasDetectedData.current) {
+          console.log('⏱️ FORCE: No automatic sensor data after 500ms, explicit permission required');
+        }
+      }, 500);
 
-    return () => {
-      clearTimeout(timeout);
-      window.removeEventListener("deviceorientation", detectDataFlow);
-    };
-  }, []); // NO dependencies - runs once on mount and stays active
+      return () => {
+        clearTimeout(timeout);
+        window.removeEventListener("deviceorientation", detectDataFlow);
+      };
+    }
+  }, [permissionGranted]); // Add dependency to prevent re-running when already granted
 
   useEffect(() => {
     if (permissionGranted !== true) return;
