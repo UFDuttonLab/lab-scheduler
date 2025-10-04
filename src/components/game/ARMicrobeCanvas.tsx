@@ -455,8 +455,7 @@ export const ARMicrobeCanvas = ({
 
       // Render loop verification logging (reduced frequency)
       if (now % 3000 < 16) { // Log every 3 seconds
-        console.log('🎨 Render loop active - Canvas:', canvas.width, 'x', canvas.height, 'Microbes:', microbes.length);
-        console.log('🎨 Canvas context exists:', !!ctx, 'Canvas element:', canvas);
+        console.log('🎨 Render loop active - Microbes:', microbes.length, 'Visible on canvas');
       }
 
       // Render microbes (READ-ONLY - no state updates!)
@@ -500,11 +499,6 @@ export const ARMicrobeCanvas = ({
           if (isOnScreen) {
             // Draw hit detection circle as the primary game element
             const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
-            
-            // Log first circle draw per frame for debugging
-            if (now % 1000 < 16 && microbes.indexOf(microbe) === 0) {
-              console.log('⭕ Drawing circle at:', Math.round(screenX), Math.round(screenY), 'size:', Math.round(size), 'depth:', Math.round(depth));
-            }
             
             // Draw dark background circle for contrast
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
