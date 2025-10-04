@@ -92,11 +92,21 @@ const ARMicrobeShooter = () => {
     const motionGranted = await requestMotionPermission();
     const orientationGranted = await requestOrientationPermission();
 
-    if (!motionGranted || !orientationGranted) {
-      toast.error("Motion sensor permissions are required to play");
-      return;
+    console.log('🔐 Permission results:', { motionGranted, orientationGranted });
+
+    if (!motionGranted) {
+      toast.error("Motion sensor permission denied", {
+        description: "The game needs motion sensors to detect when microbes should be eliminated."
+      });
+    }
+    
+    if (!orientationGranted) {
+      toast.warning("Orientation sensor not available", {
+        description: "Touch controls will be used instead. Drag to look around."
+      });
     }
 
+    // Allow playing even without orientation - will use touch fallback
     setGameState("playing");
     setScore(0);
     setLives(3);
@@ -200,10 +210,18 @@ const ARMicrobeShooter = () => {
             Use your camera to hunt down microbes in augmented reality! Move your phone to aim and tap to shoot.
           </p>
           
+          <div className="bg-muted/50 rounded-lg p-4 text-sm text-left space-y-2">
+            <p className="font-semibold">📱 Permissions Required:</p>
+            <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+              <li>Camera access for AR view</li>
+              <li>Device orientation for aiming (or use touch controls)</li>
+            </ul>
+          </div>
+          
           <div className="space-y-3">
             <Button onClick={startGame} size="lg" className="w-full">
               <Play className="mr-2 h-5 w-5" />
-              Start Game
+              Start Game & Grant Permissions
             </Button>
             <Button onClick={() => setShowLeaderboard(!showLeaderboard)} variant="outline" className="w-full">
               <Trophy className="mr-2 h-4 w-4" />

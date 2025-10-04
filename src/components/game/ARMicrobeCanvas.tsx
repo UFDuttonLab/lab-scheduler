@@ -63,6 +63,8 @@ export const ARMicrobeCanvas = ({
   const [combo, setCombo] = useState(0);
   const [activePowerUp, setActivePowerUp] = useState<{ type: string; endTime: number } | null>(null);
   const [laserFiring, setLaserFiring] = useState<number>(0); // Timestamp of laser fire
+  const [touchRotation, setTouchRotation] = useState({ yaw: 0, pitch: 0 });
+  const [lastTouch, setLastTouch] = useState<{ x: number; y: number } | null>(null);
   const lastComboTimeRef = useRef<number>(Date.now());
   const gameStartTimeRef = useRef<number>(Date.now());
   const lastSpawnTimeRef = useRef<number>(Date.now());
@@ -242,17 +244,27 @@ export const ARMicrobeCanvas = ({
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
 
-      // Device orientation in radians
-      const cameraYaw = ((alpha || 0) * Math.PI) / 180; // Horizontal rotation
-      const cameraPitch = ((beta ? beta - 90 : 0) * Math.PI) / 180; // Vertical tilt
+      // Use device orientation OR touch fallback
+      const useOrientation = alpha !== null && beta !== null;
+      const cameraYaw = useOrientation 
+        ? ((alpha || 0) * Math.PI) / 180 
+        : touchRotation.yaw; // Fallback to touch rotation
+      const cameraPitch = useOrientation 
+        ? ((beta ? beta - 90 : 0) * Math.PI) / 180 
+        : touchRotation.pitch;
 
       // Debug logging every 60 frames (~1 second)
       if (now % 1000 < 16) {
         console.log('📊 AR Debug:', {
+          mode: useOrientation ? 'Orientation' : 'Touch',
           orientation: {
             alpha: alpha?.toFixed(1) || 'null',
             beta: beta?.toFixed(1) || 'null',
             gamma: gamma?.toFixed(1) || 'null'
+          },
+          touchRotation: {
+            yaw: (touchRotation.yaw * 180 / Math.PI).toFixed(1) + '°',
+            pitch: (touchRotation.pitch * 180 / Math.PI).toFixed(1) + '°'
           },
           cameraYaw: (cameraYaw * 180 / Math.PI).toFixed(1) + '°',
           microbeCount: microbes.length,
@@ -440,6 +452,17 @@ export const ARMicrobeCanvas = ({
       ctx.lineTo(centerX + 15, centerY);
       ctx.stroke();
 
+      // Draw debug info
+      const useOrientationDisplay = alpha !== null && beta !== null;
+      ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+      ctx.fillRect(10, canvas.height - 80, 200, 70);
+      ctx.fillStyle = useOrientationDisplay ? "#00ff00" : "#ffaa00";
+      ctx.font = "12px monospace";
+      ctx.fillText(useOrientationDisplay ? "📱 Orientation Mode" : "👆 Touch Mode", 20, canvas.height - 60);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(`Yaw: ${(cameraYaw * 180 / Math.PI).toFixed(0)}°`, 20, canvas.height - 40);
+      ctx.fillText(`Microbes: ${microbes.length}`, 20, canvas.height - 20);
+
       animationFrameRef.current = requestAnimationFrame(render);
     };
 
@@ -450,11 +473,44 @@ export const ARMicrobeCanvas = ({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isPaused, alpha, beta, gamma, onLifeLost]);
+  }, [isPaused, alpha, beta, gamma, touchRotation, microbes, onLifeLost]);
+
+  // Handle touch drag for camera control (fallback when orientation unavailable)
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (alpha !== null && beta !== null) return; // Only use touch when orientation unavailable
+    
+    const touch = e.touches[0];
+    if (!lastTouch) {
+      setLastTouch({ x: touch.clientX, y: touch.clientY });
+      return;
+    }
+
+    const deltaX = touch.clientX - lastTouch.x;
+    const deltaY = touch.clientY - lastTouch.y;
+
+    setTouchRotation(prev => ({
+      yaw: prev.yaw + (deltaX * 0.005), // Sensitivity
+      pitch: Math.max(-Math.PI / 3, Math.min(Math.PI / 3, prev.pitch + (deltaY * 0.005)))
+    }));
+
+    setLastTouch({ x: touch.clientX, y: touch.clientY });
+  }, [alpha, beta, lastTouch]);
+
+  const handleTouchEnd = useCallback(() => {
+    setLastTouch(null);
+  }, []);
 
   const handleTap = useCallback(
     (e: React.TouchEvent<HTMLCanvasElement>) => {
       if (isPaused || !canvasRef.current) return;
+      
+      // If it's a drag (touch move), don't shoot
+      if (lastTouch && e.changedTouches[0]) {
+        const touch = e.changedTouches[0];
+        const moved = Math.abs(touch.clientX - lastTouch.x) > 10 || 
+                     Math.abs(touch.clientY - lastTouch.y) > 10;
+        if (moved) return;
+      }
 
       const canvas = canvasRef.current;
       const centerX = canvas.width / 2;
@@ -463,9 +519,10 @@ export const ARMicrobeCanvas = ({
       // Fire laser beam
       setLaserFiring(Date.now());
 
-      // Device orientation in radians
-      const cameraYaw = ((alpha || 0) * Math.PI) / 180;
-      const cameraPitch = ((beta ? beta - 90 : 0) * Math.PI) / 180;
+      // Use device orientation OR touch fallback
+      const useOrientation = alpha !== null && beta !== null;
+      const cameraYaw = useOrientation ? ((alpha || 0) * Math.PI) / 180 : touchRotation.yaw;
+      const cameraPitch = useOrientation ? ((beta ? beta - 90 : 0) * Math.PI) / 180 : touchRotation.pitch;
 
       // Check microbe collision at crosshair (center of screen)
       let hitMicrobe = false;
@@ -556,7 +613,7 @@ export const ARMicrobeCanvas = ({
         });
       }
     },
-    [isPaused, alpha, beta, microbes, combo, activePowerUp, onScoreChange, onComboChange, onMicrobeEliminated]
+    [isPaused, alpha, beta, touchRotation, lastTouch, microbes, combo, activePowerUp, onScoreChange, onComboChange, onMicrobeEliminated]
   );
 
   // Handle active power-up expiration
@@ -592,8 +649,13 @@ export const ARMicrobeCanvas = ({
     <>
       <canvas
         ref={canvasRef}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={(e) => {
+          handleTouchEnd();
+          handleTap(e);
+        }}
         className="absolute inset-0 w-full h-full touch-none"
-        onTouchStart={handleTap}
+        style={{ width: "100%", height: "100%" }}
       />
       {activePowerUp && <PowerUp type={activePowerUp.type} endTime={activePowerUp.endTime} />}
     </>
