@@ -68,7 +68,7 @@ export const ARMicrobeCanvas = ({
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
   const [activePowerUp, setActivePowerUp] = useState<{ type: string; endTime: number } | null>(null);
-  const [laserFiring, setLaserFiring] = useState<number>(0); // Timestamp of laser fire
+  const laserFiringRef = useRef<number>(0); // Timestamp of laser fire - using ref for instant updates
   const [showDebug, setShowDebug] = useState(false); // Hidden by default
   const [sensorMode, setSensorMode] = useState<'gyroscope' | 'orientation' | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -587,8 +587,8 @@ export const ARMicrobeCanvas = ({
       }
 
       // Render laser beam if firing - red with tapered effect
-      if (laserFiring > 0 && now - laserFiring < 150) {
-        const laserAlpha = 1 - (now - laserFiring) / 150;
+      if (laserFiringRef.current > 0 && now - laserFiringRef.current < 150) {
+        const laserAlpha = 1 - (now - laserFiringRef.current) / 150;
         
         // Create tapered laser beam (wider at bottom)
         ctx.save();
@@ -701,7 +701,7 @@ export const ARMicrobeCanvas = ({
       const centerY = canvas.height / 2;
 
       // Fire laser beam
-      setLaserFiring(Date.now());
+      laserFiringRef.current = Date.now();
       console.log('🔫 LASER FIRED! Checking for hits...');
 
       // Use sensor data from ref
