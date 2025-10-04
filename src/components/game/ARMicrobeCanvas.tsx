@@ -492,12 +492,7 @@ export const ARMicrobeCanvas = ({
 
         // Render microbes in any direction within visible range (5-130 units)
         if (depth >= 5 && depth <= 130) {
-          // Only draw circles if microbe is within canvas bounds
-          const isOnScreen = screenX >= 0 && screenX <= canvas.width && 
-                             screenY >= 0 && screenY <= canvas.height;
-          
-          if (isOnScreen) {
-            // Draw hit detection circle as the primary game element
+          // Draw hit detection circle as the primary game element
             const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
             
             // Draw dark background circle for contrast
@@ -521,7 +516,6 @@ export const ARMicrobeCanvas = ({
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 3;
             ctx.stroke();
-          }
         }
       });
 
