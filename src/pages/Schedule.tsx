@@ -50,9 +50,11 @@ const Schedule = () => {
   
   // Shake detection for AR game unlock
   const [shakeProgress, setShakeProgress] = useState(0);
-  const shakeStartTimeRef = useRef<number | null>(null);
+  const totalShakeTimeRef = useRef<number>(0);
+  const lastFrameTimeRef = useRef<number | null>(null);
   const [showUnlockDialog, setShowUnlockDialog] = useState(false);
-  const [isShakeDetectionActive, setIsShakeDetectionActive] = useState(true);
+  const isARUnlocked = sessionStorage.getItem('arMicrobeUnlocked') === 'true';
+  const [isShakeDetectionActive, setIsShakeDetectionActive] = useState(!isARUnlocked);
   const { isShaking, requestPermission: requestMotionPermission } = useDeviceMotion(15);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [bookingDate, setBookingDate] = useState<Date | undefined>(new Date());
@@ -87,8 +89,6 @@ const Schedule = () => {
     requestMotionPermission();
   }, []);
 
-  const isARUnlocked = sessionStorage.getItem('arMicrobeUnlocked') === 'true';
-
   // Shake detection logic
   useEffect(() => {
     if (!isShakeDetectionActive || isARUnlocked) return;
@@ -99,32 +99,28 @@ const Schedule = () => {
         setShowUnlockDialog(true);
       }
       
-      if (shakeStartTimeRef.current === null) {
-        shakeStartTimeRef.current = Date.now();
-      }
-      
-      const elapsed = Date.now() - shakeStartTimeRef.current;
-      const progress = Math.min((elapsed / 5000) * 100, 100);
-      setShakeProgress(progress);
-      
-      if (progress >= 100) {
-        sessionStorage.setItem('arMicrobeUnlocked', 'true');
-        setIsShakeDetectionActive(false);
-      }
-    } else {
-      // Reset if user stops shaking before completing
-      if (shakeStartTimeRef.current !== null && shakeProgress < 100) {
-        const elapsed = Date.now() - shakeStartTimeRef.current;
-        if (elapsed < 5000) {
-          setTimeout(() => {
-            setShakeProgress(0);
-            shakeStartTimeRef.current = null;
-            setShowUnlockDialog(false);
-          }, 500);
+      // Accumulate shake time
+      if (lastFrameTimeRef.current === null) {
+        lastFrameTimeRef.current = Date.now();
+      } else {
+        const now = Date.now();
+        const frameDelta = now - lastFrameTimeRef.current;
+        totalShakeTimeRef.current += frameDelta;
+        lastFrameTimeRef.current = now;
+        
+        const progress = Math.min((totalShakeTimeRef.current / 5000) * 100, 100);
+        setShakeProgress(progress);
+        
+        if (progress >= 100) {
+          sessionStorage.setItem('arMicrobeUnlocked', 'true');
+          setIsShakeDetectionActive(false);
         }
       }
+    } else {
+      // Paused - reset frame timer but keep total time and dialog open
+      lastFrameTimeRef.current = null;
     }
-  }, [isShaking, navigate, isShakeDetectionActive, isARUnlocked, showUnlockDialog, shakeProgress]);
+  }, [isShaking, navigate, isShakeDetectionActive, isARUnlocked, showUnlockDialog]);
 
   // Pre-select equipment if passed via URL, but don't auto-open dialog
   useEffect(() => {
@@ -669,10 +665,11 @@ const Schedule = () => {
       {/* AR Game Unlock Dialog */}
       <AlertDialog open={showUnlockDialog} onOpenChange={(open) => {
         if (!open && shakeProgress < 100) {
-          // Allow closing if not yet unlocked
+          // Allow closing and reset if not yet unlocked
           setShowUnlockDialog(false);
           setShakeProgress(0);
-          shakeStartTimeRef.current = null;
+          totalShakeTimeRef.current = 0;
+          lastFrameTimeRef.current = null;
         } else if (!open && shakeProgress >= 100) {
           // Allow closing after unlock
           setShowUnlockDialog(false);
@@ -696,7 +693,9 @@ const Schedule = () => {
             <p className="text-center text-sm text-muted-foreground">
               {shakeProgress >= 100 
                 ? '🎉 Unlocked!' 
-                : `${Math.round(shakeProgress)}% - Hold steady and keep shaking for 5 seconds`
+                : isShaking
+                  ? `${Math.round(shakeProgress)}% - Keep shaking!`
+                  : `Paused at ${Math.round(shakeProgress)}% - Shake again to continue!`
               }
             </p>
           </div>
