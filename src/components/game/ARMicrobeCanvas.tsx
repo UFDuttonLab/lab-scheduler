@@ -480,8 +480,8 @@ export const ARMicrobeCanvas = ({
         // Rotate world space to camera view space (at yaw=0, camera looks toward -Z)
         const cosYaw = Math.cos(cameraYaw);
         const sinYaw = Math.sin(cameraYaw);
-        const rotatedX = viewX * cosYaw - viewZ * sinYaw;
-        const rotatedZ = viewX * sinYaw + viewZ * cosYaw;
+        const rotatedX = viewX * cosYaw + viewZ * sinYaw;
+        const rotatedZ = -viewX * sinYaw + viewZ * cosYaw;
         
         // Apply pitch rotation (around X axis)
         const cosPitch = Math.cos(cameraPitch);
@@ -701,11 +701,7 @@ export const ARMicrobeCanvas = ({
       const cameraYaw = sensorDataRef.current.yaw;
       const cameraPitch = sensorDataRef.current.pitch;
 
-      // Check sensor data with more lenient threshold
-      if (Math.abs(cameraYaw) < 0.01 && Math.abs(cameraPitch) < 0.01) {
-        console.error('🚨 SENSOR DATA IS ZERO! Sensors not initialized!', sensorDataRef.current);
-        return;
-      }
+      // Laser always fires when user taps - sensors at zero is a valid state (device is level)
       
       console.log('✅ Sensor data valid:', { 
         yaw: (cameraYaw * 180 / Math.PI).toFixed(2) + '°', 
@@ -737,8 +733,8 @@ export const ARMicrobeCanvas = ({
           // Rotate world space to camera view space (at yaw=0, camera looks toward -Z)
           const cosYaw = Math.cos(cameraYaw);
           const sinYaw = Math.sin(cameraYaw);
-          const rotatedX = viewX * cosYaw - viewZ * sinYaw;
-          const rotatedZ = viewX * sinYaw + viewZ * cosYaw;
+          const rotatedX = viewX * cosYaw + viewZ * sinYaw;
+          const rotatedZ = -viewX * sinYaw + viewZ * cosYaw;
           
           // Apply pitch rotation (around X axis)
           const cosPitch = Math.cos(cameraPitch);

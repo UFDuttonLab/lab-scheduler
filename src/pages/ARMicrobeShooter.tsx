@@ -420,11 +420,6 @@ const ARMicrobeShooter = () => {
         </Button>
       </div>
 
-      <div className="absolute bottom-4 left-4 pointer-events-auto z-40">
-        <div className="bg-black/60 backdrop-blur-sm rounded-lg p-2 text-white text-sm">
-          <p>🦠 {microbesEliminated}</p>
-        </div>
-      </div>
     </ARCamera>
   );
 };
