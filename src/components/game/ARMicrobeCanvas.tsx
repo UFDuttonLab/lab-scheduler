@@ -718,16 +718,16 @@ export const ARMicrobeCanvas = ({
       setLaserFiring(Date.now());
       console.log('🔫 LASER FIRED! Checking', microbes.length, 'microbes for hits...');
 
-      // Use sensor data based on current mode
+      // Use sensor data based on current mode (MATCH RENDERING!)
       let cameraYaw = touchRotation.yaw;
       let cameraPitch = touchRotation.pitch;
       
       if (sensorMode === 'gyroscope' && gyro.alpha !== null) {
-        cameraYaw = (gyro.alpha * Math.PI) / 180;
-        cameraPitch = Math.max(-45, Math.min(45, ((gyro.beta || 0) - 90) * Math.PI / 180));
+        cameraYaw = (gyro.gamma * Math.PI) / 180; // Use gamma, not alpha!
+        cameraPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, (gyro.beta || 0) * Math.PI / 180)); // Match rendering limits
       } else if (sensorMode === 'orientation' && orientation.alpha !== null) {
-        cameraYaw = (orientation.alpha * Math.PI) / 180;
-        cameraPitch = Math.max(-45, Math.min(45, ((orientation.beta || 0) - 90) * Math.PI / 180));
+        cameraYaw = (orientation.gamma * Math.PI) / 180; // Use gamma, not alpha!
+        cameraPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, (orientation.beta || 0) * Math.PI / 180)); // Match rendering limits
       }
 
       // Use setMicrobes with callback to get FRESH microbe data
