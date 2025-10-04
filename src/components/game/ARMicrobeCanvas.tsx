@@ -116,39 +116,39 @@ export const ARMicrobeCanvas = ({
     let type: Microbe["type"] = "basic";
     let health = 1;
     let points = 10;
-    let speed = 4; // Base speed for 15-22 second approach from 60-90 units
+    let speed = 6; // Base speed for 13-20 second approach from 80-120 units
     let size = 40;
 
     if (gameTime > 90 && rand < 5) {
       type = "boss";
       health = 10;
       points = 250;
-      speed = 3.5; // Slow menacing approach (17-25 seconds)
+      speed = 6; // Menacing but faster approach (13-20 seconds)
       size = 80;
     } else if (rand < 5) {
       type = "golden";
       health = 1;
       points = 100;
-      speed = 7; // Quick reward opportunity (8-12 seconds)
+      speed = 12; // Very quick reward opportunity (6-10 seconds)
       size = 35;
     } else if (gameTime > 60 && rand < 15) {
       type = "tank";
       health = 3;
       points = 50;
-      speed = 3; // Slow but tanky approach (20-30 seconds)
+      speed = 5; // Slow but tanky approach (16-24 seconds)
       size = 60;
     } else if (gameTime > 30 && rand < 30) {
       type = "fast";
       health = 1;
       points = 25;
-      speed = 6; // Quick threat (10-15 seconds)
+      speed = 10; // Very quick threat (8-12 seconds)
       size = 30;
     }
 
     // Generate spawn position in full 360° sphere around player (requires looking around)
     const relativeAngle = Math.random() * Math.PI * 2; // Full 360° horizontal
     const elevation = (Math.random() - 0.5) * Math.PI; // Full 180° vertical
-    const distance = 60 + Math.random() * 30; // Spawn 60-90 units away for 15-30 second approach
+    const distance = 80 + Math.random() * 40; // Spawn 80-120 units away for 10-20 second approach
 
     // Convert to world coordinates (spawn in front of where camera is currently pointing)
     const worldAngle = cameraYaw + relativeAngle;
@@ -473,8 +473,8 @@ export const ARMicrobeCanvas = ({
         const scale = 300 / depth;
         const size = microbe.size * scale;
 
-        // Render microbes in any direction within visible range (5-100 units)
-        if (depth >= 5 && depth <= 100) {
+        // Render microbes in any direction within visible range (5-130 units)
+        if (depth >= 5 && depth <= 130) {
           // Render microbe
           ctx.save();
           ctx.globalAlpha = microbe.opacity;
@@ -730,9 +730,9 @@ export const ARMicrobeCanvas = ({
         const finalY = viewY * cosPitch - rotatedZ * sinPitch;
         const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
 
-        // Skip if out of visible range (must match rendering range 5-100 units)
+        // Skip if out of visible range (must match rendering range 5-130 units)
         const depth = Math.abs(finalZ);
-        if (depth < 5 || depth > 100) {
+        if (depth < 5 || depth > 130) {
           console.log('⏭️ Skipping microbe - out of range, depth:', depth.toFixed(1));
           return;
         }
@@ -780,6 +780,17 @@ export const ARMicrobeCanvas = ({
             setParticles((prev) => [...prev, ...newParticles]);
 
             if (newHealth <= 0) {
+              // Create BIG explosion particles on death
+              const explosionParticles: Particle[] = Array.from({ length: 40 }, () => ({
+                x: screenX,
+                y: screenY,
+                vx: (Math.random() - 0.5) * 12,
+                vy: (Math.random() - 0.5) * 12,
+                life: 1.5,
+                color: getMicrobeColor(m.type),
+              }));
+              setParticles((prev) => [...prev, ...explosionParticles]);
+
               // Microbe eliminated
               const newCombo = combo + 1;
               const comboMultiplier = 1 + Math.floor(newCombo / 5) * 0.5;
