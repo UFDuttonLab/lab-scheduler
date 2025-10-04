@@ -670,6 +670,7 @@ export const ARMicrobeCanvas = ({
     <>
       <canvas
         ref={canvasRef}
+        onTouchStart={handleTouchMove}
         onTouchMove={handleTouchMove}
         onTouchEnd={(e) => {
           handleTouchEnd();
