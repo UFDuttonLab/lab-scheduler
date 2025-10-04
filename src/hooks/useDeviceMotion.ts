@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 
 interface DeviceMotionState {
   acceleration: {
@@ -17,6 +17,7 @@ export const useDeviceMotion = (threshold: number = 15) => {
     shakeIntensity: 0,
   });
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
+  const lastShakeTimeRef = useRef<number>(0);
 
   const requestPermission = useCallback(async () => {
     // Check if DeviceMotionEvent is available
@@ -63,7 +64,15 @@ export const useDeviceMotion = (threshold: number = 15) => {
       const deltaZ = Math.abs(z - lastZ);
 
       const totalDelta = deltaX + deltaY + deltaZ;
-      const isShaking = totalDelta > threshold;
+      const now = Date.now();
+      
+      // If we detect shake motion, update the last shake time
+      if (totalDelta > threshold) {
+        lastShakeTimeRef.current = now;
+      }
+      
+      // Keep isShaking true for 200ms after last shake detected
+      const isShaking = (now - lastShakeTimeRef.current) < 200;
 
       setMotionState({
         acceleration: { x, y, z },
