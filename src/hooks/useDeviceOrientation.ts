@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 interface DeviceOrientationState {
   alpha: number | null; // Rotation around z-axis (0-360)
@@ -7,14 +7,12 @@ interface DeviceOrientationState {
 }
 
 export const useDeviceOrientation = () => {
-  const orientationRef = useRef<DeviceOrientationState>({
+  const [orientation, setOrientation] = useState<DeviceOrientationState>({
     alpha: null,
     beta: null,
     gamma: null,
   });
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
-  const hasDetectedDataRef = useRef(false); // FIX: Moved to top level
-  const hasWarnedRef = useRef(false); // FIX #4: Track if we've already warned about stale sensors
 
   const requestPermission = useCallback(async () => {
     // Check if DeviceOrientationEvent is available
@@ -57,8 +55,6 @@ export const useDeviceOrientation = () => {
     }
   }, []);
 
-  // PHASE 1 FIX: Removed implicit detection - permission ONLY granted via explicit requestPermission()
-
   useEffect(() => {
     if (permissionGranted !== true) return;
 
@@ -74,11 +70,11 @@ export const useDeviceOrientation = () => {
       // Check if we're getting actual data (not null)
       const hasData = event.alpha !== null || event.beta !== null || event.gamma !== null;
       
-      orientationRef.current = {
+      setOrientation({
         alpha: event.alpha,
         beta: event.beta,
         gamma: event.gamma,
-      };
+      });
       
       // Log first event
       if (wasFirstEvent) {
@@ -113,9 +109,8 @@ export const useDeviceOrientation = () => {
 
     // Periodic check for stale data
     const staleCheckInterval = setInterval(() => {
-      if (eventReceived && Date.now() - lastEventTime > 2000 && !hasWarnedRef.current) {
+      if (eventReceived && Date.now() - lastEventTime > 2000) {
         console.warn("⚠️ Device orientation events stopped updating");
-        hasWarnedRef.current = true; // Only warn once
       }
     }, 2000);
 
@@ -127,7 +122,7 @@ export const useDeviceOrientation = () => {
   }, [permissionGranted]);
 
   return {
-    orientationRef,
+    ...orientation,
     permissionGranted,
     requestPermission,
   };

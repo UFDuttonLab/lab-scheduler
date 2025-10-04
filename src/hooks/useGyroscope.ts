@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 interface GyroscopeState {
   alpha: number | null; // Calculated from gyroscope
@@ -10,7 +10,7 @@ interface GyroscopeState {
 }
 
 export const useGyroscope = () => {
-  const gyroStateRef = useRef<GyroscopeState>({
+  const [gyroState, setGyroState] = useState<GyroscopeState>({
     alpha: null,
     beta: null,
     gamma: null,
@@ -51,31 +51,6 @@ export const useGyroscope = () => {
       return false;
     }
   }, []);
-
-  // Auto-detect implicit permission - gyroscope typically requires explicit permission
-  // but we check the availability early
-  useEffect(() => {
-    if (permissionGranted !== null) return;
-
-    // For gyroscope, if the API exists and we haven't been denied, try to enable
-    if ('Gyroscope' in window) {
-      const checkAvailability = async () => {
-        try {
-          if ('permissions' in navigator) {
-            const result = await navigator.permissions.query({ name: 'gyroscope' as PermissionName });
-            if (result.state === 'granted') {
-              console.log('✅ Gyroscope implicit permission detected (already granted)');
-              setSensorAvailable(true);
-              setPermissionGranted(true);
-            }
-          }
-        } catch (e) {
-          // Permission query failed, will need explicit request
-        }
-      };
-      checkAvailability();
-    }
-  }, [permissionGranted]);
 
   useEffect(() => {
     if (permissionGranted !== true || !sensorAvailable) return;
@@ -126,14 +101,14 @@ export const useGyroscope = () => {
         // Clamp gamma to -90 to 90
         accumulatedGamma = Math.max(-90, Math.min(90, accumulatedGamma));
 
-        gyroStateRef.current = {
+        setGyroState({
           alpha: accumulatedAlpha,
           beta: accumulatedBeta,
           gamma: accumulatedGamma,
           rotationRateAlpha,
           rotationRateBeta,
           rotationRateGamma,
-        };
+        });
       });
 
       gyroscope.addEventListener('error', (event: any) => {
@@ -161,7 +136,7 @@ export const useGyroscope = () => {
   }, [permissionGranted, sensorAvailable]);
 
   return {
-    gyroStateRef,
+    ...gyroState,
     permissionGranted,
     sensorAvailable,
     requestPermission,

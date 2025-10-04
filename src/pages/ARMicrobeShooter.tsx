@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { ARCamera, ARCameraHandle } from "@/components/game/ARCamera";
+import { ARCamera } from "@/components/game/ARCamera";
 import { ARMicrobeCanvas } from "@/components/game/ARMicrobeCanvas";
 import { Leaderboard } from "@/components/game/Leaderboard";
 import { Button } from "@/components/ui/button";
@@ -14,13 +14,12 @@ import { useDeviceOrientation } from "@/hooks/useDeviceOrientation";
 import { useGyroscope } from "@/hooks/useGyroscope";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-type GameState = "menu" | "requesting-permissions" | "playing" | "paused" | "gameover";
+type GameState = "menu" | "playing" | "paused" | "gameover";
 
 const ARMicrobeShooter = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isMobile = useIsMobile();
-  const cameraRef = useRef<ARCameraHandle>(null);
   const [gameState, setGameState] = useState<GameState>("menu");
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
@@ -28,56 +27,31 @@ const ARMicrobeShooter = () => {
   const [microbesEliminated, setMicrobesEliminated] = useState(0);
   const [totalTaps, setTotalTaps] = useState(0);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [permissionsGranted, setPermissionsGranted] = useState(false);
+  const [permissionStatus, setPermissionStatus] = useState<string>("");
   const gameStartTimeRef = useRef<number>(0);
   const { requestPermission: requestMotionPermission } = useDeviceMotion();
   const { requestPermission: requestOrientationPermission } = useDeviceOrientation();
   const gyro = useGyroscope();
 
-  const startGame = useCallback(async () => {
-    console.log("🎮 Starting AR Microbe Shooter - Requesting Permissions");
-    setGameState("requesting-permissions");
-    setPermissionError(null);
+  const handleRequestPermissions = async () => {
+    setPermissionStatus("Requesting permissions...");
+    
+    const motionGranted = await requestMotionPermission();
+    const orientationGranted = await requestOrientationPermission();
+    const gyroGranted = await gyro.requestPermission();
 
-    try {
-      // Step 1: Request camera permission
-      if (!cameraRef.current) {
-        throw new Error("Camera component not ready");
-      }
-      await cameraRef.current.startCamera();
-      console.log("✅ Camera permission granted");
+    console.log('🔐 Permission results:', { motionGranted, orientationGranted, gyroGranted });
 
-      // Step 2: Request motion/orientation permissions
-      const motionGranted = await requestMotionPermission();
-      const orientationGranted = await requestOrientationPermission();
-      const gyroGranted = await gyro.requestPermission();
-      
-      if (!motionGranted && !orientationGranted && !gyroGranted) {
-        toast.warning("Motion sensors not available - using touch controls only");
-      } else {
-        console.log("✅ Sensor permissions granted");
-        // Wait for sensors to stabilize
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-
-      console.log("✅ All permissions granted - Starting game");
-      
-      // Initialize game state
-      setScore(0);
-      setLives(3);
-      setCombo(0);
-      setMicrobesEliminated(0);
-      setTotalTaps(0);
-      gameStartTimeRef.current = Date.now();
-      setGameState("playing");
-    } catch (err: any) {
-      console.error("❌ Permission error:", err);
-      const errorMsg = err.message || "Failed to get required permissions";
-      setPermissionError(errorMsg);
-      setGameState("menu");
-      toast.error("Permission Denied", { description: errorMsg });
+    if (motionGranted || orientationGranted || gyroGranted) {
+      setPermissionsGranted(true);
+      setPermissionStatus("✅ Permissions granted! Ready to play.");
+      toast.success("Sensors ready!");
+    } else {
+      setPermissionStatus("⚠️ Touch controls will be used instead.");
+      toast.warning("No sensor permissions granted - using touch controls");
     }
-  }, [requestMotionPermission, requestOrientationPermission, gyro]);
+  };
 
   // Check unlock status and device capability
   useEffect(() => {
@@ -136,6 +110,16 @@ const ARMicrobeShooter = () => {
     return () => clearTimeout(checkUnlock);
   }, [navigate, isMobile]);
 
+  const startGame = async () => {
+    // Initialize game state
+    setGameState("playing");
+    setScore(0);
+    setLives(3);
+    setCombo(0);
+    setMicrobesEliminated(0);
+    setTotalTaps(0);
+    gameStartTimeRef.current = Date.now();
+  };
 
   const pauseGame = () => {
     setGameState("paused");
@@ -200,14 +184,6 @@ const ARMicrobeShooter = () => {
     setTotalTaps((prev) => prev + 1);
   }, []);
 
-  const handleScoreChange = useCallback((newScore: number) => {
-    setScore(newScore);
-  }, []);
-
-  const handleComboChange = useCallback((newCombo: number) => {
-    setCombo(newCombo);
-  }, []);
-
   const handleTap = () => {
     setTotalTaps((prev) => prev + 1);
   };
@@ -246,15 +222,6 @@ const ARMicrobeShooter = () => {
               <li>Device orientation for aiming (or use touch controls)</li>
             </ul>
           </div>
-
-          {permissionError && (
-            <div className="bg-destructive/10 border border-destructive rounded-lg p-4">
-              <p className="text-sm text-destructive font-medium">{permissionError}</p>
-              <p className="text-xs text-muted-foreground mt-2">
-                Please allow camera and sensor permissions to play.
-              </p>
-            </div>
-          )}
           
           <div className="space-y-3">
             <Button onClick={startGame} size="lg" className="w-full">
@@ -289,18 +256,6 @@ const ARMicrobeShooter = () => {
             </ul>
           </div>
         </Card>
-      </div>
-    );
-  }
-
-  if (gameState === "requesting-permissions") {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto"></div>
-          <p className="text-lg font-medium">Requesting permissions...</p>
-          <p className="text-sm text-muted-foreground">Please allow camera and sensor access</p>
-        </div>
       </div>
     );
   }
@@ -373,61 +328,57 @@ const ARMicrobeShooter = () => {
   }
 
   // Playing state - AR view
-  // Always render ARCamera to ensure ref exists, but hide when not playing
   return (
-    <div className={gameState === "playing" ? "block" : "fixed inset-0 invisible pointer-events-none"}>
-      <ARCamera ref={cameraRef}>
-        <ARMicrobeCanvas
-          onScoreChange={handleScoreChange}
-          onLifeLost={handleLifeLost}
-          onMicrobeEliminated={handleMicrobeEliminated}
-          onComboChange={handleComboChange}
-          lives={lives}
-          isPaused={false}
-        />
+    <ARCamera>
+      <ARMicrobeCanvas
+        onScoreChange={setScore}
+        onLifeLost={handleLifeLost}
+        onMicrobeEliminated={handleMicrobeEliminated}
+        onComboChange={setCombo}
+        lives={lives}
+        isPaused={false}
+      />
 
-        {/* HUD */}
-        <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start text-white pointer-events-none">
-          <div className="bg-black/60 backdrop-blur-sm rounded-lg p-3">
-            <p className="text-2xl font-bold">{score}</p>
-            <p className="text-xs">SCORE</p>
-          </div>
-
-          <div className="bg-black/60 backdrop-blur-sm rounded-lg p-3">
-            <div className="flex gap-1">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Heart
-                  key={i}
-                  className={`h-6 w-6 ${i < lives ? "fill-red-500 text-red-500" : "fill-gray-500 text-gray-500"}`}
-                />
-              ))}
-            </div>
-          </div>
+      {/* HUD */}
+      <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start text-white pointer-events-none">
+        <div className="bg-black/60 backdrop-blur-sm rounded-lg p-3">
+          <p className="text-2xl font-bold">{score}</p>
+          <p className="text-xs">SCORE</p>
         </div>
 
-        <div className="absolute top-20 left-0 right-0 flex justify-center pointer-events-none">
-          {combo > 0 && (
-            <div className="bg-primary/90 backdrop-blur-sm rounded-full px-6 py-2 text-white font-bold text-xl animate-pulse">
-              {combo}x COMBO!
-            </div>
-          )}
+        <div className="bg-black/60 backdrop-blur-sm rounded-lg p-3">
+          <div className="flex gap-1">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Heart
+                key={i}
+                className={`h-6 w-6 ${i < lives ? "fill-red-500 text-red-500" : "fill-gray-500 text-gray-500"}`}
+              />
+            ))}
+          </div>
         </div>
+      </div>
 
-        {/* Pause Button - Fixed z-index and simplified touch handling */}
-        <Button 
-          onClick={pauseGame}
-          onTouchEnd={(e) => {
-            e.preventDefault();
-            pauseGame();
-          }}
-          size="icon" 
-          variant="secondary" 
-          className="absolute bottom-4 right-4 z-50 rounded-full h-14 w-14 shadow-lg pointer-events-auto"
-        >
+      <div className="absolute top-20 left-0 right-0 flex justify-center pointer-events-none">
+        {combo > 0 && (
+          <div className="bg-primary/90 backdrop-blur-sm rounded-full px-6 py-2 text-white font-bold text-xl animate-pulse">
+            {combo}x COMBO!
+          </div>
+        )}
+      </div>
+
+      {/* Controls */}
+      <div className="absolute bottom-4 right-4 flex gap-2 pointer-events-auto">
+        <Button onClick={pauseGame} size="icon" variant="secondary" className="rounded-full h-12 w-12">
           <Pause className="h-6 w-6" />
         </Button>
-      </ARCamera>
-    </div>
+      </div>
+
+      <div className="absolute bottom-4 left-4 pointer-events-auto">
+        <div className="bg-black/60 backdrop-blur-sm rounded-lg p-2 text-white text-sm">
+          <p>🦠 {microbesEliminated}</p>
+        </div>
+      </div>
+    </ARCamera>
   );
 };
 
