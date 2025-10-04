@@ -144,12 +144,13 @@ export const ARMicrobeCanvas = ({
       size = 30;
     }
 
-    // Generate spawn position in absolute world space (not relative to camera)
-    const worldAngle = Math.random() * Math.PI * 2; // Absolute angle in world space
+    // Spawn microbes biased toward camera's current view (within ±90° of yaw)
+    const angleOffset = (Math.random() - 0.5) * Math.PI; // ±90° from camera direction
+    const worldAngle = cameraYaw + angleOffset;
     const elevation = (Math.random() - 0.5) * Math.PI; // Full 180° vertical
     const distance = 80 + Math.random() * 40; // Spawn 80-120 units away
 
-    // Convert to absolute world coordinates
+    // Convert to world coordinates (biased toward camera's front hemisphere)
     const worldX = Math.sin(worldAngle) * Math.cos(elevation) * distance;
     const worldY = Math.sin(elevation) * distance;
     const worldZ = -Math.cos(worldAngle) * Math.cos(elevation) * distance;

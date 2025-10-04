@@ -60,6 +60,19 @@ export const useGyroscope = () => {
     let accumulatedBeta = 0;
     let accumulatedGamma = 0;
     let lastUpdateTime = Date.now();
+    let isInitialized = false;
+
+    // Try to get initial compass heading from DeviceOrientation
+    const initializeFromOrientation = (event: DeviceOrientationEvent) => {
+      if (!isInitialized && event.alpha !== null) {
+        accumulatedAlpha = event.alpha;
+        isInitialized = true;
+        console.log('✅ Gyroscope initialized from compass heading:', event.alpha);
+        window.removeEventListener('deviceorientation', initializeFromOrientation);
+      }
+    };
+    
+    window.addEventListener('deviceorientation', initializeFromOrientation);
 
     try {
       gyroscope = new (window as any).Gyroscope({ frequency: 60 });
@@ -111,6 +124,7 @@ export const useGyroscope = () => {
     }
 
     return () => {
+      window.removeEventListener('deviceorientation', initializeFromOrientation);
       if (gyroscope) {
         try {
           gyroscope.stop();
