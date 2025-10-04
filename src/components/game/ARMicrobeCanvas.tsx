@@ -74,7 +74,7 @@ export const ARMicrobeCanvas = ({
   const [showDebug] = useState(true); // Enabled for debugging
   const [sensorMode, setSensorMode] = useState<'gyroscope' | 'orientation' | 'touch'>('touch');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
-  const [showPermissionOverlay, setShowPermissionOverlay] = useState(true);
+  const [showPermissionOverlay, setShowPermissionOverlay] = useState(false); // Testing: start hidden to check spawning
   const [permissionStatus, setPermissionStatus] = useState("");
   const [cameraWorldPos] = useState({ x: 0, y: 0, z: 0 }); // Camera stays at origin
   const lastComboTimeRef = useRef<number>(Date.now());
@@ -208,6 +208,12 @@ export const ARMicrobeCanvas = ({
 
     console.log('🔐 Canvas permission results:', { gyroGranted, orientationGranted });
 
+    // Force hide overlay after 3 seconds max to prevent stuck state
+    setTimeout(() => {
+      console.log('⏰ Force hiding permission overlay after timeout');
+      setShowPermissionOverlay(false);
+    }, 3000);
+
     if (gyroGranted || orientationGranted) {
       setPermissionStatus("✅ Permissions granted! Sensors active.");
       // Wait for sensor data to flow before hiding overlay
@@ -260,7 +266,15 @@ export const ARMicrobeCanvas = ({
     if (isPaused) return;
 
     const spawnInterval = useTouchMode ? 1500 : 2000; // Faster spawn in touch mode
+    console.log('🎯 Spawn interval created:', { spawnInterval, currentMicrobes: microbes.length, isPaused, sensorMode });
+    
     const interval = setInterval(() => {
+      console.log('🎯 Spawn interval fired - attempting spawn...', { 
+        currentMicrobes: microbes.length, 
+        maxMicrobes: 10,
+        willSpawn: microbes.length < 10 
+      });
+      
       if (microbes.length < 10) {
         let cameraYaw = touchRotation.yaw;
         
@@ -270,11 +284,18 @@ export const ARMicrobeCanvas = ({
           cameraYaw = (orientation.alpha * Math.PI) / 180;
         }
         
+        console.log('🎯 Calling spawnMicrobe with cameraYaw:', cameraYaw);
         spawnMicrobe(cameraYaw);
+        console.log('🎯 spawnMicrobe called, new microbe count should be:', microbes.length + 1);
+      } else {
+        console.log('🎯 Max microbes reached, skipping spawn');
       }
     }, spawnInterval);
 
-    return () => clearInterval(interval);
+    return () => {
+      console.log('🎯 Cleaning up spawn interval');
+      clearInterval(interval);
+    };
   }, [isPaused, microbes.length, spawnMicrobe, orientation.alpha, gyro.alpha, touchRotation, sensorMode, useTouchMode]);
 
   // Power-up spawn logic
