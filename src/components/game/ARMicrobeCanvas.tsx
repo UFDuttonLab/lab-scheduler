@@ -170,18 +170,18 @@ export const ARMicrobeCanvas = ({
   useEffect(() => {
     if (isPaused) return;
 
-    // Store current camera orientation for spawning
-    const cameraYaw = ((alpha || 0) * Math.PI) / 180;
-    const cameraPitch = ((beta ? beta - 90 : 0) * Math.PI) / 180;
-
     const spawnInterval = setInterval(() => {
+      // Calculate FRESH camera orientation for each spawn
+      const cameraYaw = ((alpha || 0) * Math.PI) / 180;
+      const cameraPitch = ((beta ? beta - 90 : 0) * Math.PI) / 180;
+      
       if (microbes.length < 10) {
         spawnMicrobe(cameraYaw, cameraPitch);
       }
     }, 2000);
 
     return () => clearInterval(spawnInterval);
-  }, [isPaused, microbes.length, spawnMicrobe, alpha, beta]);
+  }, [isPaused, microbes.length, spawnMicrobe]);
 
   // Power-up spawn logic
   useEffect(() => {
