@@ -184,6 +184,14 @@ const ARMicrobeShooter = () => {
     setTotalTaps((prev) => prev + 1);
   }, []);
 
+  const handleScoreChange = useCallback((newScore: number) => {
+    setScore(newScore);
+  }, []);
+
+  const handleComboChange = useCallback((newCombo: number) => {
+    setCombo(newCombo);
+  }, []);
+
   const handleTap = () => {
     setTotalTaps((prev) => prev + 1);
   };
@@ -331,10 +339,10 @@ const ARMicrobeShooter = () => {
   return (
     <ARCamera>
       <ARMicrobeCanvas
-        onScoreChange={setScore}
+        onScoreChange={handleScoreChange}
         onLifeLost={handleLifeLost}
         onMicrobeEliminated={handleMicrobeEliminated}
-        onComboChange={setCombo}
+        onComboChange={handleComboChange}
         lives={lives}
         isPaused={false}
       />
