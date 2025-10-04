@@ -469,19 +469,6 @@ export const ARMicrobeCanvas = ({
             const finalY = viewY * cosPitch - rotatedZ * sinPitch;
             const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
 
-            // Skip rendering if behind camera (negative Z = in front, positive Z = behind)
-            if (finalZ >= 0) {
-              console.log('❌ Microbe CULLED (behind camera):', {
-                id: microbe.id.substring(8, 16),
-                worldPos: `(${newWorldX.toFixed(2)}, ${newWorldY.toFixed(2)}, ${newWorldZ.toFixed(2)})`,
-                viewPos: `(${viewX.toFixed(2)}, ${viewY.toFixed(2)}, ${viewZ.toFixed(2)})`,
-                afterYawRot: `(${rotatedX.toFixed(2)}, ${rotatedZ.toFixed(2)})`,
-                finalZ: finalZ.toFixed(2),
-                cameraYaw: (cameraYaw * 180 / Math.PI).toFixed(1) + '°',
-                cameraPitch: (cameraPitch * 180 / Math.PI).toFixed(1) + '°'
-              });
-              return null;
-            }
             
             // Add wobble for realism
             const wobbleOffset = Math.sin(newWobble) * 0.05;
