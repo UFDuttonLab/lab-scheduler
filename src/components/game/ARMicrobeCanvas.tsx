@@ -492,15 +492,22 @@ export const ARMicrobeCanvas = ({
 
         // Render microbes in any direction within visible range (5-130 units)
         if (depth >= 5 && depth <= 130) {
-          // Debug: Draw hit detection circle around microbe
-          const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
-          if (distanceFromCrosshair < 150) {
-            ctx.strokeStyle = distanceFromCrosshair < 120 ? '#00ff00' : '#ffff00';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
-            ctx.stroke();
-          }
+          // Debug: Draw filled hit detection circle around microbe
+          const distanceFromCrosshair = Math.hypot(screenX - centerX, centerY - screenY);
+          // Color based on distance from crosshair
+          const circleColor = distanceFromCrosshair < 120 ? 'rgba(0, 255, 0, 0.3)' : 
+                              distanceFromCrosshair < 150 ? 'rgba(255, 255, 0, 0.3)' : 
+                              'rgba(255, 0, 0, 0.3)';
+          ctx.fillStyle = circleColor;
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
+          ctx.fill();
+          // Add outline for clarity
+          ctx.strokeStyle = distanceFromCrosshair < 120 ? '#00ff00' : 
+                            distanceFromCrosshair < 150 ? '#ffff00' : 
+                            '#ff0000';
+          ctx.lineWidth = 2;
+          ctx.stroke();
           
           // Render microbe
           ctx.save();
