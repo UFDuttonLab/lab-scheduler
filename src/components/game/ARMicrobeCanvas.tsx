@@ -460,8 +460,9 @@ export const ARMicrobeCanvas = ({
       }
 
       // Camera stays at origin (0, 0, 0) - only rotation changes
-      // cameraWorldPosRef.current.x = 0;
-      // cameraWorldPosRef.current.z = 0;
+      cameraWorldPosRef.current.x = 0;
+      cameraWorldPosRef.current.y = 0;
+      cameraWorldPosRef.current.z = 0;
 
       // Render loop verification logging (reduced frequency)
       if (now % 3000 < 16) { // Log every 3 seconds
