@@ -960,7 +960,7 @@ export const ARMicrobeCanvas = ({
           handleTap(e);      // ← Check tap FIRST (while lastTouch exists)
           handleTouchEnd();  // ← Clear lastTouch AFTER
         }}
-        className="absolute inset-0 w-full h-full touch-none"
+        className="absolute inset-0 w-full h-full"
         style={{ width: "100%", height: "100%" }}
       />
 
