@@ -69,11 +69,8 @@ export const ARMicrobeCanvas = ({
   const [combo, setCombo] = useState(0);
   const [activePowerUp, setActivePowerUp] = useState<{ type: string; endTime: number } | null>(null);
   const [laserFiring, setLaserFiring] = useState<number>(0); // Timestamp of laser fire
-  const [touchRotation, setTouchRotation] = useState({ yaw: 0, pitch: 0 });
-  const [lastTouch, setLastTouch] = useState<{ x: number; y: number } | null>(null);
-  const [useTouchMode, setUseTouchMode] = useState(false);
   const [showDebug, setShowDebug] = useState(false); // Hidden by default
-  const [sensorMode, setSensorMode] = useState<'gyroscope' | 'orientation' | 'touch'>('touch');
+  const [sensorMode, setSensorMode] = useState<'gyroscope' | 'orientation' | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [showPermissionOverlay, setShowPermissionOverlay] = useState(true); // Show on game start
   const [permissionStatus, setPermissionStatus] = useState("Sensors needed for best experience");
@@ -212,37 +209,30 @@ export const ARMicrobeCanvas = ({
         setTimeout(() => spawnMicrobe(initialYaw + (Math.random() - 0.5) * Math.PI), i * 100);
       }
     } else {
-      toast.info("Using touch controls - drag to look around");
+      toast.error("Sensors required to play AR Microbe Shooter");
     }
   };
 
-  // Determine which sensor mode to use with smart fallback
+  // Determine which sensor mode to use
   useEffect(() => {
-    const now = Date.now();
-    
     // Check Gyroscope API first (best for Android)
     if (gyro.permissionGranted && gyro.sensorAvailable && gyro.alpha !== null) {
       setSensorMode('gyroscope');
-      setUseTouchMode(false);
       console.log('✅ Using GYROSCOPE API mode - alpha:', gyro.alpha);
-      lastDataCheckRef.current = now;
       return;
     }
     
     // Fallback to DeviceOrientation if data is flowing
     if (orientation.permissionGranted && orientation.alpha !== null) {
       setSensorMode('orientation');
-      setUseTouchMode(false);
       console.log('✅ Using DEVICE ORIENTATION mode - alpha:', orientation.alpha);
-      lastDataCheckRef.current = now;
       return;
     }
     
-    // If no sensor data after 2 seconds, switch to touch mode
-    if (now - lastDataCheckRef.current > 2000) {
-      setSensorMode('touch');
-      setUseTouchMode(true);
-      console.log('⚠️ No sensor data available, using TOUCH mode');
+    // No sensors available
+    if ((gyro.permissionGranted === false || !gyro.sensorAvailable) && orientation.permissionGranted === false) {
+      setSensorMode(null);
+      console.log('❌ No sensors available');
     }
   }, [gyro.permissionGranted, gyro.sensorAvailable, gyro.alpha, orientation.permissionGranted, orientation.alpha]);
 
@@ -256,11 +246,8 @@ export const ARMicrobeCanvas = ({
       sensorDataRef.current.yaw = (gyro.alpha * Math.PI) / 180;
     } else if (sensorMode === 'orientation' && orientation.alpha !== null) {
       sensorDataRef.current.yaw = (orientation.alpha * Math.PI) / 180;
-    } else {
-      sensorDataRef.current.yaw = touchRotation.yaw;
-      sensorDataRef.current.pitch = touchRotation.pitch;
     }
-  }, [gyro.alpha, orientation.alpha, touchRotation, sensorMode]);
+  }, [gyro.alpha, orientation.alpha, sensorMode]);
 
   // Update microbe count ref
   useEffect(() => {
@@ -269,9 +256,9 @@ export const ARMicrobeCanvas = ({
 
   // Spawn logic - stable interval that doesn't recreate constantly
   useEffect(() => {
-    if (isPaused) return;
+    if (isPaused || !sensorMode) return;
 
-    const spawnInterval = useTouchMode ? 1500 : 2000;
+    const spawnInterval = 2000;
     console.log('🎯 Spawn interval STARTED');
     
     const interval = setInterval(() => {
@@ -288,7 +275,7 @@ export const ARMicrobeCanvas = ({
       console.log('🎯 Spawn interval STOPPED');
       clearInterval(interval);
     };
-  }, [isPaused, useTouchMode, spawnMicrobe]);
+  }, [isPaused, sensorMode, spawnMicrobe]);
 
   // Power-up spawn logic
   useEffect(() => {
@@ -444,11 +431,6 @@ export const ARMicrobeCanvas = ({
         cameraYaw = (orientation.gamma * Math.PI) / 180; // Use gamma for left/right tilt
         cameraPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, (orientation.beta || 0) * Math.PI / 180)); // Direct beta for pitch
         activeSensorData = { type: 'DeviceOrientation', alpha: orientation.alpha, beta: orientation.beta, gamma: orientation.gamma };
-      } else {
-        // Fallback to touch mode
-        cameraYaw = touchRotation.yaw;
-        cameraPitch = touchRotation.pitch;
-        activeSensorData = { type: 'Touch', yaw: touchRotation.yaw, pitch: touchRotation.pitch };
       }
 
       // Update camera world position based on rotation
@@ -640,11 +622,7 @@ export const ARMicrobeCanvas = ({
         ctx.fillText(`Camera: yaw=${(cameraYaw * 180 / Math.PI).toFixed(1)}° pitch=${(cameraPitch * 180 / Math.PI).toFixed(1)}°`, 20, 55);
         
         if (activeSensorData) {
-          if (activeSensorData.type === 'Touch') {
-            ctx.fillText(`Touch Δ: ${activeSensorData.yaw.toFixed(1)}°, ${activeSensorData.pitch.toFixed(1)}°`, 20, 75);
-          } else {
-            ctx.fillText(`α=${activeSensorData.alpha?.toFixed(1) ?? 'null'} β=${activeSensorData.beta?.toFixed(1) ?? 'null'} γ=${activeSensorData.gamma?.toFixed(1) ?? 'null'}`, 20, 75);
-          }
+          ctx.fillText(`α=${activeSensorData.alpha?.toFixed(1) ?? 'null'} β=${activeSensorData.beta?.toFixed(1) ?? 'null'} γ=${activeSensorData.gamma?.toFixed(1) ?? 'null'}`, 20, 75);
         }
         
         const visibleCount = microbes.filter(m => {
@@ -682,34 +660,7 @@ export const ARMicrobeCanvas = ({
       }
       window.removeEventListener('resize', handleResize);
     };
-  }, [microbes, powerUps, lives, isPaused, combo, activePowerUp, useTouchMode, touchRotation, sensorMode, gyro, orientation, showDebug, score, onLifeLost, onScoreChange, onComboChange, onMicrobeEliminated]);
-
-  // Handle touch drag for camera control (primary when orientation unavailable)
-  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    const shouldUseTouchControl = sensorMode === 'touch' || useTouchMode;
-    if (!shouldUseTouchControl) return;
-    
-    const touch = e.touches[0];
-    if (!lastTouch) {
-      setLastTouch({ x: touch.clientX, y: touch.clientY });
-      return;
-    }
-
-    const deltaX = touch.clientX - lastTouch.x;
-    const deltaY = touch.clientY - lastTouch.y;
-
-    setTouchRotation(prev => ({
-      yaw: prev.yaw + (deltaX * 0.01), // Increased sensitivity from 0.005
-      pitch: Math.max(-Math.PI / 3, Math.min(Math.PI / 3, prev.pitch + (deltaY * 0.01)))
-    }));
-
-    setLastTouch({ x: touch.clientX, y: touch.clientY });
-  }, [sensorMode, useTouchMode, lastTouch]);
-
-  const handleTouchEnd = useCallback(() => {
-    setLastTouch(null);
-  }, []);
+  }, [microbes, powerUps, lives, isPaused, combo, activePowerUp, sensorMode, gyro, orientation, showDebug, score, onLifeLost, onScoreChange, onComboChange, onMicrobeEliminated]);
 
   const handleTap = useCallback(
     (e: React.TouchEvent<HTMLCanvasElement>) => {
@@ -718,14 +669,6 @@ export const ARMicrobeCanvas = ({
       if (isPaused || !canvasRef.current) {
         console.log('🔴 EARLY RETURN:', isPaused ? 'PAUSED' : 'NO CANVAS');
         return;
-      }
-      
-      // If it's a drag (touch move), don't shoot
-      if (lastTouch && e.changedTouches[0]) {
-        const touch = e.changedTouches[0];
-        const moved = Math.abs(touch.clientX - lastTouch.x) > 30 || 
-                     Math.abs(touch.clientY - lastTouch.y) > 30;
-        if (moved) return;
       }
 
       const canvas = canvasRef.current;
@@ -737,8 +680,8 @@ export const ARMicrobeCanvas = ({
       console.log('🔫 LASER FIRED! Checking', microbes.length, 'microbes for hits...');
 
       // Use sensor data based on current mode (MATCH RENDERING!)
-      let cameraYaw = touchRotation.yaw;
-      let cameraPitch = touchRotation.pitch;
+      let cameraYaw = 0;
+      let cameraPitch = 0;
       
       if (sensorMode === 'gyroscope' && gyro.alpha !== null) {
         cameraYaw = (gyro.gamma * Math.PI) / 180; // Use gamma, not alpha!
@@ -884,7 +827,7 @@ export const ARMicrobeCanvas = ({
         return currentMicrobes; // No hit, no change
       });
     },
-    [isPaused, gyro.alpha, gyro.beta, orientation.alpha, orientation.beta, touchRotation, lastTouch, combo, activePowerUp, sensorMode, onScoreChange, onComboChange, onMicrobeEliminated, cameraWorldPos]
+    [isPaused, gyro.alpha, gyro.beta, gyro.gamma, orientation.alpha, orientation.beta, orientation.gamma, combo, activePowerUp, sensorMode, onScoreChange, onComboChange, onMicrobeEliminated, cameraWorldPos, microbes.length]
   );
 
   // Handle active power-up expiration
@@ -945,39 +888,16 @@ export const ARMicrobeCanvas = ({
               </div>
             )}
             
-            <div className="space-y-2">
-              <Button onClick={handleRequestPermissions} className="w-full" size="lg">
-                Grant Permissions
-              </Button>
-              <Button 
-                onClick={() => {
-                  setShowPermissionOverlay(false);
-                  setUseTouchMode(true);
-                  setSensorMode('touch');
-                  toast.info("Using touch controls - drag to look around");
-                  // Spawn initial microbes immediately
-                  for (let i = 0; i < 5; i++) {
-                    setTimeout(() => spawnMicrobe(0), i * 100);
-                  }
-                }} 
-                variant="outline" 
-                className="w-full"
-              >
-                Use Touch Controls
-              </Button>
-            </div>
+            <Button onClick={handleRequestPermissions} className="w-full" size="lg">
+              Grant Permissions
+            </Button>
           </div>
         </div>
       )}
 
       <canvas
         ref={canvasRef}
-        onTouchStart={handleTouchMove}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={(e) => {
-          handleTap(e);      // ← Check tap FIRST (while lastTouch exists)
-          handleTouchEnd();  // ← Clear lastTouch AFTER
-        }}
+        onTouchEnd={handleTap}
         className="absolute inset-0 w-full h-full"
         style={{ width: "100%", height: "100%" }}
       />
