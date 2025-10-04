@@ -221,21 +221,21 @@ export const ARMicrobeCanvas = ({
     const checkInterval = setInterval(() => {
       // Check if orientation data is flowing
       if (orientation.current.alpha !== null && orientation.current.beta !== null) {
-        if (sensorMode !== 'orientation') {
+        if (sensorModeRef.current !== 'orientation') {
           console.log('✅ SENSOR MODE SET: orientation (data detected in ref)');
           setSensorMode('orientation');
         }
       }
       // Fallback to gyroscope if available
       else if (gyro.current.alpha !== null && gyro.current.beta !== null && gyroAvailable) {
-        if (sensorMode !== 'gyroscope') {
+        if (sensorModeRef.current !== 'gyroscope') {
           console.log('✅ SENSOR MODE SET: gyroscope (data detected in ref)');
           setSensorMode('gyroscope');
         }
       }
       // No sensor data
       else {
-        if (sensorMode !== null) {
+        if (sensorModeRef.current !== null) {
           console.log('❌ SENSOR MODE SET: null (no data in refs)');
           setSensorMode(null);
         }
@@ -245,8 +245,14 @@ export const ARMicrobeCanvas = ({
     return () => clearInterval(checkInterval);
   }, [gyroAvailable]);
 
+  // Sync sensorMode state to ref to avoid stale closures
+  useEffect(() => {
+    sensorModeRef.current = sensorMode;
+  }, [sensorMode]);
+
   // Refs to access current sensor values without causing re-renders
   const sensorDataRef = useRef({ yaw: 0, pitch: 0 });
+  const sensorModeRef = useRef<'orientation' | 'gyroscope' | null>(null);
   const microbeCountRef = useRef(0);
   const removedMicrobesRef = useRef<Set<string>>(new Set());
 
