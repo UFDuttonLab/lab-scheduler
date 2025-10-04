@@ -275,6 +275,7 @@ export const ARMicrobeCanvas = ({
     console.log('🎯 Spawn interval STARTED');
     
     const interval = setInterval(() => {
+      console.log('🔴 SPAWN CHECK - Count:', microbeCountRef.current, 'isPaused:', isPaused);
       // Use ref to get current count without closure issues
       if (microbeCountRef.current < 10) {
         const cameraYaw = sensorDataRef.current.yaw;
@@ -694,7 +695,12 @@ export const ARMicrobeCanvas = ({
 
   const handleTap = useCallback(
     (e: React.TouchEvent<HTMLCanvasElement>) => {
-      if (isPaused || !canvasRef.current) return;
+      console.log('🔴 handleTap CALLED!', 'isPaused:', isPaused, 'canvas:', !!canvasRef.current);
+      
+      if (isPaused || !canvasRef.current) {
+        console.log('🔴 EARLY RETURN:', isPaused ? 'PAUSED' : 'NO CANVAS');
+        return;
+      }
       
       // If it's a drag (touch move), don't shoot
       if (lastTouch && e.changedTouches[0]) {
@@ -724,99 +730,105 @@ export const ARMicrobeCanvas = ({
         cameraPitch = Math.max(-45, Math.min(45, ((orientation.beta || 0) - 90) * Math.PI / 180));
       }
 
-      // Check microbe collision at crosshair (center of screen)
-      let hitMicrobe = false;
-      let closestMicrobe: { microbe: Microbe; screenX: number; screenY: number; size: number } | null = null;
-      let minDistance = Infinity;
+      // Use setMicrobes with callback to get FRESH microbe data
+      setMicrobes((currentMicrobes) => {
+        console.log('🔴 CHECKING', currentMicrobes.length, 'microbes - Array:', currentMicrobes);
+        
+        let hitMicrobe = false;
+        let closestMicrobe: { microbe: Microbe; screenX: number; screenY: number; size: number } | null = null;
+        let minDistance = Infinity;
 
-      // Find closest microbe to crosshair using world coordinates
-      microbes.forEach((microbe) => {
-        // Transform world position to camera-relative view space
-        const viewX = microbe.worldX - cameraWorldPos.x;
-        const viewY = microbe.worldY - cameraWorldPos.y;
-        const viewZ = microbe.worldZ - cameraWorldPos.z;
+        // Find closest microbe to crosshair using CURRENT microbe data
+        currentMicrobes.forEach((microbe) => {
+          // Transform world position to camera-relative view space
+          const viewX = microbe.worldX - cameraWorldPos.x;
+          const viewY = microbe.worldY - cameraWorldPos.y;
+          const viewZ = microbe.worldZ - cameraWorldPos.z;
 
-        // Rotate by camera yaw (around Y axis)
-        const cosYaw = Math.cos(cameraYaw);
-        const sinYaw = Math.sin(cameraYaw);
-        const rotatedX = viewX * cosYaw - viewZ * sinYaw;
-        const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
-        
-        // Apply pitch rotation (around X axis)
-        const cosPitch = Math.cos(cameraPitch);
-        const sinPitch = Math.sin(cameraPitch);
-        const finalY = viewY * cosPitch - rotatedZ * sinPitch;
-        const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
+          // Rotate by camera yaw (around Y axis)
+          const cosYaw = Math.cos(cameraYaw);
+          const sinYaw = Math.sin(cameraYaw);
+          const rotatedX = viewX * cosYaw - viewZ * sinYaw;
+          const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
+          
+          // Apply pitch rotation (around X axis)
+          const cosPitch = Math.cos(cameraPitch);
+          const sinPitch = Math.sin(cameraPitch);
+          const finalY = viewY * cosPitch - rotatedZ * sinPitch;
+          const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
 
-        // Skip if out of visible range (must match rendering range 5-130 units)
-        const depth = Math.abs(finalZ);
-        if (depth < 5 || depth > 130) {
-          console.log('⏭️ Skipping microbe - out of range, depth:', depth.toFixed(1));
-          return;
-        }
+          // Skip if out of visible range (must match rendering range 5-130 units)
+          const depth = Math.abs(finalZ);
+          if (depth < 5 || depth > 130) {
+            console.log('⏭️ Skipping microbe - out of range, depth:', depth.toFixed(1));
+            return;
+          }
 
-        const wobbleOffset = Math.sin(microbe.wobble) * 0.05;
-        const fov = 1200; // Match rendering FOV
-        const screenX = centerX + (rotatedX / depth) * fov + wobbleOffset * 50;
-        const screenY = centerY + (finalY / depth) * fov;
-        
-        console.log('🔍 Microbe projection - screen:', screenX.toFixed(0), screenY.toFixed(0), 'depth:', depth.toFixed(1));
-        
-        // Use depth-based scale like rendering
-        const scale = 300 / depth;
-        const size = microbe.size * scale;
+          const wobbleOffset = Math.sin(microbe.wobble) * 0.05;
+          const fov = 1200; // Match rendering FOV
+          const screenX = centerX + (rotatedX / depth) * fov + wobbleOffset * 50;
+          const screenY = centerY + (finalY / depth) * fov;
+          
+          console.log('🔍 Microbe projection - screen:', screenX.toFixed(0), screenY.toFixed(0), 'depth:', depth.toFixed(1));
+          
+          // Use depth-based scale like rendering
+          const scale = 300 / depth;
+          const size = microbe.size * scale;
 
-        const distance = Math.hypot(screenX - centerX, screenY - centerY);
-        
-        // Log near misses for debugging
-        if (distance < 150 && distance >= 120) {
-          console.log('🔸 Near miss! Microbe type:', microbe.type, 'Distance:', distance.toFixed(0), 'px');
-        }
-        
-        // Check if within crosshair area (120px radius - doubled for easier hits)
-        if (distance < 120 && distance < minDistance) {
-          minDistance = distance;
-          closestMicrobe = { microbe, screenX, screenY, size };
-        }
-      });
+          const distance = Math.hypot(screenX - centerX, screenY - centerY);
+          
+          // Log near misses for debugging
+          if (distance < 150 && distance >= 120) {
+            console.log('🔸 Near miss! Microbe type:', microbe.type, 'Distance:', distance.toFixed(0), 'px');
+          }
+          
+          // Check if within crosshair area (120px radius - doubled for easier hits)
+          if (distance < 120 && distance < minDistance) {
+            minDistance = distance;
+            closestMicrobe = { microbe, screenX, screenY, size };
+          }
+        });
 
-      if (closestMicrobe) {
-        hitMicrobe = true;
-        const { microbe, screenX, screenY } = closestMicrobe;
-        console.log('🎯 HIT! Microbe:', microbe.type, 'at screen:', screenX.toFixed(0), screenY.toFixed(0), 'Distance from crosshair:', minDistance.toFixed(1), 'px');
-        
-        const newHealth = microbe.health - 1;
-        
-        // Calculate particles BEFORE state updates
-        const particlesToAdd: Particle[] = [];
-        
-        // Always add hit particles (10)
-        particlesToAdd.push(...Array.from({ length: 10 }, () => ({
-          x: screenX,
-          y: screenY,
-          vx: (Math.random() - 0.5) * 5,
-          vy: (Math.random() - 0.5) * 5,
-          life: 1,
-          color: getMicrobeColor(microbe.type),
-        })));
-        
-        // If microbe will die, add BIG explosion particles (40 more)
-        if (newHealth <= 0) {
-          particlesToAdd.push(...Array.from({ length: 40 }, () => ({
+        if (closestMicrobe) {
+          hitMicrobe = true;
+          const { microbe, screenX, screenY } = closestMicrobe;
+          console.log('🎯 HIT! Microbe:', microbe.type, 'at screen:', screenX.toFixed(0), screenY.toFixed(0), 'Distance from crosshair:', minDistance.toFixed(1), 'px');
+          
+          const newHealth = microbe.health - 1;
+          
+          // Calculate particles BEFORE state updates
+          const particlesToAdd: Particle[] = [];
+          
+          // Always add hit particles (10)
+          particlesToAdd.push(...Array.from({ length: 10 }, () => ({
             x: screenX,
             y: screenY,
-            vx: (Math.random() - 0.5) * 12,
-            vy: (Math.random() - 0.5) * 12,
-            life: 1.5,
+            vx: (Math.random() - 0.5) * 5,
+            vy: (Math.random() - 0.5) * 5,
+            life: 1,
             color: getMicrobeColor(microbe.type),
           })));
-        }
-        
-        console.log('💥 Prepared', particlesToAdd.length, 'particles!', newHealth <= 0 ? '(BIG EXPLOSION!)' : '(hit)');
-        
-        // NOW update microbe state
-        setMicrobes((prev) => {
-          return prev.map((m) => {
+          
+          // If microbe will die, add BIG explosion particles (40 more)
+          if (newHealth <= 0) {
+            particlesToAdd.push(...Array.from({ length: 40 }, () => ({
+              x: screenX,
+              y: screenY,
+              vx: (Math.random() - 0.5) * 12,
+              vy: (Math.random() - 0.5) * 12,
+              life: 1.5,
+              color: getMicrobeColor(microbe.type),
+            })));
+          }
+          
+          console.log('💥 Prepared', particlesToAdd.length, 'particles!', newHealth <= 0 ? '(BIG EXPLOSION!)' : '(hit)');
+          
+          // Add particles directly to ref (no state batching!)
+          particlesRef.current.push(...particlesToAdd);
+          console.log('✅ Particles now:', particlesRef.current.length);
+          
+          // Update microbe state with CURRENT data
+          return currentMicrobes.map((m) => {
             if (m.id !== microbe.id) return m;
 
             if (newHealth <= 0) {
@@ -838,19 +850,21 @@ export const ARMicrobeCanvas = ({
               lastComboTimeRef.current = Date.now();
               onMicrobeEliminated();
 
+              // Decrement microbe count!
+              microbeCountRef.current = Math.max(0, microbeCountRef.current - 1);
+              console.log('🗑️ Microbe removed, count now:', microbeCountRef.current);
+
               return null; // Remove microbe
             }
 
             return { ...m, health: newHealth };
           }).filter(Boolean) as Microbe[];
-        });
+        } else {
+          console.log('❌ NO HIT - Microbes:', currentMicrobes.length, 'Center:', centerX, centerY, 'Yaw:', (cameraYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (cameraPitch * 180 / Math.PI).toFixed(1), '°');
+        }
         
-        // Add particles directly to ref (no state batching!)
-        particlesRef.current.push(...particlesToAdd);
-        console.log('✅ Particles now:', particlesRef.current.length);
-      } else {
-        console.log('❌ NO HIT - Microbes:', microbes.length, 'Center:', centerX, centerY, 'Yaw:', (cameraYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (cameraPitch * 180 / Math.PI).toFixed(1), '°');
-      }
+        return currentMicrobes; // No hit, no change
+      });
     },
     [isPaused, gyro.alpha, gyro.beta, orientation.alpha, orientation.beta, touchRotation, lastTouch, microbes, combo, activePowerUp, sensorMode, onScoreChange, onComboChange, onMicrobeEliminated, cameraWorldPos]
   );
@@ -943,8 +957,8 @@ export const ARMicrobeCanvas = ({
         onTouchStart={handleTouchMove}
         onTouchMove={handleTouchMove}
         onTouchEnd={(e) => {
-          handleTouchEnd();
-          handleTap(e);
+          handleTap(e);      // ← Check tap FIRST (while lastTouch exists)
+          handleTouchEnd();  // ← Clear lastTouch AFTER
         }}
         className="absolute inset-0 w-full h-full touch-none"
         style={{ width: "100%", height: "100%" }}
