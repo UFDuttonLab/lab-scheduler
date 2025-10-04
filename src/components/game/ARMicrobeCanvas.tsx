@@ -84,6 +84,14 @@ export const ARMicrobeCanvas = ({
   const lastDataCheckRef = useRef<number>(Date.now());
   const comboRef = useRef(0);
   const activePowerUpRef = useRef<{ type: string; endTime: number } | null>(null);
+  
+  // Sensor and game state refs - MUST be declared before hooks that use them
+  const sensorDataRef = useRef({ yaw: 0, pitch: 0 });
+  const sensorModeRef = useRef<'orientation' | 'gyroscope' | null>(null);
+  const microbeCountRef = useRef(0);
+  const removedMicrobesRef = useRef<Set<string>>(new Set());
+  const cloneTimeoutsRef = useRef<number[]>([]); // Track timeouts to prevent memory leaks
+  const lastLogTimeRef = useRef<number>(0); // Throttle console logs
 
   const getMicrobeEmoji = (type: string): string => {
     switch (type) {
@@ -250,12 +258,6 @@ export const ARMicrobeCanvas = ({
     sensorModeRef.current = sensorMode;
   }, [sensorMode]);
 
-  // Refs to access current sensor values without causing re-renders
-  const sensorDataRef = useRef({ yaw: 0, pitch: 0 });
-  const sensorModeRef = useRef<'orientation' | 'gyroscope' | null>(null);
-  const microbeCountRef = useRef(0);
-  const removedMicrobesRef = useRef<Set<string>>(new Set());
-
 
   // Update microbe count ref
   useEffect(() => {
@@ -379,7 +381,8 @@ export const ARMicrobeCanvas = ({
                 worldZ: newWorldZ + Math.cos(offsetAngle) * offsetDist,
                 spawnTime: now,
               };
-              setTimeout(() => setMicrobes((m) => [...m, clone]), 0);
+              const timeoutId = window.setTimeout(() => setMicrobes((m) => [...m, clone]), 0);
+              cloneTimeoutsRef.current.push(timeoutId);
             }
 
             return { ...microbe, worldX: newWorldX, worldY: newWorldY, worldZ: newWorldZ, wobble: newWobble, opacity };
@@ -396,6 +399,9 @@ export const ARMicrobeCanvas = ({
     return () => {
       clearInterval(updateInterval);
       clearInterval(cleanupInterval);
+      // Clear all clone timeouts to prevent memory leaks
+      cloneTimeoutsRef.current.forEach(id => clearTimeout(id));
+      cloneTimeoutsRef.current = [];
     };
   }, [isPaused, onLifeLost]);
 
@@ -443,21 +449,20 @@ export const ARMicrobeCanvas = ({
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
 
-      // 🔍 COMPREHENSIVE SENSOR DIAGNOSTIC
-      console.log('🔍 SENSOR CHECK:', {
-        sensorMode,
-        orientationAlpha: orientation.current.alpha,
-        orientationBeta: orientation.current.beta,
-        orientationGamma: orientation.current.gamma,
-        gyroAlpha: gyro.current.alpha,
-        gyroBeta: gyro.current.beta,
-        gyroGamma: gyro.current.gamma,
-        sensorDataRefYaw: sensorDataRef.current.yaw,
-        sensorDataRefPitch: sensorDataRef.current.pitch,
-        orientationPermission,
-        gyroPermission,
-        gyroAvailable
-      });
+      // 🔍 COMPREHENSIVE SENSOR DIAGNOSTIC (throttled to once per second)
+      const shouldLog = now - lastLogTimeRef.current > 1000;
+      if (shouldLog) {
+        console.log('🔍 SENSOR CHECK:', {
+          sensorMode,
+          orientationAlpha: orientation.current.alpha,
+          orientationBeta: orientation.current.beta,
+          gyroAlpha: gyro.current.alpha,
+          gyroBeta: gyro.current.beta,
+          sensorDataRefYaw: sensorDataRef.current.yaw,
+          sensorDataRefPitch: sensorDataRef.current.pitch,
+        });
+        lastLogTimeRef.current = now;
+      }
 
       // One-time initialization: if we have a sensor mode but sensorDataRef is still zero, initialize it
       if (sensorMode && sensorDataRef.current.yaw === 0 && sensorDataRef.current.pitch === 0) {
@@ -476,27 +481,17 @@ export const ARMicrobeCanvas = ({
       if (sensorMode === 'orientation' && orientation.current.alpha !== null && orientation.current.beta !== null) {
         const newYaw = ((orientation.current.alpha || 0) * Math.PI) / 180;
         const newPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((orientation.current.beta || 0) * Math.PI) / 180));
-        console.log('🔄 UPDATING sensorDataRef from ORIENTATION:', {
-          alpha: orientation.current.alpha,
-          beta: orientation.current.beta,
-          oldYaw: sensorDataRef.current.yaw,
-          newYaw,
-          oldPitch: sensorDataRef.current.pitch,
-          newPitch
-        });
+        if (shouldLog) {
+          console.log('🔄 UPDATING from ORIENTATION - Yaw:', (newYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (newPitch * 180 / Math.PI).toFixed(1), '°');
+        }
         sensorDataRef.current.yaw = newYaw;
         sensorDataRef.current.pitch = newPitch;
       } else if (sensorMode === 'gyroscope' && gyro.current.alpha !== null && gyro.current.beta !== null) {
         const newYaw = ((gyro.current.alpha || 0) * Math.PI) / 180;
         const newPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((gyro.current.beta || 0) * Math.PI) / 180));
-        console.log('🔄 UPDATING sensorDataRef from GYROSCOPE:', {
-          alpha: gyro.current.alpha,
-          beta: gyro.current.beta,
-          oldYaw: sensorDataRef.current.yaw,
-          newYaw,
-          oldPitch: sensorDataRef.current.pitch,
-          newPitch
-        });
+        if (shouldLog) {
+          console.log('🔄 UPDATING from GYROSCOPE - Yaw:', (newYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (newPitch * 180 / Math.PI).toFixed(1), '°');
+        }
         sensorDataRef.current.yaw = newYaw;
         sensorDataRef.current.pitch = newPitch;
       }
@@ -930,7 +925,7 @@ export const ARMicrobeCanvas = ({
         lastComboTimeRef.current = Date.now();
       }
     },
-    [isPaused, sensorMode, onScoreChange, onComboChange, onMicrobeEliminated]
+    [isPaused, onScoreChange, onComboChange, onMicrobeEliminated]
   );
 
   // Handle active power-up expiration
