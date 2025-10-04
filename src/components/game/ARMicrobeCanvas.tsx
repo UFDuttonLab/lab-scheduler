@@ -433,9 +433,6 @@ export const ARMicrobeCanvas = ({
 
       // Clear canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      // Add semi-transparent background to ensure circles are visible over video
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       const now = Date.now();
       const centerX = canvas.width / 2;
@@ -518,7 +515,9 @@ export const ARMicrobeCanvas = ({
             ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
             ctx.fill();
             
-            // Add white outline for maximum clarity
+            // Add white outline for maximum clarity (need to redraw arc for stroke)
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 3;
             ctx.stroke();
