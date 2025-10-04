@@ -452,12 +452,18 @@ export const ARMicrobeCanvas = ({
         pitch: cameraPitch 
       };
 
-      // FIX #4: Check if sensors are ready - require 3 consecutive valid readings
+      // FIX #3: More lenient sensor readiness check
       if (!sensorsReady) {
-        if (Math.abs(cameraYaw) > 0.1 || Math.abs(cameraPitch) > 0.1) {
+        const hasValidData = (
+          Math.abs(cameraYaw) > 0.01 || 
+          Math.abs(cameraPitch) > 0.01 ||
+          (sensorDataRef.current.yaw !== cameraYaw || sensorDataRef.current.pitch !== cameraPitch)
+        );
+        
+        if (hasValidData) {
           validReadingsRef.current++;
-          if (validReadingsRef.current >= 3) {
-            console.log("🚀 SENSORS READY! 3 consecutive valid readings:", { 
+          if (validReadingsRef.current >= 2) { // Reduced from 3 to 2
+            console.log("🚀 SENSORS READY! 2 consecutive valid readings:", { 
               yaw: (cameraYaw * 180 / Math.PI).toFixed(2), 
               pitch: (cameraPitch * 180 / Math.PI).toFixed(2) 
             });
@@ -914,6 +920,21 @@ export const ARMicrobeCanvas = ({
     return () => clearInterval(expirationInterval);
   }, [isPaused]);
 
+  // FIX #6: Fallback timeout for sensor initialization
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (!sensorsReady) {
+        console.warn('⚠️ FORCING sensors ready after 5s timeout');
+        toast.warning('Sensor initialization slow - starting anyway', {
+          description: 'You can still play using touch controls'
+        });
+        setSensorsReady(true);
+      }
+    }, 5000);
+    
+    return () => clearTimeout(timeout);
+  }, [sensorsReady]);
+
   return (
     <>
       {/* FIX #6: Canvas with touch-action: none and onTouchStart */}
@@ -924,19 +945,19 @@ export const ARMicrobeCanvas = ({
         style={{ touchAction: "none" }}
       />
 
-      {/* HUD */}
-      <div className="absolute top-4 left-4 text-white text-sm font-mono z-20 pointer-events-none">
-        <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2">
-          🦠 Microbes: {microbes.length}
-          {sensorsReady && (
+      {/* HUD - moved to bottom-left to avoid overlap with score/lives */}
+      <div className="absolute bottom-4 left-4 text-white text-sm font-mono z-20 pointer-events-none">
+        {!sensorsReady && (
+          <div className="px-3 py-2 bg-yellow-500/90 backdrop-blur-sm rounded-lg font-bold animate-pulse">
+            ⏳ Initializing sensors...
+          </div>
+        )}
+        {sensorsReady && (
+          <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2">
+            🦠 Microbes: {microbes.length}
             <div className="mt-1 text-xs text-green-400">
               📡 {sensorMode === 'gyroscope' ? 'Gyroscope' : sensorMode === 'orientation' ? 'DeviceOrientation' : 'No Sensor'}
             </div>
-          )}
-        </div>
-        {!sensorsReady && (
-          <div className="mt-2 px-3 py-2 bg-yellow-500/80 backdrop-blur-sm rounded-lg font-bold">
-            ⏳ Initializing sensors...
           </div>
         )}
         {activePowerUp && (
