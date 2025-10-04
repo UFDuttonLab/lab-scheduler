@@ -26,9 +26,29 @@ const ARMicrobeShooter = () => {
   const [microbesEliminated, setMicrobesEliminated] = useState(0);
   const [totalTaps, setTotalTaps] = useState(0);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [permissionsGranted, setPermissionsGranted] = useState(false);
+  const [permissionStatus, setPermissionStatus] = useState<string>("");
   const gameStartTimeRef = useRef<number>(0);
   const { requestPermission: requestMotionPermission } = useDeviceMotion();
   const { requestPermission: requestOrientationPermission } = useDeviceOrientation();
+
+  const handleRequestPermissions = async () => {
+    setPermissionStatus("Requesting permissions...");
+    
+    const motionGranted = await requestMotionPermission();
+    const orientationGranted = await requestOrientationPermission();
+
+    console.log('🔐 Permission results:', { motionGranted, orientationGranted });
+
+    if (motionGranted || orientationGranted) {
+      setPermissionsGranted(true);
+      setPermissionStatus("✅ Permissions granted! Ready to play.");
+      toast.success("Sensors ready!");
+    } else {
+      setPermissionStatus("⚠️ Touch controls will be used instead.");
+      toast.warning("No sensor permissions granted - using touch controls");
+    }
+  };
 
   // Check unlock status and device capability
   useEffect(() => {
@@ -218,10 +238,21 @@ const ARMicrobeShooter = () => {
             </ul>
           </div>
           
+          {permissionStatus && (
+            <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-sm">
+              {permissionStatus}
+            </div>
+          )}
+          
           <div className="space-y-3">
+            {!permissionsGranted && (
+              <Button onClick={handleRequestPermissions} size="lg" className="w-full" variant="outline">
+                Request Sensor Permissions
+              </Button>
+            )}
             <Button onClick={startGame} size="lg" className="w-full">
               <Play className="mr-2 h-5 w-5" />
-              Start Game & Grant Permissions
+              {permissionsGranted ? "Start Game" : "Start Game (Request Permissions Later)"}
             </Button>
             <Button onClick={() => setShowLeaderboard(!showLeaderboard)} variant="outline" className="w-full">
               <Trophy className="mr-2 h-4 w-4" />

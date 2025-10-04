@@ -3,7 +3,6 @@ import { useDeviceOrientation } from "@/hooks/useDeviceOrientation";
 import { useGyroscope } from "@/hooks/useGyroscope";
 import { PowerUp } from "./PowerUp";
 import { Button } from "@/components/ui/button";
-import { Info } from "lucide-react";
 
 interface Microbe {
   id: string;
@@ -421,8 +420,8 @@ export const ARMicrobeCanvas = ({
             const finalY = viewY * cosPitch - rotatedZ * sinPitch;
             const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
 
-            // Skip rendering if behind camera (finalZ >= 0 means behind)
-            if (finalZ >= 0) {
+            // Skip rendering if behind camera (finalZ <= 0 means behind with negative Z forward)
+            if (finalZ <= 0) {
               if (showDebug && Math.random() < 0.01) {
                 console.log('❌ Microbe behind camera:', {
                   id: microbe.id,
@@ -434,12 +433,12 @@ export const ARMicrobeCanvas = ({
             }
             
             // Debug successful render (log occasionally)
-            if (showDebug && Math.random() < 0.005) {
+            if (Math.random() < 0.05) {
               console.log('✅ Rendering microbe:', {
                 id: microbe.id,
                 worldPos: `(${newWorldX.toFixed(2)}, ${newWorldY.toFixed(2)}, ${newWorldZ.toFixed(2)})`,
                 finalZ: finalZ.toFixed(2),
-                screenPos: `(${(centerX + (rotatedX / -finalZ) * 800).toFixed(0)}, ${(centerY + (finalY / -finalZ) * 800).toFixed(0)})`
+                screenPos: `(${(centerX + (rotatedX / finalZ) * 800).toFixed(0)}, ${(centerY + (finalY / finalZ) * 800).toFixed(0)})`
               });
             }
 
@@ -448,8 +447,8 @@ export const ARMicrobeCanvas = ({
 
             // Project to screen with perspective
             const fov = 800;
-            const screenX = centerX + (rotatedX / -finalZ) * fov + wobbleOffset * 50;
-            const screenY = centerY + (finalY / -finalZ) * fov;
+            const screenX = centerX + (rotatedX / finalZ) * fov + wobbleOffset * 50;
+            const screenY = centerY + (finalY / finalZ) * fov;
             
             // Size based on distance
             const newDistance = Math.sqrt(newWorldX * newWorldX + newWorldY * newWorldY + newWorldZ * newWorldZ);
@@ -879,16 +878,6 @@ export const ARMicrobeCanvas = ({
       
       {/* Control buttons */}
       <div className="absolute bottom-24 left-4 flex flex-col gap-2 z-40">
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => setShowDiagnostics(!showDiagnostics)}
-          className="opacity-70 hover:opacity-100"
-        >
-          <Info className="w-4 h-4 mr-1" />
-          Sensors
-        </Button>
-        
         <Button
           size="sm"
           variant="secondary"
