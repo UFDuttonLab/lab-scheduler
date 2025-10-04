@@ -187,13 +187,16 @@ export const ARMicrobeCanvas = ({
 
     const spawnInterval = setInterval(() => {
       if (microbes.length < 10) {
-        const cameraYaw = ((alpha || 0) * Math.PI) / 180;
+        const useOrientation = permissionGranted && alpha !== null && beta !== null && !useTouchMode;
+        const cameraYaw = useOrientation 
+          ? ((alpha || 0) * Math.PI) / 180
+          : touchRotation.yaw;
         spawnMicrobe(cameraYaw);
       }
     }, 2000);
 
     return () => clearInterval(spawnInterval);
-  }, [isPaused, microbes.length, spawnMicrobe, alpha]);
+  }, [isPaused, microbes.length, spawnMicrobe, alpha, beta, touchRotation, permissionGranted, useTouchMode]);
 
   // Power-up spawn logic
   useEffect(() => {
