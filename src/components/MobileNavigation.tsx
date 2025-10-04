@@ -7,6 +7,7 @@ export const MobileNavigation = () => {
   const location = useLocation();
   const { permissions } = useAuth();
   const isZombieUnlocked = sessionStorage.getItem('zombieLunchUnlocked') === 'true';
+  const isARMicrobeUnlocked = sessionStorage.getItem('arMicrobeUnlocked') === 'true';
 
   const baseNavItems = [
     { path: "/", label: "Home", icon: Home },
@@ -20,6 +21,14 @@ export const MobileNavigation = () => {
     { path: "/help", label: "Help", icon: HelpCircle },
   ];
 
+  // Add AR Microbe game if unlocked
+  if (isARMicrobeUnlocked) {
+    baseNavItems.splice(3, 0, { 
+      path: "/ar-microbe-shooter", 
+      label: "AR Game", 
+      icon: (() => <span className="text-xl">🦠</span>) as any
+    });
+  }
 
   const navItems = baseNavItems.filter(item => !item.requirePermission || permissions[item.requirePermission as keyof typeof permissions]);
 
@@ -41,7 +50,11 @@ export const MobileNavigation = () => {
                   : "text-muted-foreground"
               )}
             >
-              <Icon className="w-5 h-5" />
+              {typeof Icon === 'function' && item.path === '/ar-microbe-shooter' ? (
+                <Icon />
+              ) : (
+                <Icon className="w-5 h-5" />
+              )}
               <span className="text-xs">{item.label}</span>
             </Link>
           );

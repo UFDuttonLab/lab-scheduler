@@ -88,15 +88,15 @@ const Schedule = () => {
       if (progress >= 100) {
         sessionStorage.setItem('arMicrobeUnlocked', 'true');
         toast.success('🦠 AR Microbe Shooter Unlocked!', {
-          description: 'Check your menu or navigate to the AR game',
+          description: 'Tap to play now!',
+          action: {
+            label: 'Play Now',
+            onClick: () => navigate('/ar-microbe-shooter')
+          },
+          duration: 10000,
         });
         setShakeProgress(0);
         shakeStartTimeRef.current = null;
-        
-        // Navigate to AR game after brief delay
-        setTimeout(() => {
-          navigate('/ar-microbe-shooter');
-        }, 1500);
       }
     } else {
       // Reset if user stops shaking
@@ -619,6 +619,8 @@ const Schedule = () => {
     return Array.from(daysSet).map(dateStr => new Date(dateStr));
   };
 
+  const isARGameUnlocked = sessionStorage.getItem('arMicrobeUnlocked') === 'true';
+
   return (
     <div className="min-h-screen bg-background">
       {/* Shake Progress Indicator */}
@@ -637,6 +639,17 @@ const Schedule = () => {
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Floating Action Button for AR Game */}
+      {isARGameUnlocked && (
+        <Button
+          onClick={() => navigate('/ar-microbe-shooter')}
+          className="fixed bottom-20 right-4 z-40 h-14 w-14 rounded-full shadow-lg animate-pulse"
+          size="icon"
+        >
+          <span className="text-2xl">🦠</span>
+        </Button>
       )}
       
       <Navigation />

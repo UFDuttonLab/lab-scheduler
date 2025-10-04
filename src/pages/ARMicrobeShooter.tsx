@@ -32,33 +32,59 @@ const ARMicrobeShooter = () => {
 
   // Check unlock status and device capability
   useEffect(() => {
-    const isUnlocked = sessionStorage.getItem("arMicrobeUnlocked") === "true";
-    
-    if (!isUnlocked) {
-      toast.error("AR Microbe Shooter is locked. Shake your phone on the Schedule page to unlock!");
-      navigate("/schedule");
-      return;
-    }
+    // Add small delay to ensure sessionStorage is readable
+    const checkUnlock = setTimeout(() => {
+      const isUnlocked = sessionStorage.getItem("arMicrobeUnlocked") === "true";
+      
+      if (!isUnlocked) {
+        toast.error("AR Microbe Shooter is locked", {
+          description: "Shake your phone on the Schedule page to unlock!",
+          action: {
+            label: "Go to Schedule",
+            onClick: () => navigate("/schedule")
+          }
+        });
+        navigate("/schedule");
+        return;
+      }
 
-    // Check if device is mobile
-    if (!isMobile) {
-      toast.error("AR Microbe Shooter requires a mobile device with camera and motion sensors");
-      navigate("/schedule");
-      return;
-    }
+      // Check if device is mobile
+      if (!isMobile) {
+        toast.error("AR Microbe Shooter requires a mobile device", {
+          action: {
+            label: "Go to Schedule",
+            onClick: () => navigate("/schedule")
+          }
+        });
+        navigate("/schedule");
+        return;
+      }
 
-    // Check if camera and motion sensors are available
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      toast.error("Camera access is not available on this device");
-      navigate("/schedule");
-      return;
-    }
+      // Check if camera and motion sensors are available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast.error("Camera access is not available on this device", {
+          action: {
+            label: "Go to Schedule",
+            onClick: () => navigate("/schedule")
+          }
+        });
+        navigate("/schedule");
+        return;
+      }
 
-    if (typeof DeviceMotionEvent === "undefined" || typeof DeviceOrientationEvent === "undefined") {
-      toast.error("Motion sensors are not available on this device");
-      navigate("/schedule");
-      return;
-    }
+      if (typeof DeviceMotionEvent === "undefined" || typeof DeviceOrientationEvent === "undefined") {
+        toast.error("Motion sensors are not available on this device", {
+          action: {
+            label: "Go to Schedule",
+            onClick: () => navigate("/schedule")
+          }
+        });
+        navigate("/schedule");
+        return;
+      }
+    }, 100); // Small delay to ensure sessionStorage is ready
+
+    return () => clearTimeout(checkUnlock);
   }, [navigate, isMobile]);
 
   const startGame = async () => {
