@@ -144,13 +144,12 @@ export const ARMicrobeCanvas = ({
       size = 30;
     }
 
-    // Generate spawn position in full 360° sphere around player (requires looking around)
-    const relativeAngle = Math.random() * Math.PI * 2; // Full 360° horizontal
+    // Generate spawn position in absolute world space (not relative to camera)
+    const worldAngle = Math.random() * Math.PI * 2; // Absolute angle in world space
     const elevation = (Math.random() - 0.5) * Math.PI; // Full 180° vertical
-    const distance = 80 + Math.random() * 40; // Spawn 80-120 units away for 10-20 second approach
+    const distance = 80 + Math.random() * 40; // Spawn 80-120 units away
 
-    // Convert to world coordinates (spawn in front of where camera is currently pointing)
-    const worldAngle = cameraYaw + relativeAngle;
+    // Convert to absolute world coordinates
     const worldX = Math.sin(worldAngle) * Math.cos(elevation) * distance;
     const worldY = Math.sin(elevation) * distance;
     const worldZ = -Math.cos(worldAngle) * Math.cos(elevation) * distance;
@@ -222,12 +221,8 @@ export const ARMicrobeCanvas = ({
       setSensorMode('orientation');
       console.log('✅ Using DEVICE ORIENTATION mode (absolute) - alpha:', orientation.alpha, 'beta:', orientation.beta);
       
-      // Initialize sensorDataRef with current orientation using ALPHA for 360° yaw
-      // Normalize alpha: 0-360° -> -180° to 180° for proper rotation math
-      const normalizedAlpha = ((orientation.alpha || 0) > 180) 
-        ? (orientation.alpha || 0) - 360 
-        : (orientation.alpha || 0);
-      sensorDataRef.current.yaw = (normalizedAlpha * Math.PI) / 180;
+      // Initialize sensorDataRef with current orientation using ALPHA for 360° yaw (use directly, no normalization)
+      sensorDataRef.current.yaw = ((orientation.alpha || 0) * Math.PI) / 180;
       sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((orientation.beta || 0) * Math.PI) / 180));
       console.log('📐 Initialized camera - Yaw:', orientation.alpha.toFixed(1), '° Pitch:', orientation.beta.toFixed(1), '°');
       return;
@@ -255,20 +250,12 @@ export const ARMicrobeCanvas = ({
   useEffect(() => {
     // Always prefer orientation over gyroscope if available
     if (sensorMode === 'orientation' && orientation.alpha !== null && orientation.beta !== null) {
-      // DeviceOrientation gives ABSOLUTE angles - no drift! Use ALPHA for 360° yaw
-      // Normalize alpha: 0-360° -> -180° to 180° for proper rotation math
-      const normalizedAlpha = ((orientation.alpha || 0) > 180) 
-        ? (orientation.alpha || 0) - 360 
-        : (orientation.alpha || 0);
-      sensorDataRef.current.yaw = (normalizedAlpha * Math.PI) / 180;
+      // DeviceOrientation gives ABSOLUTE angles - no drift! Use ALPHA for 360° yaw (use directly, no normalization)
+      sensorDataRef.current.yaw = ((orientation.alpha || 0) * Math.PI) / 180;
       sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((orientation.beta || 0) * Math.PI) / 180));
     } else if (sensorMode === 'gyroscope' && gyro.alpha !== null && gyro.beta !== null) {
-      // Gyroscope fallback (accumulated angles - may drift) - also use alpha
-      // Normalize alpha: 0-360° -> -180° to 180° for proper rotation math
-      const normalizedAlpha = ((gyro.alpha || 0) > 180) 
-        ? (gyro.alpha || 0) - 360 
-        : (gyro.alpha || 0);
-      sensorDataRef.current.yaw = (normalizedAlpha * Math.PI) / 180;
+      // Gyroscope fallback (accumulated angles - may drift) - also use alpha (use directly, no normalization)
+      sensorDataRef.current.yaw = ((gyro.alpha || 0) * Math.PI) / 180;
       sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((gyro.beta || 0) * Math.PI) / 180));
     }
   }, [orientation.alpha, orientation.beta, gyro.alpha, gyro.beta, sensorMode]);
@@ -461,9 +448,9 @@ export const ARMicrobeCanvas = ({
         activeSensorData = { type: 'DeviceOrientation', alpha: orientation.alpha, beta: orientation.beta, gamma: orientation.gamma };
       }
 
-      // Update camera world position based on rotation
-      cameraWorldPosRef.current.x = Math.sin(cameraYaw) * 0.1;
-      cameraWorldPosRef.current.z = -Math.cos(cameraYaw) * 0.1;
+      // Camera stays at origin (0, 0, 0) - only rotation changes
+      // cameraWorldPosRef.current.x = 0;
+      // cameraWorldPosRef.current.z = 0;
 
       // Render loop verification logging (reduced frequency)
       if (now % 3000 < 16) { // Log every 3 seconds
@@ -477,11 +464,11 @@ export const ARMicrobeCanvas = ({
         const viewY = microbe.worldY - cameraWorldPosRef.current.y;
         const viewZ = microbe.worldZ - cameraWorldPosRef.current.z;
 
-        // Rotate by camera yaw (around Y axis) - Correct matrix for X=right, -Z=forward
+        // Rotate world space to camera view space (at yaw=0, camera looks toward -Z)
         const cosYaw = Math.cos(cameraYaw);
         const sinYaw = Math.sin(cameraYaw);
-        const rotatedX = viewX * cosYaw + viewZ * sinYaw;
-        const rotatedZ = -viewX * sinYaw + viewZ * cosYaw;
+        const rotatedX = viewX * cosYaw - viewZ * sinYaw;
+        const rotatedZ = viewX * sinYaw + viewZ * cosYaw;
         
         // Apply pitch rotation (around X axis)
         const cosPitch = Math.cos(cameraPitch);
@@ -733,11 +720,11 @@ export const ARMicrobeCanvas = ({
           const viewY = microbe.worldY - cameraWorldPosRef.current.y;
           const viewZ = microbe.worldZ - cameraWorldPosRef.current.z;
 
-          // Rotate by camera yaw (around Y axis) - Correct matrix for X=right, -Z=forward
+          // Rotate world space to camera view space (at yaw=0, camera looks toward -Z)
           const cosYaw = Math.cos(cameraYaw);
           const sinYaw = Math.sin(cameraYaw);
-          const rotatedX = viewX * cosYaw + viewZ * sinYaw;
-          const rotatedZ = -viewX * sinYaw + viewZ * cosYaw;
+          const rotatedX = viewX * cosYaw - viewZ * sinYaw;
+          const rotatedZ = viewX * sinYaw + viewZ * cosYaw;
           
           // Apply pitch rotation (around X axis)
           const cosPitch = Math.cos(cameraPitch);
