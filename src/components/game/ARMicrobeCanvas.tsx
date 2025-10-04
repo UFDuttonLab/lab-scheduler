@@ -808,6 +808,10 @@ export const ARMicrobeCanvas = ({
               life: 1.5,
               color: getMicrobeColor(microbe.type),
             })));
+            
+            // Mark for removal IMMEDIATELY, before map operation starts
+            removedMicrobesRef.current.add(microbe.id);
+            console.log('🗑️ Marked for removal BEFORE map:', microbe.id);
           }
           
           console.log('💥 Prepared', particlesToAdd.length, 'particles!', newHealth <= 0 ? '(BIG EXPLOSION!)' : '(hit)');
@@ -843,8 +847,7 @@ export const ARMicrobeCanvas = ({
               microbeCountRef.current = Math.max(0, microbeCountRef.current - 1);
               console.log('🗑️ Microbe removed, count now:', microbeCountRef.current);
 
-              // Mark for removal to prevent animation loop from resurrecting
-              removedMicrobesRef.current.add(microbe.id);
+              // Already marked for removal before map operation
               return null; // Remove microbe
             }
 
