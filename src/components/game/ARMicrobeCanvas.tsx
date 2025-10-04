@@ -276,19 +276,11 @@ export const ARMicrobeCanvas = ({
             const relY = Math.sin(microbe.elevation) * newDistance;
             const relZ = -Math.cos(microbe.angle) * Math.cos(microbe.elevation) * newDistance;
 
-            // Apply current camera orientation to transform to view space
-            // Yaw rotation (around Y axis)
-            const cosYaw = Math.cos(cameraYaw);
-            const sinYaw = Math.sin(cameraYaw);
-            const rotX = relX * cosYaw - relZ * sinYaw;
-            const rotZ = relX * sinYaw + relZ * cosYaw;
-
-            // Pitch rotation (around X axis)
-            const cosPitch = Math.cos(cameraPitch);
-            const sinPitch = Math.sin(cameraPitch);
-            const viewY = relY * cosPitch - rotZ * sinPitch;
-            const viewZ = relY * sinPitch + rotZ * cosPitch;
-            const viewX = rotX;
+            // These coordinates are ALREADY in camera-relative space
+            // No additional rotation needed - use them directly for view space
+            const viewX = relX;
+            const viewY = relY;
+            const viewZ = relZ;
 
             // Only render if in front of camera (negative Z in view space)
             if (viewZ > 0) {
@@ -453,17 +445,10 @@ export const ARMicrobeCanvas = ({
         const relY = Math.sin(microbe.elevation) * microbe.distance;
         const relZ = -Math.cos(microbe.angle) * Math.cos(microbe.elevation) * microbe.distance;
 
-        // Apply current camera orientation
-        const cosYaw = Math.cos(cameraYaw);
-        const sinYaw = Math.sin(cameraYaw);
-        const rotX = relX * cosYaw - relZ * sinYaw;
-        const rotZ = relX * sinYaw + relZ * cosYaw;
-
-        const cosPitch = Math.cos(cameraPitch);
-        const sinPitch = Math.sin(cameraPitch);
-        const viewY = relY * cosPitch - rotZ * sinPitch;
-        const viewZ = relY * sinPitch + rotZ * cosPitch;
-        const viewX = rotX;
+        // These coordinates are ALREADY in camera-relative space
+        const viewX = relX;
+        const viewY = relY;
+        const viewZ = relZ;
 
         // Skip if behind camera
         if (viewZ > 0) return;
