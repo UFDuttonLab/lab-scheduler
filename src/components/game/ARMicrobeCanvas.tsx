@@ -243,7 +243,7 @@ export const ARMicrobeCanvas = ({
     }, 100);
 
     return () => clearInterval(checkInterval);
-  }, [sensorMode, gyroAvailable]);
+  }, [gyroAvailable]);
 
   // Refs to access current sensor values without causing re-renders
   const sensorDataRef = useRef({ yaw: 0, pitch: 0 });
