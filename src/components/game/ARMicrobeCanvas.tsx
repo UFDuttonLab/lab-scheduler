@@ -417,13 +417,13 @@ export const ARMicrobeCanvas = ({
 
       if (sensorMode === 'gyroscope' && gyro.alpha !== null) {
         // Use Gyroscope API (best for Android)
-        cameraYaw = (gyro.alpha * Math.PI) / 180;
-        cameraPitch = Math.max(-45, Math.min(45, ((gyro.beta || 0) - 90) * Math.PI / 180));
+        cameraYaw = (gyro.gamma * Math.PI) / 180; // Use gamma for left/right tilt
+        cameraPitch = Math.max(-Math.PI/4, Math.min(Math.PI/4, -((gyro.beta || 0) - 90) * Math.PI / 180)); // Inverted pitch
         activeSensorData = { type: 'Gyroscope', alpha: gyro.alpha, beta: gyro.beta, gamma: gyro.gamma };
       } else if (sensorMode === 'orientation' && orientation.alpha !== null) {
         // Use DeviceOrientation
-        cameraYaw = (orientation.alpha * Math.PI) / 180;
-        cameraPitch = Math.max(-45, Math.min(45, ((orientation.beta || 0) - 90) * Math.PI / 180));
+        cameraYaw = (orientation.gamma * Math.PI) / 180; // Use gamma for left/right tilt
+        cameraPitch = Math.max(-Math.PI/4, Math.min(Math.PI/4, -((orientation.beta || 0) - 90) * Math.PI / 180)); // Inverted pitch
         activeSensorData = { type: 'DeviceOrientation', alpha: orientation.alpha, beta: orientation.beta, gamma: orientation.gamma };
       } else {
         // Fallback to touch mode
