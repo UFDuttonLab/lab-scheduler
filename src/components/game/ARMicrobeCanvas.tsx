@@ -64,7 +64,7 @@ export const ARMicrobeCanvas = ({
   const orientation = useDeviceOrientation();
   const [microbes, setMicrobes] = useState<Microbe[]>([]);
   const [powerUps, setPowerUps] = useState<PowerUpItem[]>([]);
-  const [particles, setParticles] = useState<Particle[]>([]);
+  const particlesRef = useRef<Particle[]>([]);
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
   const [activePowerUp, setActivePowerUp] = useState<{ type: string; endTime: number } | null>(null);
@@ -533,24 +533,23 @@ export const ARMicrobeCanvas = ({
       });
 
       // Update and render particles
-      setParticles((prev) => {
-        return prev
-          .map((particle) => {
-            particle.x += particle.vx;
-            particle.y += particle.vy;
-            particle.life -= 0.02;
+      // Update and render particles directly (no state update!)
+      particlesRef.current = particlesRef.current
+        .map((particle) => {
+          particle.x += particle.vx;
+          particle.y += particle.vy;
+          particle.life -= 0.02;
 
-            if (particle.life <= 0) return null;
+          if (particle.life <= 0) return null;
 
-            ctx.fillStyle = particle.color;
-            ctx.globalAlpha = particle.life;
-            ctx.fillRect(particle.x, particle.y, 4, 4);
-            ctx.globalAlpha = 1;
+          ctx.fillStyle = particle.color;
+          ctx.globalAlpha = particle.life;
+          ctx.fillRect(particle.x, particle.y, 4, 4);
+          ctx.globalAlpha = 1;
 
-            return particle;
-          })
-          .filter(Boolean) as Particle[];
-      });
+          return particle;
+        })
+        .filter(Boolean) as Particle[];
 
       // Render laser beam if firing - red with tapered effect
       if (laserFiring > 0 && now - laserFiring < 150) {
@@ -664,7 +663,7 @@ export const ARMicrobeCanvas = ({
       }
       window.removeEventListener('resize', handleResize);
     };
-  }, [microbes, powerUps, particles, lives, isPaused, combo, activePowerUp, useTouchMode, touchRotation, sensorMode, gyro, orientation, showDebug, score, onLifeLost, onScoreChange, onComboChange, onMicrobeEliminated]);
+  }, [microbes, powerUps, lives, isPaused, combo, activePowerUp, useTouchMode, touchRotation, sensorMode, gyro, orientation, showDebug, score, onLifeLost, onScoreChange, onComboChange, onMicrobeEliminated]);
 
   // Handle touch drag for camera control (primary when orientation unavailable)
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
@@ -846,8 +845,9 @@ export const ARMicrobeCanvas = ({
           }).filter(Boolean) as Microbe[];
         });
         
-        // Add particles (guaranteed to have data now!)
-        setParticles(prev => [...prev, ...particlesToAdd]);
+        // Add particles directly to ref (no state batching!)
+        particlesRef.current.push(...particlesToAdd);
+        console.log('✅ Particles now:', particlesRef.current.length);
       } else {
         console.log('❌ NO HIT - Microbes:', microbes.length, 'Center:', centerX, centerY, 'Yaw:', (cameraYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (cameraPitch * 180 / Math.PI).toFixed(1), '°');
       }
