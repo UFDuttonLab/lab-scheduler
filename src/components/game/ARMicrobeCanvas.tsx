@@ -487,7 +487,7 @@ export const ARMicrobeCanvas = ({
         const screenY = centerY + (finalY / depth) * fov;
         
         // Size based on camera-relative depth
-        const scale = 300 / depth;
+      const scale = Math.min(300 / depth, 8); // Cap at 8x max scale
         const size = microbe.size * scale;
 
         // Render microbes in any direction within visible range (5-130 units)
