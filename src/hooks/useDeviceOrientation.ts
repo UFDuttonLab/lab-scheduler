@@ -55,6 +55,37 @@ export const useDeviceOrientation = () => {
     }
   }, []);
 
+  // Auto-detect implicit permission when sensor data flows (runs before explicit permission)
+  useEffect(() => {
+    if (permissionGranted !== null) return; // Already determined
+
+    const detectDataFlow = (event: DeviceOrientationEvent) => {
+      if (event.alpha !== null || event.beta !== null || event.gamma !== null) {
+        console.log('✅ DeviceOrientation implicit permission detected (data flowing automatically)');
+        orientationRef.current = {
+          alpha: event.alpha,
+          beta: event.beta,
+          gamma: event.gamma,
+        };
+        setPermissionGranted(true);
+      }
+    };
+
+    window.addEventListener("deviceorientation", detectDataFlow);
+    
+    // If no data after 500ms, permission needs to be explicitly requested
+    const timeout = setTimeout(() => {
+      if (permissionGranted === null) {
+        console.log('⏱️ No automatic sensor data detected, explicit permission required');
+      }
+    }, 500);
+
+    return () => {
+      clearTimeout(timeout);
+      window.removeEventListener("deviceorientation", detectDataFlow);
+    };
+  }, [permissionGranted]);
+
   useEffect(() => {
     if (permissionGranted !== true) return;
 

@@ -52,6 +52,31 @@ export const useGyroscope = () => {
     }
   }, []);
 
+  // Auto-detect implicit permission - gyroscope typically requires explicit permission
+  // but we check the availability early
+  useEffect(() => {
+    if (permissionGranted !== null) return;
+
+    // For gyroscope, if the API exists and we haven't been denied, try to enable
+    if ('Gyroscope' in window) {
+      const checkAvailability = async () => {
+        try {
+          if ('permissions' in navigator) {
+            const result = await navigator.permissions.query({ name: 'gyroscope' as PermissionName });
+            if (result.state === 'granted') {
+              console.log('✅ Gyroscope implicit permission detected (already granted)');
+              setSensorAvailable(true);
+              setPermissionGranted(true);
+            }
+          }
+        } catch (e) {
+          // Permission query failed, will need explicit request
+        }
+      };
+      checkAvailability();
+    }
+  }, [permissionGranted]);
+
   useEffect(() => {
     if (permissionGranted !== true || !sensorAvailable) return;
 
