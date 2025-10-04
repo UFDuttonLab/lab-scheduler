@@ -217,17 +217,22 @@ export const ARMicrobeCanvas = ({
 
   // Determine which sensor mode to use
   useEffect(() => {
-    // Check Gyroscope API first (best for Android)
-    if (gyro.permissionGranted && gyro.sensorAvailable && gyro.alpha !== null) {
-      setSensorMode('gyroscope');
-      console.log('✅ Using GYROSCOPE API mode - alpha:', gyro.alpha);
+    // FORCE DeviceOrientation API for absolute positioning (no drift)
+    if (orientation.permissionGranted && orientation.gamma !== null && orientation.beta !== null) {
+      setSensorMode('orientation');
+      console.log('✅ Using DEVICE ORIENTATION mode (absolute) - gamma:', orientation.gamma, 'beta:', orientation.beta);
+      
+      // Initialize sensorDataRef with current orientation
+      sensorDataRef.current.yaw = (orientation.gamma * Math.PI) / 180;
+      sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, (orientation.beta * Math.PI) / 180));
+      console.log('📐 Initialized camera - Yaw:', orientation.gamma.toFixed(1), '° Pitch:', orientation.beta.toFixed(1), '°');
       return;
     }
     
-    // Fallback to DeviceOrientation if data is flowing
-    if (orientation.permissionGranted && orientation.alpha !== null) {
-      setSensorMode('orientation');
-      console.log('✅ Using DEVICE ORIENTATION mode - alpha:', orientation.alpha);
+    // Fallback to Gyroscope only if orientation unavailable
+    if (gyro.permissionGranted && gyro.sensorAvailable && gyro.gamma !== null && gyro.beta !== null) {
+      setSensorMode('gyroscope');
+      console.log('⚠️ Using GYROSCOPE API mode (fallback - may drift) - gamma:', gyro.gamma, 'beta:', gyro.beta);
       return;
     }
     
@@ -236,26 +241,25 @@ export const ARMicrobeCanvas = ({
       setSensorMode(null);
       console.log('❌ No sensors available');
     }
-  }, [gyro.permissionGranted, gyro.sensorAvailable, gyro.alpha, orientation.permissionGranted, orientation.alpha]);
+  }, [gyro.permissionGranted, gyro.sensorAvailable, gyro.gamma, gyro.beta, orientation.permissionGranted, orientation.gamma, orientation.beta]);
 
   // Refs to access current sensor values without causing re-renders
   const sensorDataRef = useRef({ yaw: 0, pitch: 0 });
   const microbeCountRef = useRef(0);
 
-  // Update refs when sensor data changes
+  // Update refs when sensor data changes - PRIORITIZE DeviceOrientation for absolute positioning
   useEffect(() => {
-    if (sensorMode === 'gyroscope' && gyro.alpha !== null) {
-      // Use GAMMA for yaw (left/right tilt), not alpha!
-      sensorDataRef.current.yaw = (gyro.gamma * Math.PI) / 180;
-      // Use BETA for pitch (forward/back tilt), clamped to prevent flipping
-      sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, (gyro.beta || 0) * Math.PI / 180));
-    } else if (sensorMode === 'orientation' && orientation.alpha !== null) {
-      // Use GAMMA for yaw (left/right tilt), not alpha!
+    // Always prefer orientation over gyroscope if available
+    if (sensorMode === 'orientation' && orientation.gamma !== null && orientation.beta !== null) {
+      // DeviceOrientation gives ABSOLUTE angles - no drift!
       sensorDataRef.current.yaw = (orientation.gamma * Math.PI) / 180;
-      // Use BETA for pitch (forward/back tilt), clamped to prevent flipping
-      sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, (orientation.beta || 0) * Math.PI / 180));
+      sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, (orientation.beta * Math.PI) / 180));
+    } else if (sensorMode === 'gyroscope' && gyro.gamma !== null && gyro.beta !== null) {
+      // Gyroscope fallback (accumulated angles - may drift)
+      sensorDataRef.current.yaw = (gyro.gamma * Math.PI) / 180;
+      sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, (gyro.beta * Math.PI) / 180));
     }
-  }, [gyro.alpha, gyro.beta, gyro.gamma, orientation.alpha, orientation.beta, orientation.gamma, sensorMode]);
+  }, [orientation.gamma, orientation.beta, gyro.gamma, gyro.beta, sensorMode]);
 
   // Update microbe count ref
   useEffect(() => {
@@ -691,11 +695,16 @@ export const ARMicrobeCanvas = ({
       setLaserFiring(Date.now());
       console.log('🔫 LASER FIRED! Checking', microbes.length, 'microbes for hits...');
 
-      // Use sensor data from ref (FRESH values!)
+      // Use sensor data from ref (FRESH absolute values from DeviceOrientation!)
       const cameraYaw = sensorDataRef.current.yaw;
       const cameraPitch = sensorDataRef.current.pitch;
 
+      // DEFENSIVE LOGGING - verify we have real sensor data
+      if (cameraYaw === 0 && cameraPitch === 0) {
+        console.error('🚨 SENSOR DATA IS ZERO! Sensor not initialized!');
+      }
       console.log('📐 Camera angles from ref - Yaw:', (cameraYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (cameraPitch * 180 / Math.PI).toFixed(1), '°');
+      console.log('📱 Raw sensor - Gamma:', orientation.gamma, 'Beta:', orientation.beta);
 
       // Use setMicrobes with callback to get FRESH microbe data
       setMicrobes((currentMicrobes) => {
