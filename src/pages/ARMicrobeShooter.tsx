@@ -14,7 +14,7 @@ import { useDeviceOrientation } from "@/hooks/useDeviceOrientation";
 import { useGyroscope } from "@/hooks/useGyroscope";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-type GameState = "menu" | "premission" | "playing" | "paused" | "gameover";
+type GameState = "menu" | "playing" | "paused" | "gameover";
 
 const ARMicrobeShooter = () => {
   const navigate = useNavigate();
@@ -109,10 +109,6 @@ const ARMicrobeShooter = () => {
 
     return () => clearTimeout(checkUnlock);
   }, [navigate, isMobile]);
-
-  const goToPreMissionCheck = () => {
-    setGameState("premission");
-  };
 
   const startGame = async () => {
     // Initialize game state
@@ -228,7 +224,7 @@ const ARMicrobeShooter = () => {
           </div>
           
           <div className="space-y-3">
-            <Button onClick={goToPreMissionCheck} size="lg" className="w-full">
+            <Button onClick={startGame} size="lg" className="w-full">
               <Play className="mr-2 h-5 w-5" />
               Start Game
             </Button>
@@ -258,69 +254,6 @@ const ARMicrobeShooter = () => {
               <li>Build combos for score multipliers</li>
               <li>You have 3 lives - don't let microbes escape!</li>
             </ul>
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
-  if (gameState === "premission") {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-b from-background to-primary/10 p-6">
-        <Card className="max-w-md p-8 text-center space-y-6">
-          <h1 className="text-3xl font-bold text-primary">🎯 Pre-Mission Check</h1>
-          <p className="text-muted-foreground">
-            Prepare for your mission by enabling your device sensors for optimal AR tracking.
-          </p>
-          
-          <div className="bg-muted/50 rounded-lg p-4 text-sm text-left space-y-3">
-            <p className="font-semibold">📱 Sensor Status:</p>
-            <ul className="space-y-2 text-muted-foreground">
-              <li className="flex items-center gap-2">
-                <span className={permissionsGranted ? "text-green-500" : "text-yellow-500"}>
-                  {permissionsGranted ? "✅" : "⏳"}
-                </span>
-                Device Motion & Orientation
-              </li>
-              <li className="flex items-center gap-2">
-                <span className={gyro.sensorAvailable ? "text-green-500" : "text-yellow-500"}>
-                  {gyro.sensorAvailable ? "✅" : "⏳"}
-                </span>
-                Gyroscope (Enhanced Tracking)
-              </li>
-            </ul>
-          </div>
-          
-          {permissionStatus && (
-            <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-sm">
-              {permissionStatus}
-            </div>
-          )}
-          
-          <div className="space-y-3">
-            {!permissionsGranted && (
-              <Button onClick={handleRequestPermissions} size="lg" className="w-full">
-                Grant Sensor Permissions
-              </Button>
-            )}
-            <Button 
-              onClick={startGame} 
-              size="lg" 
-              className="w-full"
-              variant={permissionsGranted ? "default" : "outline"}
-            >
-              <Play className="mr-2 h-5 w-5" />
-              {permissionsGranted ? "Start Mission" : "Start Without Sensors (Touch Only)"}
-            </Button>
-            <Button onClick={() => setGameState("menu")} variant="ghost" className="w-full">
-              <X className="mr-2 h-4 w-4" />
-              Back to Menu
-            </Button>
-          </div>
-
-          <div className="text-left text-xs space-y-1 pt-4 border-t text-muted-foreground">
-            <p>💡 <strong>Tip:</strong> For best experience, grant all permissions</p>
-            <p>🎮 Touch controls are available as fallback</p>
           </div>
         </Card>
       </div>

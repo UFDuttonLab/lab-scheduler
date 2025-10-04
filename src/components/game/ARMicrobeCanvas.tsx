@@ -3,6 +3,7 @@ import { useDeviceOrientation } from "@/hooks/useDeviceOrientation";
 import { useGyroscope } from "@/hooks/useGyroscope";
 import { PowerUp } from "./PowerUp";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 interface Microbe {
   id: string;
@@ -74,8 +75,8 @@ export const ARMicrobeCanvas = ({
   const [showDebug, setShowDebug] = useState(true); // Enabled for debugging
   const [sensorMode, setSensorMode] = useState<'gyroscope' | 'orientation' | 'touch'>('touch');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
-  const [showPermissionOverlay, setShowPermissionOverlay] = useState(false); // Testing: start hidden to check spawning
-  const [permissionStatus, setPermissionStatus] = useState("");
+  const [showPermissionOverlay, setShowPermissionOverlay] = useState(true); // Show on game start
+  const [permissionStatus, setPermissionStatus] = useState("Sensors needed for best experience");
   const [cameraWorldPos] = useState({ x: 0, y: 0, z: 0 }); // Camera stays at origin
   const lastComboTimeRef = useRef<number>(Date.now());
   const gameStartTimeRef = useRef<number>(Date.now());
@@ -108,7 +109,6 @@ export const ARMicrobeCanvas = ({
   };
 
   const spawnMicrobe = useCallback((cameraYaw: number) => {
-    console.log('🦠 spawnMicrobe called, current count:', microbes.length);
     const gameTime = (Date.now() - gameStartTimeRef.current) / 1000;
     
     // Determine microbe type based on spawn rate and game time
@@ -172,19 +172,7 @@ export const ARMicrobeCanvas = ({
       wobble: 0,
     };
 
-    console.log('🎯 Spawning microbe:', {
-      worldPos: `(${worldX.toFixed(2)}, ${worldY.toFixed(2)}, ${worldZ.toFixed(2)})`,
-      relativeAngle: (relativeAngle * 180 / Math.PI).toFixed(1) + '°',
-      cameraYaw: (cameraYaw * 180 / Math.PI).toFixed(1) + '°',
-      type,
-      distance: distance.toFixed(2)
-    });
-
-    setMicrobes((prev) => {
-      const updated = [...prev, microbe];
-      console.log('✅ Microbe added! New count:', updated.length, 'Position:', microbe.worldX.toFixed(2), microbe.worldZ.toFixed(2));
-      return updated;
-    });
+    setMicrobes((prev) => [...prev, microbe]);
   }, []);
 
   const spawnPowerUp = useCallback(() => {
@@ -266,42 +254,48 @@ export const ARMicrobeCanvas = ({
     }
   }, [gyro.permissionGranted, gyro.sensorAvailable, gyro.alpha, orientation.permissionGranted, orientation.alpha]);
 
-  // Spawn logic - faster in touch mode
+  // Refs to access current sensor values without causing re-renders
+  const sensorDataRef = useRef({ yaw: 0, pitch: 0 });
+  const microbeCountRef = useRef(0);
+
+  // Update refs when sensor data changes
+  useEffect(() => {
+    if (sensorMode === 'gyroscope' && gyro.alpha !== null) {
+      sensorDataRef.current.yaw = (gyro.alpha * Math.PI) / 180;
+    } else if (sensorMode === 'orientation' && orientation.alpha !== null) {
+      sensorDataRef.current.yaw = (orientation.alpha * Math.PI) / 180;
+    } else {
+      sensorDataRef.current.yaw = touchRotation.yaw;
+      sensorDataRef.current.pitch = touchRotation.pitch;
+    }
+  }, [gyro.alpha, orientation.alpha, touchRotation, sensorMode]);
+
+  // Update microbe count ref
+  useEffect(() => {
+    microbeCountRef.current = microbes.length;
+  }, [microbes.length]);
+
+  // Spawn logic - stable interval that doesn't recreate constantly
   useEffect(() => {
     if (isPaused) return;
 
-    const spawnInterval = useTouchMode ? 1500 : 2000; // Faster spawn in touch mode
-    console.log('🎯 Spawn interval created:', { spawnInterval, currentMicrobes: microbes.length, isPaused, sensorMode });
+    const spawnInterval = useTouchMode ? 1500 : 2000;
+    console.log('🎯 Spawn interval STARTED');
     
     const interval = setInterval(() => {
-      console.log('🎯 Spawn interval fired - attempting spawn...', { 
-        currentMicrobes: microbes.length, 
-        maxMicrobes: 10,
-        willSpawn: microbes.length < 10 
-      });
-      
-      if (microbes.length < 10) {
-        let cameraYaw = touchRotation.yaw;
-        
-        if (sensorMode === 'gyroscope' && gyro.alpha !== null) {
-          cameraYaw = (gyro.alpha * Math.PI) / 180;
-        } else if (sensorMode === 'orientation' && orientation.alpha !== null) {
-          cameraYaw = (orientation.alpha * Math.PI) / 180;
-        }
-        
-        console.log('🎯 Calling spawnMicrobe with cameraYaw:', cameraYaw);
+      // Use ref to get current count without closure issues
+      if (microbeCountRef.current < 10) {
+        const cameraYaw = sensorDataRef.current.yaw;
+        console.log('🎯 Spawning at count:', microbeCountRef.current, 'yaw:', cameraYaw);
         spawnMicrobe(cameraYaw);
-        console.log('🎯 spawnMicrobe called, new microbe count should be:', microbes.length + 1);
-      } else {
-        console.log('🎯 Max microbes reached, skipping spawn');
       }
     }, spawnInterval);
 
     return () => {
-      console.log('🎯 Cleaning up spawn interval');
+      console.log('🎯 Spawn interval STOPPED');
       clearInterval(interval);
     };
-  }, [isPaused, spawnMicrobe, orientation.alpha, gyro.alpha, touchRotation, sensorMode, useTouchMode]);
+  }, [isPaused, useTouchMode, spawnMicrobe]);
 
   // Power-up spawn logic
   useEffect(() => {
@@ -881,6 +875,54 @@ export const ARMicrobeCanvas = ({
 
   return (
     <>
+      {/* Pre-Mission Check Overlay */}
+      {showPermissionOverlay && (
+        <div className="absolute inset-0 bg-black/90 flex items-center justify-center z-50 pointer-events-auto">
+          <div className="bg-background/95 rounded-lg p-6 max-w-sm mx-4 text-center space-y-4">
+            <h2 className="text-2xl font-bold">🎯 Pre-Mission Check</h2>
+            <p className="text-sm text-muted-foreground">
+              Grant sensor permissions for the best AR experience
+            </p>
+            
+            <div className="bg-muted/50 rounded-lg p-3 text-xs text-left space-y-2">
+              <p className="font-semibold">📱 Sensor Status:</p>
+              <div className="space-y-1">
+                <p className={gyro.sensorAvailable ? "text-green-500" : "text-yellow-500"}>
+                  {gyro.sensorAvailable ? "✅" : "⏳"} Gyroscope
+                </p>
+                <p className={orientation.permissionGranted ? "text-green-500" : "text-yellow-500"}>
+                  {orientation.permissionGranted ? "✅" : "⏳"} Orientation
+                </p>
+              </div>
+            </div>
+            
+            {permissionStatus && (
+              <div className="bg-primary/10 border border-primary/20 rounded-lg p-2 text-xs">
+                {permissionStatus}
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Button onClick={handleRequestPermissions} className="w-full" size="lg">
+                Grant Permissions
+              </Button>
+              <Button 
+                onClick={() => {
+                  setShowPermissionOverlay(false);
+                  setUseTouchMode(true);
+                  setSensorMode('touch');
+                  toast.info("Using touch controls - drag to look around");
+                }} 
+                variant="outline" 
+                className="w-full"
+              >
+                Use Touch Controls
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <canvas
         ref={canvasRef}
         onTouchStart={handleTouchMove}
