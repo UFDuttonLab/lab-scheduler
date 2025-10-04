@@ -413,15 +413,35 @@ const ARMicrobeShooter = () => {
         )}
       </div>
 
-      {/* Controls - TOUCH FIX: Precise positioning with z-60 (above canvas z-50) */}
-      <Button 
-        onClick={pauseGame} 
-        size="icon" 
-        variant="secondary" 
-        className="absolute bottom-4 right-4 rounded-full h-12 w-12 pointer-events-auto z-60"
+      {/* Controls - TOUCH FIX: Explicit container with pointer-events-auto */}
+      <div 
+        className="absolute bottom-4 right-4 z-60 pointer-events-auto"
+        onTouchStart={(e) => {
+          console.log('🎮 Pause button container touch detected');
+          e.stopPropagation();
+        }}
+        onClick={(e) => {
+          console.log('🎮 Pause button container click detected');
+          e.stopPropagation();
+        }}
       >
-        <Pause className="h-6 w-6" />
-      </Button>
+        <Button 
+          onClick={(e) => {
+            console.log('⏸️ Pause button clicked!');
+            pauseGame();
+          }}
+          onTouchStart={(e) => {
+            console.log('⏸️ Pause button touched!');
+            e.preventDefault();
+            pauseGame();
+          }}
+          size="icon" 
+          variant="secondary" 
+          className="rounded-full h-12 w-12 pointer-events-auto touch-none"
+        >
+          <Pause className="h-6 w-6" />
+        </Button>
+      </div>
 
     </ARCamera>
   );
