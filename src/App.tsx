@@ -20,6 +20,7 @@ import Help from "./pages/Help";
 import NotFound from "./pages/NotFound";
 import MicrobeBlaster from "./pages/MicrobeBlaster";
 import ZombieLunch from "./pages/ZombieLunch";
+import ARMicrobeShooter from "./pages/ARMicrobeShooter";
 
 const queryClient = new QueryClient();
 
@@ -44,6 +45,7 @@ const App = () => (
             <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
             <Route path="/microbe-blaster" element={<ProtectedRoute><MicrobeBlaster /></ProtectedRoute>} />
             <Route path="/zombie-lunch" element={<ProtectedRoute><ZombieLunch /></ProtectedRoute>} />
+            <Route path="/ar-microbe-shooter" element={<ProtectedRoute><ARMicrobeShooter /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

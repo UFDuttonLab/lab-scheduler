@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
+import { useNavigate } from "react-router-dom";
+import { useDeviceMotion } from "@/hooks/useDeviceMotion";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
@@ -32,7 +34,13 @@ interface UserProfile {
 
 const Schedule = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  
+  // Shake detection for AR game unlock
+  const [shakeProgress, setShakeProgress] = useState(0);
+  const shakeStartTimeRef = useRef<number | null>(null);
+  const { isShaking, requestPermission: requestMotionPermission } = useDeviceMotion(15);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [bookingDate, setBookingDate] = useState<Date | undefined>(new Date());
   const [isBookingDialogOpen, setIsBookingDialogOpen] = useState(false);
@@ -61,7 +69,48 @@ const Schedule = () => {
     fetchEquipment();
     fetchBookings();
     fetchUsers();
+    
+    // Request motion permission on mount for shake detection
+    requestMotionPermission();
   }, []);
+
+  // Shake detection logic
+  useEffect(() => {
+    if (isShaking) {
+      if (shakeStartTimeRef.current === null) {
+        shakeStartTimeRef.current = Date.now();
+      }
+      
+      const elapsed = Date.now() - shakeStartTimeRef.current;
+      const progress = Math.min((elapsed / 5000) * 100, 100);
+      setShakeProgress(progress);
+      
+      if (progress >= 100) {
+        sessionStorage.setItem('arMicrobeUnlocked', 'true');
+        toast.success('🦠 AR Microbe Shooter Unlocked!', {
+          description: 'Check your menu or navigate to the AR game',
+        });
+        setShakeProgress(0);
+        shakeStartTimeRef.current = null;
+        
+        // Navigate to AR game after brief delay
+        setTimeout(() => {
+          navigate('/ar-microbe-shooter');
+        }, 1500);
+      }
+    } else {
+      // Reset if user stops shaking
+      if (shakeStartTimeRef.current !== null) {
+        const elapsed = Date.now() - shakeStartTimeRef.current;
+        if (elapsed < 5000) {
+          setTimeout(() => {
+            setShakeProgress(0);
+            shakeStartTimeRef.current = null;
+          }, 500);
+        }
+      }
+    }
+  }, [isShaking, navigate]);
 
   // Pre-select equipment if passed via URL, but don't auto-open dialog
   useEffect(() => {
@@ -572,6 +621,24 @@ const Schedule = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Shake Progress Indicator */}
+      {shakeProgress > 0 && shakeProgress < 100 && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 bg-primary/95 backdrop-blur-sm text-primary-foreground px-6 py-3 rounded-full shadow-lg animate-pulse">
+          <div className="flex items-center gap-3">
+            <span className="text-lg">🎮</span>
+            <div>
+              <p className="font-semibold">Keep shaking...</p>
+              <div className="w-48 h-2 bg-primary-foreground/20 rounded-full mt-1">
+                <div 
+                  className="h-full bg-primary-foreground rounded-full transition-all duration-100"
+                  style={{ width: `${shakeProgress}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <Navigation />
       
       <main className="container mx-auto px-6 py-8">

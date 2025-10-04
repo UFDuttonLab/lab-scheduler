@@ -174,8 +174,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setPermissions(getRolePermissions(null));
       setIsManager(false);
       
-      // Clear zombie game unlock status
+      // Clear game unlock statuses
       sessionStorage.removeItem('zombieLunchUnlocked');
+      sessionStorage.removeItem('arMicrobeUnlocked');
       
       // Attempt server logout (may fail if session is invalid)
       const { error } = await supabase.auth.signOut();
