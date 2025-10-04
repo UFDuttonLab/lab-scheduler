@@ -17,6 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -93,6 +94,11 @@ const Schedule = () => {
     if (!isShakeDetectionActive || isARUnlocked) return;
 
     if (isShaking) {
+      // Open dialog immediately when shaking starts
+      if (!showUnlockDialog) {
+        setShowUnlockDialog(true);
+      }
+      
       if (shakeStartTimeRef.current === null) {
         shakeStartTimeRef.current = Date.now();
       }
@@ -103,24 +109,22 @@ const Schedule = () => {
       
       if (progress >= 100) {
         sessionStorage.setItem('arMicrobeUnlocked', 'true');
-        setShowUnlockDialog(true);
-        setShakeProgress(0);
-        shakeStartTimeRef.current = null;
         setIsShakeDetectionActive(false);
       }
     } else {
-      // Reset if user stops shaking
-      if (shakeStartTimeRef.current !== null) {
+      // Reset if user stops shaking before completing
+      if (shakeStartTimeRef.current !== null && shakeProgress < 100) {
         const elapsed = Date.now() - shakeStartTimeRef.current;
         if (elapsed < 5000) {
           setTimeout(() => {
             setShakeProgress(0);
             shakeStartTimeRef.current = null;
+            setShowUnlockDialog(false);
           }, 500);
         }
       }
     }
-  }, [isShaking, navigate, isShakeDetectionActive, isARUnlocked]);
+  }, [isShaking, navigate, isShakeDetectionActive, isARUnlocked, showUnlockDialog, shakeProgress]);
 
   // Pre-select equipment if passed via URL, but don't auto-open dialog
   useEffect(() => {
@@ -663,27 +667,53 @@ const Schedule = () => {
       )}
       
       {/* AR Game Unlock Dialog */}
-      <AlertDialog open={showUnlockDialog} onOpenChange={setShowUnlockDialog}>
+      <AlertDialog open={showUnlockDialog} onOpenChange={(open) => {
+        if (!open && shakeProgress < 100) {
+          // Allow closing if not yet unlocked
+          setShowUnlockDialog(false);
+          setShakeProgress(0);
+          shakeStartTimeRef.current = null;
+        } else if (!open && shakeProgress >= 100) {
+          // Allow closing after unlock
+          setShowUnlockDialog(false);
+        }
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-2xl text-center">
-              🦠 Secret AR Game Unlocked!
+              {shakeProgress >= 100 ? '🦠 Secret AR Game Unlocked!' : '🤳 Keep Shaking!'}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-center text-base">
-              You've discovered the AR Microbe Shooter game! Use your device's camera and motion sensors to blast microbes in augmented reality.
+              {shakeProgress >= 100 
+                ? "You've discovered the AR Microbe Shooter game! Use your device's camera and motion sensors to blast microbes in augmented reality."
+                : "Shake your device to unlock a secret AR game..."
+              }
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-            <AlertDialogCancel onClick={() => setShowUnlockDialog(false)}>
-              Play Later
-            </AlertDialogCancel>
-            <AlertDialogAction onClick={() => {
-              setShowUnlockDialog(false);
-              navigate('/ar-microbe-shooter');
-            }}>
-              Play Now
-            </AlertDialogAction>
-          </AlertDialogFooter>
+          
+          <div className="space-y-3 py-4">
+            <Progress value={shakeProgress} className="h-3" />
+            <p className="text-center text-sm text-muted-foreground">
+              {shakeProgress >= 100 
+                ? '🎉 Unlocked!' 
+                : `${Math.round(shakeProgress)}% - Hold steady and keep shaking for 5 seconds`
+              }
+            </p>
+          </div>
+          
+          {shakeProgress >= 100 && (
+            <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+              <AlertDialogCancel onClick={() => setShowUnlockDialog(false)}>
+                Play Later
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={() => {
+                setShowUnlockDialog(false);
+                navigate('/ar-microbe-shooter');
+              }}>
+                Play Now
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          )}
         </AlertDialogContent>
       </AlertDialog>
       
