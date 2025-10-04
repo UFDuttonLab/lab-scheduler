@@ -458,7 +458,7 @@ export const ARMicrobeCanvas = ({
             const size = microbe.size * scale;
 
             // Only render microbes in front of camera AND not too close
-            if (finalZ < 0 && depth >= 20) {
+            if (finalZ < 0 && depth >= 8) {
               // Render microbe
               ctx.save();
               ctx.globalAlpha = opacity;
