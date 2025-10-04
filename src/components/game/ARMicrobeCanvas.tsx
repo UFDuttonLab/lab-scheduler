@@ -759,7 +759,7 @@ export const ARMicrobeCanvas = ({
 
           // Skip if out of visible range (must match rendering range 5-130 units)
           const depth = Math.abs(finalZ);
-          if (depth < 5 || depth > 130) {
+          if (depth < 0.1 || depth > 130) {
             console.log('⏭️ Skipping microbe - out of range, depth:', depth.toFixed(1));
             return;
           }
