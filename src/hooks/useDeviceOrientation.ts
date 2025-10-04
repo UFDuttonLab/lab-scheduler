@@ -13,6 +13,7 @@ export const useDeviceOrientation = () => {
     gamma: null,
   });
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
+  const hasDetectedDataRef = useRef(false); // FIX: Moved to top level
 
   const requestPermission = useCallback(async () => {
     // Check if DeviceOrientationEvent is available
@@ -57,8 +58,6 @@ export const useDeviceOrientation = () => {
 
   // FIX #1: Auto-detect implicit permission with proper flag to prevent infinite loop
   useEffect(() => {
-    const hasDetectedData = useRef(false);
-    
     const detectDataFlow = (event: DeviceOrientationEvent) => {
       if (event.alpha !== null || event.beta !== null || event.gamma !== null) {
         // Force update data immediately
@@ -69,9 +68,9 @@ export const useDeviceOrientation = () => {
         };
         
         // Set permission to true ONLY ONCE
-        if (permissionGranted !== true && !hasDetectedData.current) {
+        if (permissionGranted !== true && !hasDetectedDataRef.current) {
           console.log('🚀 FORCE: DeviceOrientation data detected, setting permission to TRUE');
-          hasDetectedData.current = true;
+          hasDetectedDataRef.current = true;
           setPermissionGranted(true);
         }
       }
@@ -84,7 +83,7 @@ export const useDeviceOrientation = () => {
       
       // Check after 500ms if we got data
       const timeout = setTimeout(() => {
-        if (permissionGranted === null && !hasDetectedData.current) {
+        if (permissionGranted === null && !hasDetectedDataRef.current) {
           console.log('⏱️ FORCE: No automatic sensor data after 500ms, explicit permission required');
         }
       }, 500);
