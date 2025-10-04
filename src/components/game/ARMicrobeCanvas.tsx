@@ -16,6 +16,8 @@ interface Microbe {
   spawnTime: number;
   opacity: number;
   wobble: number; // For slight movement
+  spawnCameraYaw: number; // Camera yaw when spawned
+  spawnCameraPitch: number; // Camera pitch when spawned
 }
 
 interface PowerUpItem {
@@ -90,7 +92,7 @@ export const ARMicrobeCanvas = ({
     }
   };
 
-  const spawnMicrobe = useCallback(() => {
+  const spawnMicrobe = useCallback((cameraYaw: number = 0, cameraPitch: number = 0) => {
     const gameTime = (Date.now() - gameStartTimeRef.current) / 1000;
     
     // Determine microbe type based on spawn rate and game time
@@ -141,6 +143,8 @@ export const ARMicrobeCanvas = ({
       spawnTime: Date.now(),
       opacity: 1,
       wobble: 0,
+      spawnCameraYaw: cameraYaw,
+      spawnCameraPitch: cameraPitch,
     };
 
     setMicrobes((prev) => [...prev, microbe]);
@@ -166,14 +170,18 @@ export const ARMicrobeCanvas = ({
   useEffect(() => {
     if (isPaused) return;
 
+    // Store current camera orientation for spawning
+    const cameraYaw = ((alpha || 0) * Math.PI) / 180;
+    const cameraPitch = ((beta ? beta - 90 : 0) * Math.PI) / 180;
+
     const spawnInterval = setInterval(() => {
       if (microbes.length < 10) {
-        spawnMicrobe();
+        spawnMicrobe(cameraYaw, cameraPitch);
       }
     }, 2000);
 
     return () => clearInterval(spawnInterval);
-  }, [isPaused, microbes.length, spawnMicrobe]);
+  }, [isPaused, microbes.length, spawnMicrobe, alpha, beta]);
 
   // Power-up spawn logic
   useEffect(() => {
@@ -260,16 +268,25 @@ export const ARMicrobeCanvas = ({
                 angle: microbe.angle + (Math.random() - 0.5) * 0.3,
                 elevation: microbe.elevation + (Math.random() - 0.5) * 0.2,
                 spawnTime: now,
+                spawnCameraYaw: microbe.spawnCameraYaw,
+                spawnCameraPitch: microbe.spawnCameraPitch,
               };
               setTimeout(() => setMicrobes((m) => [...m, clone]), 0);
             }
 
-            // Convert microbe's spherical coordinates to 3D world position
-            const worldX = Math.sin(microbe.angle) * Math.cos(microbe.elevation) * microbe.distance;
-            const worldY = Math.sin(microbe.elevation) * microbe.distance;
-            const worldZ = -Math.cos(microbe.angle) * Math.cos(microbe.elevation) * microbe.distance;
+            // Convert microbe's spherical coordinates to spawn-relative position
+            const spawnRelX = Math.sin(microbe.angle) * Math.cos(microbe.elevation) * microbe.distance;
+            const spawnRelY = Math.sin(microbe.elevation) * microbe.distance;
+            const spawnRelZ = -Math.cos(microbe.angle) * Math.cos(microbe.elevation) * microbe.distance;
 
-            // Rotate world position by camera orientation
+            // Transform spawn-relative position to world coordinates using spawn camera orientation
+            const cosSpawnYaw = Math.cos(microbe.spawnCameraYaw);
+            const sinSpawnYaw = Math.sin(microbe.spawnCameraYaw);
+            const worldX = spawnRelX * cosSpawnYaw - spawnRelZ * sinSpawnYaw;
+            const worldZ = spawnRelX * sinSpawnYaw + spawnRelZ * cosSpawnYaw;
+            const worldY = spawnRelY; // Y doesn't change with yaw
+
+            // Now transform world position by current camera orientation
             // Yaw rotation (around Y axis)
             const cosYaw = Math.cos(cameraYaw);
             const sinYaw = Math.sin(cameraYaw);
