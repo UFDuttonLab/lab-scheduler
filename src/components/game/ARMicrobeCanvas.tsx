@@ -7,9 +7,9 @@ import { toast } from "sonner";
 
 interface Microbe {
   id: string;
-  worldX: number; // World position X
-  worldY: number; // World position Y
-  worldZ: number; // World position Z (negative = in front)
+  screenOffsetX: number; // Screen offset from center in pixels
+  screenOffsetY: number; // Screen offset from center in pixels
+  depth: number; // Distance for scale calculation (80-120)
   type: "basic" | "fast" | "tank" | "golden" | "boss";
   health: number;
   maxHealth: number;
@@ -144,22 +144,16 @@ export const ARMicrobeCanvas = ({
       size = 30;
     }
 
-    // Spawn microbes biased toward camera's current view (within ±90° of yaw)
-    const angleOffset = (Math.random() - 0.5) * Math.PI; // ±90° from camera direction
-    const worldAngle = cameraYaw + angleOffset;
-    const elevation = (Math.random() - 0.5) * Math.PI; // Full 180° vertical
-    const distance = 80 + Math.random() * 40; // Spawn 80-120 units away
-
-    // Convert to world coordinates (biased toward camera's front hemisphere)
-    const worldX = Math.sin(worldAngle) * Math.cos(elevation) * distance;
-    const worldY = Math.sin(elevation) * distance;
-    const worldZ = -Math.cos(worldAngle) * Math.cos(elevation) * distance;
+    // Spawn microbes with screen-relative positioning (always near center)
+    const screenOffsetX = (Math.random() - 0.5) * 300; // -150 to +150 pixels from center
+    const screenOffsetY = (Math.random() - 0.5) * 300; // -150 to +150 pixels from center
+    const depth = 80 + Math.random() * 40; // 80-120 units for scaling
 
     const microbe: Microbe = {
       id: `microbe-${Date.now()}-${Math.random()}`,
-      worldX,
-      worldY,
-      worldZ,
+      screenOffsetX,
+      screenOffsetY,
+      depth,
       type,
       health,
       maxHealth: health,
@@ -342,27 +336,21 @@ export const ARMicrobeCanvas = ({
             const age = (now - microbe.spawnTime) / 1000;
             const newWobble = microbe.wobble + 0.02;
 
-            // Calculate distance to camera in world space
-            const dx = microbe.worldX - cameraWorldPosRef.current.x;
-            const dy = microbe.worldY - cameraWorldPosRef.current.y;
-            const dz = microbe.worldZ - cameraWorldPosRef.current.z;
-            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
-            // Check if reached camera or despawned
-            if (distance < 0.5 || age > 25) {
+            // Check if despawned (depth approaching 0 means it's "at" camera)
+            if (microbe.depth < 2 || age > 25) {
               onLifeLost();
               return null;
             }
 
-            // Move microbe toward camera in world space
-            const dirX = -dx / distance;
-            const dirY = -dy / distance;
-            const dirZ = -dz / distance;
-            const moveAmount = microbe.speed * 0.016;
-            
-            const newWorldX = microbe.worldX + dirX * moveAmount;
-            const newWorldY = microbe.worldY + dirY * moveAmount;
-            const newWorldZ = microbe.worldZ + dirZ * moveAmount;
+            // Move microbe closer (reduce depth) - simulates approach
+            const depthDecreaseRate = microbe.speed * 0.05; // Adjust speed factor
+            const newDepth = microbe.depth - depthDecreaseRate;
+
+            // Add small random drift to screen position for floating effect
+            const driftX = (Math.random() - 0.5) * 0.5;
+            const driftY = (Math.random() - 0.5) * 0.5;
+            const newScreenOffsetX = microbe.screenOffsetX + driftX;
+            const newScreenOffsetY = microbe.screenOffsetY + driftY;
 
             // Camouflage effect for tank/boss
             let opacity = microbe.opacity;
@@ -372,20 +360,18 @@ export const ARMicrobeCanvas = ({
 
             // Multiplication for basic microbes
             if (microbe.type === "basic" && age > 15 && Math.random() < 0.001) {
-              const offsetAngle = (Math.random() - 0.5) * 0.5;
-              const offsetDist = 0.3;
               const clone: Microbe = {
                 ...microbe,
                 id: `microbe-clone-${Date.now()}-${Math.random()}`,
-                worldX: newWorldX + Math.sin(offsetAngle) * offsetDist,
-                worldY: newWorldY + (Math.random() - 0.5) * 0.2,
-                worldZ: newWorldZ + Math.cos(offsetAngle) * offsetDist,
+                screenOffsetX: newScreenOffsetX + (Math.random() - 0.5) * 50,
+                screenOffsetY: newScreenOffsetY + (Math.random() - 0.5) * 50,
+                depth: newDepth,
                 spawnTime: now,
               };
               setTimeout(() => setMicrobes((m) => [...m, clone]), 0);
             }
 
-            return { ...microbe, worldX: newWorldX, worldY: newWorldY, worldZ: newWorldZ, wobble: newWobble, opacity };
+            return { ...microbe, screenOffsetX: newScreenOffsetX, screenOffsetY: newScreenOffsetY, depth: newDepth, wobble: newWobble, opacity };
           })
           .filter(Boolean) as Microbe[];
       });
@@ -458,91 +444,46 @@ export const ARMicrobeCanvas = ({
         console.log('🎨 Render loop active - Microbes:', microbes.length, 'Visible on canvas');
       }
 
-      // Debug counters
-      let totalMicrobes = microbes.length;
-      let passedDepthCheck = 0;
-      let passedBoundsCheck = 0;
-      let rendered = 0;
-
-      // Render microbes with bounds checking
+      // Render microbes using simple screen-relative positioning
       microbes.forEach((microbe) => {
-        // Transform world position to camera-relative view space
-        const viewX = microbe.worldX - cameraWorldPosRef.current.x;
-        const viewY = microbe.worldY - cameraWorldPosRef.current.y;
-        const viewZ = microbe.worldZ - cameraWorldPosRef.current.z;
-
-        // Rotate world space to camera view space
-        const cosYaw = Math.cos(cameraYaw);
-        const sinYaw = Math.sin(cameraYaw);
-        const rotatedX = viewX * cosYaw - viewZ * sinYaw;
-        const rotatedZ = viewX * sinYaw + viewZ * cosYaw;
+        // Simple screen positioning - always on screen!
+        const wobbleOffset = Math.sin(microbe.wobble) * 5; // Wobble in pixels
+        const screenX = centerX + microbe.screenOffsetX + wobbleOffset;
+        const screenY = centerY + microbe.screenOffsetY;
         
-        // Apply pitch rotation
-        const cosPitch = Math.cos(cameraPitch);
-        const sinPitch = Math.sin(cameraPitch);
-        const finalY = viewY * cosPitch - rotatedZ * sinPitch;
-        const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
-
-        // Add wobble
-        const wobbleOffset = Math.sin(microbe.wobble) * 0.05;
-
-        // Project to screen
-        const depth = Math.abs(finalZ);
-        const fov = 1200;
-        const screenX = centerX + (rotatedX / depth) * fov + wobbleOffset * 50;
-        const screenY = centerY + (finalY / depth) * fov;
-        
-        const scale = Math.min(300 / depth, 8);
+        // Scale based on depth (closer = bigger)
+        const scale = Math.min(300 / microbe.depth, 8);
         const size = microbe.size * scale;
 
-        // Check depth range
-        if (depth >= 5 && depth <= 130) {
-          passedDepthCheck++;
-          
-          // Check bounds (with 100px margin)
-          if (screenX >= -100 && screenX <= canvas.width + 100 && 
-              screenY >= -100 && screenY <= canvas.height + 100) {
-            passedBoundsCheck++;
-            
-            const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
-            
-            // Draw dark background circle
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, (size / 2) + 4, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Draw main colored circle
-            const circleColor = distanceFromCrosshair < 120 ? 'rgba(0, 255, 0, 1.0)' : 
-                                distanceFromCrosshair < 150 ? 'rgba(255, 255, 0, 1.0)' : 
-                                'rgba(255, 0, 0, 1.0)';
-            ctx.fillStyle = circleColor;
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Add white outline
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 3;
-            ctx.stroke();
-            
-            rendered++;
-          }
-        }
+        const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
+        
+        // Draw dark background circle
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, (size / 2) + 4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Draw main colored circle (green when hittable, red otherwise)
+        const circleColor = distanceFromCrosshair < 120 ? 'rgba(0, 255, 0, 1.0)' : 'rgba(255, 0, 0, 1.0)';
+        ctx.fillStyle = circleColor;
+        ctx.globalAlpha = microbe.opacity;
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+        
+        // Add white outline
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.stroke();
       });
 
-      // Draw debug info
+      // Draw microbe counter
       ctx.fillStyle = '#ffffff';
-      ctx.font = '16px monospace';
-      ctx.fillText(`Total: ${totalMicrobes} | Depth: ${passedDepthCheck} | Bounds: ${passedBoundsCheck} | Rendered: ${rendered}`, 10, 30);
-      
-      // Draw test circle at center for reference
-      ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 25, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.font = 'bold 20px monospace';
+      ctx.fillText(`Microbes: ${microbes.length}`, 10, 30);
 
       // Update and render power-ups (keep simple fixed positioning for now)
       setPowerUps((prev) => {
@@ -656,14 +597,7 @@ export const ARMicrobeCanvas = ({
           ctx.fillText(`α=${activeSensorData.alpha?.toFixed(1) ?? 'null'} β=${activeSensorData.beta?.toFixed(1) ?? 'null'} γ=${activeSensorData.gamma?.toFixed(1) ?? 'null'}`, 20, 75);
         }
         
-        const visibleCount = microbes.filter(m => {
-          const viewZ = m.worldZ - cameraWorldPosRef.current.z;
-          const viewX = m.worldX - cameraWorldPosRef.current.x;
-          const cosYaw = Math.cos(-cameraYaw);
-          const sinYaw = Math.sin(-cameraYaw);
-          const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
-          return rotatedZ < 0;
-        }).length;
+        const visibleCount = microbes.length; // All microbes are visible in screen-space model
         
         ctx.fillText(`Microbes: ${microbes.length} (${visibleCount} visible)`, 20, 95);
         ctx.fillText(`Gyro: ${gyro.sensorAvailable ? '✅' : '❌'} | Orient: ${orientation.permissionGranted ? '✅' : '❌'}`, 20, 115);
@@ -729,51 +663,28 @@ export const ARMicrobeCanvas = ({
         let closestMicrobe: { microbe: Microbe; screenX: number; screenY: number; size: number } | null = null;
         let minDistance = Infinity;
 
-        // Find closest microbe to crosshair using CURRENT microbe data
+        // Find closest microbe to crosshair using simple screen-space distance
         currentMicrobes.forEach((microbe) => {
-          // Transform world position to camera-relative view space
-          const viewX = microbe.worldX - cameraWorldPosRef.current.x;
-          const viewY = microbe.worldY - cameraWorldPosRef.current.y;
-          const viewZ = microbe.worldZ - cameraWorldPosRef.current.z;
-
-          // Rotate world space to camera view space (at yaw=0, camera looks toward -Z)
-          const cosYaw = Math.cos(cameraYaw);
-          const sinYaw = Math.sin(cameraYaw);
-          const rotatedX = viewX * cosYaw - viewZ * sinYaw;
-          const rotatedZ = viewX * sinYaw + viewZ * cosYaw;
+          // Calculate screen position (match rendering logic)
+          const wobbleOffset = Math.sin(microbe.wobble) * 5;
+          const screenX = centerX + microbe.screenOffsetX + wobbleOffset;
+          const screenY = centerY + microbe.screenOffsetY;
           
-          // Apply pitch rotation (around X axis)
-          const cosPitch = Math.cos(cameraPitch);
-          const sinPitch = Math.sin(cameraPitch);
-          const finalY = viewY * cosPitch - rotatedZ * sinPitch;
-          const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
-
-          // Skip if out of visible range (must match rendering range 5-130 units)
-          const depth = Math.abs(finalZ);
-          if (depth < 0.1 || depth > 130) {
-            console.log('⏭️ Skipping microbe - out of range, depth:', depth.toFixed(1));
-            return;
-          }
-
-          const wobbleOffset = Math.sin(microbe.wobble) * 0.05;
-          const fov = 1200; // Match rendering FOV
-          const screenX = centerX + (rotatedX / depth) * fov + wobbleOffset * 50;
-          const screenY = centerY + (finalY / depth) * fov;
-          
-          console.log('🔍 Microbe projection - screen:', screenX.toFixed(0), screenY.toFixed(0), 'depth:', depth.toFixed(1));
-          
-          // Use depth-based scale like rendering
-          const scale = 300 / depth;
+          // Calculate scale (match rendering)
+          const scale = Math.min(300 / microbe.depth, 8);
           const size = microbe.size * scale;
 
+          // Simple screen-space distance to crosshair
           const distance = Math.hypot(screenX - centerX, screenY - centerY);
+          
+          console.log('🔍 Microbe check - screen:', screenX.toFixed(0), screenY.toFixed(0), 'distance:', distance.toFixed(1), 'px');
           
           // Log near misses for debugging
           if (distance < 150 && distance >= 120) {
             console.log('🔸 Near miss! Microbe type:', microbe.type, 'Distance:', distance.toFixed(0), 'px');
           }
           
-          // Check if within crosshair area (120px radius - doubled for easier hits)
+          // Check if within crosshair area (120px radius)
           if (distance < 120 && distance < minDistance) {
             minDistance = distance;
             closestMicrobe = { microbe, screenX, screenY, size };
