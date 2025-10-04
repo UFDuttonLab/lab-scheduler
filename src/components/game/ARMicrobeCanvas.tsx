@@ -245,11 +245,17 @@ export const ARMicrobeCanvas = ({
   // Update refs when sensor data changes
   useEffect(() => {
     if (sensorMode === 'gyroscope' && gyro.alpha !== null) {
-      sensorDataRef.current.yaw = (gyro.alpha * Math.PI) / 180;
+      // Use GAMMA for yaw (left/right tilt), not alpha!
+      sensorDataRef.current.yaw = (gyro.gamma * Math.PI) / 180;
+      // Use BETA for pitch (forward/back tilt), clamped to prevent flipping
+      sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, (gyro.beta || 0) * Math.PI / 180));
     } else if (sensorMode === 'orientation' && orientation.alpha !== null) {
-      sensorDataRef.current.yaw = (orientation.alpha * Math.PI) / 180;
+      // Use GAMMA for yaw (left/right tilt), not alpha!
+      sensorDataRef.current.yaw = (orientation.gamma * Math.PI) / 180;
+      // Use BETA for pitch (forward/back tilt), clamped to prevent flipping
+      sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, (orientation.beta || 0) * Math.PI / 180));
     }
-  }, [gyro.alpha, orientation.alpha, sensorMode]);
+  }, [gyro.alpha, gyro.beta, gyro.gamma, orientation.alpha, orientation.beta, orientation.gamma, sensorMode]);
 
   // Update microbe count ref
   useEffect(() => {
@@ -428,20 +434,14 @@ export const ARMicrobeCanvas = ({
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
 
-      // Camera control with smart sensor selection
-      let cameraYaw = 0;
-      let cameraPitch = 0;
+      // Camera control - use sensor data from ref for consistency
+      const cameraYaw = sensorDataRef.current.yaw;
+      const cameraPitch = sensorDataRef.current.pitch;
       let activeSensorData: any = null;
 
       if (sensorMode === 'gyroscope' && gyro.alpha !== null) {
-        // Use Gyroscope API (best for Android)
-        cameraYaw = (gyro.gamma * Math.PI) / 180; // Use gamma for left/right tilt
-        cameraPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, (gyro.beta || 0) * Math.PI / 180)); // Direct beta for pitch
         activeSensorData = { type: 'Gyroscope', alpha: gyro.alpha, beta: gyro.beta, gamma: gyro.gamma };
       } else if (sensorMode === 'orientation' && orientation.alpha !== null) {
-        // Use DeviceOrientation
-        cameraYaw = (orientation.gamma * Math.PI) / 180; // Use gamma for left/right tilt
-        cameraPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, (orientation.beta || 0) * Math.PI / 180)); // Direct beta for pitch
         activeSensorData = { type: 'DeviceOrientation', alpha: orientation.alpha, beta: orientation.beta, gamma: orientation.gamma };
       }
 
@@ -691,17 +691,11 @@ export const ARMicrobeCanvas = ({
       setLaserFiring(Date.now());
       console.log('🔫 LASER FIRED! Checking', microbes.length, 'microbes for hits...');
 
-      // Use sensor data based on current mode (MATCH RENDERING!)
-      let cameraYaw = 0;
-      let cameraPitch = 0;
-      
-      if (sensorMode === 'gyroscope' && gyro.alpha !== null) {
-        cameraYaw = (gyro.gamma * Math.PI) / 180; // Use gamma, not alpha!
-        cameraPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, (gyro.beta || 0) * Math.PI / 180)); // Match rendering limits
-      } else if (sensorMode === 'orientation' && orientation.alpha !== null) {
-        cameraYaw = (orientation.gamma * Math.PI) / 180; // Use gamma, not alpha!
-        cameraPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, (orientation.beta || 0) * Math.PI / 180)); // Match rendering limits
-      }
+      // Use sensor data from ref (FRESH values!)
+      const cameraYaw = sensorDataRef.current.yaw;
+      const cameraPitch = sensorDataRef.current.pitch;
+
+      console.log('📐 Camera angles from ref - Yaw:', (cameraYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (cameraPitch * 180 / Math.PI).toFixed(1), '°');
 
       // Use setMicrobes with callback to get FRESH microbe data
       setMicrobes((currentMicrobes) => {
