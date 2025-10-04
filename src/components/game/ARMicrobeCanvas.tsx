@@ -322,6 +322,10 @@ export const ARMicrobeCanvas = ({
         activeSensorData = { type: 'Touch', yaw: touchRotation.yaw, pitch: touchRotation.pitch };
       }
 
+      // Update camera world position based on rotation
+      cameraWorldPos.x = Math.sin(cameraYaw) * 0.1;
+      cameraWorldPos.z = -Math.cos(cameraYaw) * 0.1;
+
       // Debug logging every second
       if (showDebug && now % 1000 < 16) {
         const visibleCount = microbes.filter(m => {
@@ -416,9 +420,9 @@ export const ARMicrobeCanvas = ({
             const finalY = viewY * cosPitch - rotatedZ * sinPitch;
             const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
 
-            // Only render if in front of camera
+            // Skip rendering if behind camera (finalZ >= 0 means behind)
             if (finalZ >= 0) {
-              return { ...microbe, worldX: newWorldX, worldY: newWorldY, worldZ: newWorldZ, wobble: newWobble, opacity };
+              return null;
             }
 
             // Add wobble for realism
