@@ -14,6 +14,7 @@ export const useDeviceOrientation = () => {
   });
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
   const hasDetectedDataRef = useRef(false); // FIX: Moved to top level
+  const hasWarnedRef = useRef(false); // FIX #4: Track if we've already warned about stale sensors
 
   const requestPermission = useCallback(async () => {
     // Check if DeviceOrientationEvent is available
@@ -112,8 +113,9 @@ export const useDeviceOrientation = () => {
 
     // Periodic check for stale data
     const staleCheckInterval = setInterval(() => {
-      if (eventReceived && Date.now() - lastEventTime > 2000) {
+      if (eventReceived && Date.now() - lastEventTime > 2000 && !hasWarnedRef.current) {
         console.warn("⚠️ Device orientation events stopped updating");
+        hasWarnedRef.current = true; // Only warn once
       }
     }, 2000);
 

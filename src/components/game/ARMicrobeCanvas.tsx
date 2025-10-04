@@ -56,6 +56,7 @@ export const ARMicrobeCanvas = ({
   lives,
   isPaused,
 }: ARMicrobeCanvasProps) => {
+  const DEBUG_MODE = false; // Set to true to enable debug logging
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   // Try Gyroscope API first (best for Android Chrome) - returns refs to avoid re-renders
@@ -179,7 +180,7 @@ export const ARMicrobeCanvas = ({
       wobble: 0,
     };
 
-    console.log(`🎯 SPAWNED: id=${microbe.id.slice(-4)}, type=${type}, worldPos=(${worldX.toFixed(1)}, ${worldY.toFixed(1)}, ${worldZ.toFixed(1)}), distance=${distance.toFixed(1)}`);
+    if (DEBUG_MODE) console.log(`🎯 SPAWNED: id=${microbe.id.slice(-4)}, type=${type}, worldPos=(${worldX.toFixed(1)}, ${worldY.toFixed(1)}, ${worldZ.toFixed(1)}), distance=${distance.toFixed(1)}`);
 
     setMicrobes((prev) => [...prev, microbe]);
   }, []);
@@ -238,21 +239,22 @@ export const ARMicrobeCanvas = ({
     if (isPaused) return;
 
     const spawnInterval = 2000;
-    console.log('🎯 Spawn interval STARTED (sensors ready)');
+    if (DEBUG_MODE) console.log('🎯 Spawn interval STARTED (sensors ready)');
     
     const interval = setInterval(() => {
       if (microbeCountRef.current < 10) {
-        const cameraYaw = sensorDataRef.current.yaw || 0;
-        console.log('🎯 Spawning microbe - count:', microbeCountRef.current, 'yaw:', cameraYaw.toFixed(2));
+        // FIX #6: Use random yaw if sensors are stale/unavailable
+        const cameraYaw = sensorDataRef.current.yaw || (Math.random() * Math.PI * 2);
+        if (DEBUG_MODE) console.log('🎯 Spawning microbe - count:', microbeCountRef.current, 'yaw:', cameraYaw.toFixed(2));
         spawnMicrobe(cameraYaw);
       }
     }, spawnInterval);
 
     return () => {
-      console.log('🎯 Spawn interval STOPPED');
+      if (DEBUG_MODE) console.log('🎯 Spawn interval STOPPED');
       clearInterval(interval);
     };
-  }, [isPaused]);
+  }, [isPaused, spawnMicrobe]);
 
   // Power-up spawn logic
   useEffect(() => {
@@ -348,7 +350,11 @@ export const ARMicrobeCanvas = ({
                 worldZ: newWorldZ + Math.cos(offsetAngle) * offsetDist,
                 spawnTime: now,
               };
-              const timeoutId = window.setTimeout(() => setMicrobes((m) => [...m, clone]), 0);
+              // FIX #5: Check game state before adding clone to prevent memory leak
+              const timeoutId = window.setTimeout(() => {
+                if (isPaused || lives <= 0) return;
+                setMicrobes((m) => [...m, clone]);
+              }, 0);
               cloneTimeoutsRef.current.push(timeoutId);
             }
 
@@ -417,18 +423,20 @@ export const ARMicrobeCanvas = ({
       const centerY = canvas.height / 2;
 
       // 🔍 COMPREHENSIVE SENSOR DIAGNOSTIC (throttled to once per second)
-      const shouldLog = now - lastLogTimeRef.current > 1000;
-      if (shouldLog) {
-        console.log('🔍 SENSOR CHECK:', {
-          sensorMode,
-          orientationAlpha: orientation.current.alpha,
-          orientationBeta: orientation.current.beta,
-          gyroAlpha: gyro.current.alpha,
-          gyroBeta: gyro.current.beta,
-          sensorDataRefYaw: sensorDataRef.current.yaw,
-          sensorDataRefPitch: sensorDataRef.current.pitch,
-        });
-        lastLogTimeRef.current = now;
+      if (DEBUG_MODE) {
+        const shouldLog = now - lastLogTimeRef.current > 1000;
+        if (shouldLog) {
+          console.log('🔍 SENSOR CHECK:', {
+            sensorMode,
+            orientationAlpha: orientation.current.alpha,
+            orientationBeta: orientation.current.beta,
+            gyroAlpha: gyro.current.alpha,
+            gyroBeta: gyro.current.beta,
+            sensorDataRefYaw: sensorDataRef.current.yaw,
+            sensorDataRefPitch: sensorDataRef.current.pitch,
+          });
+          lastLogTimeRef.current = now;
+        }
       }
 
       // FIX #2: Get sensor data and update sensorDataRef
@@ -466,7 +474,7 @@ export const ARMicrobeCanvas = ({
       cameraWorldPosRef.current.z = 0;
 
       // Render loop verification logging (reduced frequency)
-      if (now % 3000 < 16) { // Log every 3 seconds
+      if (DEBUG_MODE && now % 3000 < 16) { // Log every 3 seconds
         console.log('🎨 Render loop active - Microbes:', microbes.length, 'Visible on canvas');
       }
 
@@ -490,37 +498,39 @@ export const ARMicrobeCanvas = ({
         const finalY = viewY * cosPitch - rotatedZ * sinPitch;
         const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
 
-        // Skip if behind camera
-        if (finalZ >= 0) return;
+          // Skip if behind camera
+          if (finalZ >= 0) return;
 
-        // Add wobble for realism
-        const wobbleOffset = Math.sin(microbe.wobble) * 0.05;
+          // Add wobble for realism
+          const wobbleOffset = Math.sin(microbe.wobble) * 0.05;
 
-        // Project to screen with proper perspective (negative Z = in front of camera)
-        const depth = -finalZ; // Make positive for division
-        const fovDegrees = 60;
-        const fovRadians = (fovDegrees * Math.PI) / 180;
-        const projectionScale = (canvas.width / 2) / Math.tan(fovRadians / 2);
-        
-        const screenX = centerX + (finalX / depth) * projectionScale + wobbleOffset * 50;
-        const screenY = centerY - (finalY / depth) * projectionScale; // Negative because screen Y increases downward
-        
-        // Size based on camera-relative depth
-        const sizeScale = 300 / Math.max(0.1, depth);
-        const size = microbe.size * sizeScale;
+          // Project to screen with proper perspective (negative Z = in front of camera)
+          const depth = -finalZ; // Make positive for division
+          const fovDegrees = 60;
+          const fovRadians = (fovDegrees * Math.PI) / 180;
+          const projectionScale = (canvas.width / 2) / Math.tan(fovRadians / 2);
+          
+          const screenX = centerX + (finalX / depth) * projectionScale + wobbleOffset * 50;
+          const screenY = centerY - (finalY / depth) * projectionScale; // Negative because screen Y increases downward
+          
+          // Size based on camera-relative depth
+          const sizeScale = 300 / Math.max(0.1, depth);
+          const size = microbe.size * sizeScale;
 
-        // FIX #2: Only render microbes clearly in front of camera with better distance check
-        if (finalZ < -1 && depth > 0.5 && depth < 300) {
-          console.log(`✅ RENDERING: id=${microbe.id.slice(-4)}, screen=(${screenX.toFixed(0)}, ${screenY.toFixed(0)}), depth=${depth.toFixed(1)}, finalZ=${finalZ.toFixed(1)}`);
-          // Debug: Draw hit detection circle around microbe
-          const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
-          if (distanceFromCrosshair < 150) {
-            ctx.strokeStyle = distanceFromCrosshair < 120 ? '#00ff00' : '#ffff00';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
-            ctx.stroke();
-          }
+          // FIX #2: Only render microbes clearly in front of camera with better distance check
+          if (finalZ < -1 && depth > 0.5 && depth < 300) {
+            if (DEBUG_MODE) console.log(`✅ RENDERING: id=${microbe.id.slice(-4)}, screen=(${screenX.toFixed(0)}, ${screenY.toFixed(0)}), depth=${depth.toFixed(1)}, finalZ=${finalZ.toFixed(1)}`);
+            // Debug: Draw hit detection circle around microbe
+            if (DEBUG_MODE) {
+              const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
+              if (distanceFromCrosshair < 150) {
+                ctx.strokeStyle = distanceFromCrosshair < 120 ? '#00ff00' : '#ffff00';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
+                ctx.stroke();
+              }
+            }
           
           // Render microbe
           ctx.save();
@@ -689,10 +699,10 @@ export const ARMicrobeCanvas = ({
   const handleTap = useCallback(
     (e: React.TouchEvent<HTMLCanvasElement> | React.MouseEvent<HTMLCanvasElement>) => {
       e.preventDefault(); // FIX #6: Prevent default touch behavior
-      console.log('🖐️ TOUCH/CLICK DETECTED at canvas!', e.type);
+      if (DEBUG_MODE) console.log('🖐️ TOUCH/CLICK DETECTED at canvas!', e.type);
       
       if (isPaused || !canvasRef.current) {
-        console.log('🔴 EARLY RETURN:', isPaused ? 'PAUSED' : 'NO CANVAS');
+        if (DEBUG_MODE) console.log('🔴 EARLY RETURN:', isPaused ? 'PAUSED' : 'NO CANVAS');
         return;
       }
 
@@ -702,7 +712,7 @@ export const ARMicrobeCanvas = ({
 
       // Fire laser beam
       laserFiringRef.current = Date.now();
-      console.log('🔫 LASER FIRED! Checking for hits...');
+      if (DEBUG_MODE) console.log('🔫 LASER FIRED! Checking for hits...');
 
       // Use sensor data from ref
       const cameraYaw = sensorDataRef.current.yaw;
@@ -710,7 +720,7 @@ export const ARMicrobeCanvas = ({
 
       // Laser always fires when user taps - sensors at zero is a valid state (device is level)
       
-      console.log('✅ Sensor data valid:', { 
+      if (DEBUG_MODE) console.log('✅ Sensor data valid:', { 
         yaw: (cameraYaw * 180 / Math.PI).toFixed(2) + '°', 
         pitch: (cameraPitch * 180 / Math.PI).toFixed(2) + '°' 
       });
@@ -723,8 +733,8 @@ export const ARMicrobeCanvas = ({
 
       // Use setMicrobes with callback to get FRESH microbe data
       setMicrobes((currentMicrobes) => {
-        console.log('🔴 TAP DETECTED! Checking', currentMicrobes.length, 'microbes for hits...');
-        console.log('📐 Camera state - Yaw:', (cameraYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (cameraPitch * 180 / Math.PI).toFixed(1), '° Crosshair at center:', centerX, centerY);
+        if (DEBUG_MODE) console.log('🔴 TAP DETECTED! Checking', currentMicrobes.length, 'microbes for hits...');
+        if (DEBUG_MODE) console.log('📐 Camera state - Yaw:', (cameraYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (cameraPitch * 180 / Math.PI).toFixed(1), '° Crosshair at center:', centerX, centerY);
         
         let hitMicrobe = false;
         let closestMicrobe: { microbe: Microbe; screenX: number; screenY: number; size: number } | null = null;
@@ -759,7 +769,7 @@ export const ARMicrobeCanvas = ({
           const screenX = centerX + (finalX / depth) * projectionScale;
           const screenY = centerY - (finalY / depth) * projectionScale;
           
-          console.log('🔍 Microbe projection - screen:', screenX.toFixed(0), screenY.toFixed(0), 'depth:', depth.toFixed(1));
+          if (DEBUG_MODE) console.log('🔍 Microbe projection - screen:', screenX.toFixed(0), screenY.toFixed(0), 'depth:', depth.toFixed(1));
           
           // Use depth-based scale like rendering
           const sizeScale = 300 / Math.max(0.1, depth);
@@ -768,7 +778,7 @@ export const ARMicrobeCanvas = ({
           const distance = Math.hypot(screenX - centerX, screenY - centerY);
           
           // Log near misses for debugging
-          if (distance < 150 && distance >= 120) {
+          if (DEBUG_MODE && distance < 150 && distance >= 120) {
             console.log('🔸 Near miss! Microbe type:', microbe.type, 'Distance:', distance.toFixed(0), 'px');
           }
           
@@ -782,7 +792,7 @@ export const ARMicrobeCanvas = ({
         if (closestMicrobe) {
           hitMicrobe = true;
           const { microbe, screenX, screenY } = closestMicrobe;
-          console.log('🎯 HIT! Microbe:', microbe.type, 'at screen:', screenX.toFixed(0), screenY.toFixed(0), 'Distance from crosshair:', minDistance.toFixed(1), 'px');
+          if (DEBUG_MODE) console.log('🎯 HIT! Microbe:', microbe.type, 'at screen:', screenX.toFixed(0), screenY.toFixed(0), 'Distance from crosshair:', minDistance.toFixed(1), 'px');
           
           const newHealth = microbe.health - 1;
           
@@ -812,14 +822,14 @@ export const ARMicrobeCanvas = ({
             
             // Mark for removal IMMEDIATELY, before map operation starts
             removedMicrobesRef.current.add(microbe.id);
-            console.log('🗑️ Marked for removal BEFORE map:', microbe.id);
+            if (DEBUG_MODE) console.log('🗑️ Marked for removal BEFORE map:', microbe.id);
           }
           
-          console.log('💥 Prepared', particlesToAdd.length, 'particles!', newHealth <= 0 ? '(BIG EXPLOSION!)' : '(hit)');
+          if (DEBUG_MODE) console.log('💥 Prepared', particlesToAdd.length, 'particles!', newHealth <= 0 ? '(BIG EXPLOSION!)' : '(hit)');
           
           // Add particles directly to ref (no state batching!)
           particlesRef.current.push(...particlesToAdd);
-          console.log('✅ Particles now:', particlesRef.current.length);
+          if (DEBUG_MODE) console.log('✅ Particles now:', particlesRef.current.length);
           
           // Update microbe state with CURRENT data
           const updatedMicrobes = currentMicrobes.map((m) => {
@@ -836,7 +846,7 @@ export const ARMicrobeCanvas = ({
 
               // Decrement microbe count!
               microbeCountRef.current = Math.max(0, microbeCountRef.current - 1);
-              console.log('🗑️ Microbe removed, count now:', microbeCountRef.current);
+              if (DEBUG_MODE) console.log('🗑️ Microbe removed, count now:', microbeCountRef.current);
 
               // Already marked for removal before map operation
               return null; // Remove microbe
@@ -845,10 +855,10 @@ export const ARMicrobeCanvas = ({
             return { ...m, health: newHealth };
           }).filter(Boolean) as Microbe[];
           
-          console.log('🔄 After hit - remaining microbes:', updatedMicrobes.length);
+          if (DEBUG_MODE) console.log('🔄 After hit - remaining microbes:', updatedMicrobes.length);
           return updatedMicrobes; // Return the updated array
         } else {
-          console.log('❌ NO HIT - Microbes:', currentMicrobes.length, 'Center:', centerX, centerY, 'Yaw:', (cameraYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (cameraPitch * 180 / Math.PI).toFixed(1), '°');
+          if (DEBUG_MODE) console.log('❌ NO HIT - Microbes:', currentMicrobes.length, 'Center:', centerX, centerY, 'Yaw:', (cameraYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (cameraPitch * 180 / Math.PI).toFixed(1), '°');
           return currentMicrobes; // No hit, no change
         }
       });

@@ -373,59 +373,61 @@ const ARMicrobeShooter = () => {
   }
 
   // Playing state - AR view
+  // Always render ARCamera to ensure ref exists, but hide when not playing
   return (
-    <ARCamera ref={cameraRef}>
-      <ARMicrobeCanvas
-        onScoreChange={handleScoreChange}
-        onLifeLost={handleLifeLost}
-        onMicrobeEliminated={handleMicrobeEliminated}
-        onComboChange={handleComboChange}
-        lives={lives}
-        isPaused={false}
-      />
+    <div className={gameState === "playing" ? "block" : "hidden"}>
+      <ARCamera ref={cameraRef}>
+        <ARMicrobeCanvas
+          onScoreChange={handleScoreChange}
+          onLifeLost={handleLifeLost}
+          onMicrobeEliminated={handleMicrobeEliminated}
+          onComboChange={handleComboChange}
+          lives={lives}
+          isPaused={false}
+        />
 
-      {/* HUD */}
-      <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start text-white pointer-events-none">
-        <div className="bg-black/60 backdrop-blur-sm rounded-lg p-3">
-          <p className="text-2xl font-bold">{score}</p>
-          <p className="text-xs">SCORE</p>
-        </div>
+        {/* HUD */}
+        <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start text-white pointer-events-none">
+          <div className="bg-black/60 backdrop-blur-sm rounded-lg p-3">
+            <p className="text-2xl font-bold">{score}</p>
+            <p className="text-xs">SCORE</p>
+          </div>
 
-        <div className="bg-black/60 backdrop-blur-sm rounded-lg p-3">
-          <div className="flex gap-1">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Heart
-                key={i}
-                className={`h-6 w-6 ${i < lives ? "fill-red-500 text-red-500" : "fill-gray-500 text-gray-500"}`}
-              />
-            ))}
+          <div className="bg-black/60 backdrop-blur-sm rounded-lg p-3">
+            <div className="flex gap-1">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Heart
+                  key={i}
+                  className={`h-6 w-6 ${i < lives ? "fill-red-500 text-red-500" : "fill-gray-500 text-gray-500"}`}
+                />
+              ))}
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="absolute top-20 left-0 right-0 flex justify-center pointer-events-none">
-        {combo > 0 && (
-          <div className="bg-primary/90 backdrop-blur-sm rounded-full px-6 py-2 text-white font-bold text-xl animate-pulse">
-            {combo}x COMBO!
-          </div>
-        )}
-      </div>
+        <div className="absolute top-20 left-0 right-0 flex justify-center pointer-events-none">
+          {combo > 0 && (
+            <div className="bg-primary/90 backdrop-blur-sm rounded-full px-6 py-2 text-white font-bold text-xl animate-pulse">
+              {combo}x COMBO!
+            </div>
+          )}
+        </div>
 
-      {/* Pause Button - Fixed z-index and simplified touch handling */}
-      <Button 
-        onClick={pauseGame}
-        onTouchEnd={(e) => {
-          e.preventDefault();
-          pauseGame();
-        }}
-        size="icon" 
-        variant="secondary" 
-        className="absolute bottom-4 right-4 z-50 rounded-full h-14 w-14 shadow-lg pointer-events-auto"
-      >
-        <Pause className="h-6 w-6" />
-      </Button>
-
-    </ARCamera>
+        {/* Pause Button - Fixed z-index and simplified touch handling */}
+        <Button 
+          onClick={pauseGame}
+          onTouchEnd={(e) => {
+            e.preventDefault();
+            pauseGame();
+          }}
+          size="icon" 
+          variant="secondary" 
+          className="absolute bottom-4 right-4 z-50 rounded-full h-14 w-14 shadow-lg pointer-events-auto"
+        >
+          <Pause className="h-6 w-6" />
+        </Button>
+      </ARCamera>
+    </div>
   );
 };
 
