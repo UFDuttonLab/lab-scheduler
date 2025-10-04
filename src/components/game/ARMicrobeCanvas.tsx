@@ -676,8 +676,8 @@ export const ARMicrobeCanvas = ({
       // If it's a drag (touch move), don't shoot
       if (lastTouch && e.changedTouches[0]) {
         const touch = e.changedTouches[0];
-        const moved = Math.abs(touch.clientX - lastTouch.x) > 10 || 
-                     Math.abs(touch.clientY - lastTouch.y) > 10;
+        const moved = Math.abs(touch.clientX - lastTouch.x) > 30 || 
+                     Math.abs(touch.clientY - lastTouch.y) > 30;
         if (moved) return;
       }
 
@@ -687,6 +687,7 @@ export const ARMicrobeCanvas = ({
 
       // Fire laser beam
       setLaserFiring(Date.now());
+      console.log('🔫 LASER FIRED! Checking', microbes.length, 'microbes for hits...');
 
       // Use sensor data based on current mode
       let cameraYaw = touchRotation.yaw;
@@ -719,8 +720,8 @@ export const ARMicrobeCanvas = ({
         const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
         
         // Apply pitch rotation (around X axis)
-        const cosPitch = Math.cos(cameraPitch);
-        const sinPitch = Math.sin(cameraPitch);
+        const cosPitch = Math.cos(-cameraPitch);
+        const sinPitch = Math.sin(-cameraPitch);
         const finalY = viewY * cosPitch - rotatedZ * sinPitch;
         const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
 
@@ -752,7 +753,7 @@ export const ARMicrobeCanvas = ({
       if (closestMicrobe) {
         hitMicrobe = true;
         const { microbe, screenX, screenY } = closestMicrobe;
-        console.log('🎯 HIT! Microbe:', microbe.type, 'Distance:', minDistance.toFixed(1), 'px from crosshair');
+        console.log('🎯 HIT! Microbe:', microbe.type, 'at screen:', screenX.toFixed(0), screenY.toFixed(0), 'Distance from crosshair:', minDistance.toFixed(1), 'px');
         
         setMicrobes((prev) => {
           return prev.map((m) => {
@@ -797,7 +798,7 @@ export const ARMicrobeCanvas = ({
           }).filter(Boolean) as Microbe[];
         });
       } else {
-        console.log('❌ NO HIT - Microbes in view:', microbes.length);
+        console.log('❌ NO HIT - Microbes:', microbes.length, 'Yaw:', (cameraYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (cameraPitch * 180 / Math.PI).toFixed(1), '°');
       }
     },
     [isPaused, gyro.alpha, gyro.beta, orientation.alpha, orientation.beta, touchRotation, lastTouch, microbes, combo, activePowerUp, sensorMode, onScoreChange, onComboChange, onMicrobeEliminated, cameraWorldPos]
