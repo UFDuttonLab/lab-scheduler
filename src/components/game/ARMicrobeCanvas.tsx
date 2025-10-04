@@ -714,8 +714,8 @@ export const ARMicrobeCanvas = ({
         const viewZ = microbe.worldZ - cameraWorldPos.z;
 
         // Rotate by camera yaw (around Y axis)
-        const cosYaw = Math.cos(cameraYaw);
-        const sinYaw = Math.sin(cameraYaw);
+        const cosYaw = Math.cos(-cameraYaw);
+        const sinYaw = Math.sin(-cameraYaw);
         const rotatedX = viewX * cosYaw - viewZ * sinYaw;
         const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
         
@@ -737,14 +737,16 @@ export const ARMicrobeCanvas = ({
         const screenX = centerX + (rotatedX / depth) * fov + wobbleOffset * 50;
         const screenY = centerY + (finalY / depth) * fov;
         
+        console.log('🔍 Microbe projection - screen:', screenX.toFixed(0), screenY.toFixed(0), 'depth:', depth.toFixed(1));
+        
         // Use depth-based scale like rendering
         const scale = 300 / depth;
         const size = microbe.size * scale;
 
         const distance = Math.hypot(screenX - centerX, screenY - centerY);
         
-        // Check if within crosshair area (40px radius)
-        if (distance < 40 && distance < minDistance) {
+        // Check if within crosshair area (60px radius)
+        if (distance < 60 && distance < minDistance) {
           minDistance = distance;
           closestMicrobe = { microbe, screenX, screenY, size };
         }
@@ -798,7 +800,7 @@ export const ARMicrobeCanvas = ({
           }).filter(Boolean) as Microbe[];
         });
       } else {
-        console.log('❌ NO HIT - Microbes:', microbes.length, 'Yaw:', (cameraYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (cameraPitch * 180 / Math.PI).toFixed(1), '°');
+        console.log('❌ NO HIT - Microbes:', microbes.length, 'Center:', centerX, centerY, 'Yaw:', (cameraYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (cameraPitch * 180 / Math.PI).toFixed(1), '°');
       }
     },
     [isPaused, gyro.alpha, gyro.beta, orientation.alpha, orientation.beta, touchRotation, lastTouch, microbes, combo, activePowerUp, sensorMode, onScoreChange, onComboChange, onMicrobeEliminated, cameraWorldPos]
