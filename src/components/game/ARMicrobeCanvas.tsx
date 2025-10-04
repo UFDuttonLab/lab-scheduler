@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useDeviceOrientation } from "@/hooks/useDeviceOrientation";
+import { useGyroscope } from "@/hooks/useGyroscope";
 import { PowerUp } from "./PowerUp";
+import { Button } from "@/components/ui/button";
+import { Info } from "lucide-react";
 
 interface Microbe {
   id: string;
@@ -54,7 +57,11 @@ export const ARMicrobeCanvas = ({
   isPaused,
 }: ARMicrobeCanvasProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { alpha, beta, gamma, permissionGranted } = useDeviceOrientation();
+  
+  // Try Gyroscope API first (best for Android Chrome)
+  const gyro = useGyroscope();
+  // Fallback to DeviceOrientation
+  const orientation = useDeviceOrientation();
   const [microbes, setMicrobes] = useState<Microbe[]>([]);
   const [powerUps, setPowerUps] = useState<PowerUpItem[]>([]);
   const [particles, setParticles] = useState<Particle[]>([]);
@@ -66,6 +73,8 @@ export const ARMicrobeCanvas = ({
   const [lastTouch, setLastTouch] = useState<{ x: number; y: number } | null>(null);
   const [useTouchMode, setUseTouchMode] = useState(false);
   const [showDebug, setShowDebug] = useState(true);
+  const [sensorMode, setSensorMode] = useState<'gyroscope' | 'orientation' | 'touch'>('touch');
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [cameraWorldPos] = useState({ x: 0, y: 0, z: 0 }); // Camera stays at origin
   const lastComboTimeRef = useRef<number>(Date.now());
   const gameStartTimeRef = useRef<number>(Date.now());
@@ -73,6 +82,7 @@ export const ARMicrobeCanvas = ({
   const lastPowerUpSpawnRef = useRef<number>(Date.now());
   const animationFrameRef = useRef<number>();
   const orientationCheckRef = useRef<number>(Date.now());
+  const lastDataCheckRef = useRef<number>(Date.now());
 
   const getMicrobeEmoji = (type: string): string => {
     switch (type) {
@@ -186,6 +196,36 @@ export const ARMicrobeCanvas = ({
     setPowerUps((prev) => [...prev, powerUp]);
   }, []);
 
+  // Determine which sensor mode to use with smart fallback
+  useEffect(() => {
+    const now = Date.now();
+    
+    // Check Gyroscope API first (best for Android)
+    if (gyro.permissionGranted && gyro.sensorAvailable && gyro.alpha !== null) {
+      setSensorMode('gyroscope');
+      setUseTouchMode(false);
+      console.log('✅ Using GYROSCOPE API mode');
+      lastDataCheckRef.current = now;
+      return;
+    }
+    
+    // Fallback to DeviceOrientation if data is flowing
+    if (orientation.permissionGranted && orientation.alpha !== null) {
+      setSensorMode('orientation');
+      setUseTouchMode(false);
+      console.log('✅ Using DEVICE ORIENTATION mode');
+      lastDataCheckRef.current = now;
+      return;
+    }
+    
+    // If no sensor data after 2 seconds, switch to touch mode
+    if (now - lastDataCheckRef.current > 2000) {
+      setSensorMode('touch');
+      setUseTouchMode(true);
+      console.log('⚠️ No sensor data available, using TOUCH mode');
+    }
+  }, [gyro.permissionGranted, gyro.sensorAvailable, gyro.alpha, orientation.permissionGranted, orientation.alpha]);
+
   // Spawn logic - faster in touch mode
   useEffect(() => {
     if (isPaused) return;
@@ -193,16 +233,20 @@ export const ARMicrobeCanvas = ({
     const spawnInterval = useTouchMode ? 1500 : 2000; // Faster spawn in touch mode
     const interval = setInterval(() => {
       if (microbes.length < 10) {
-        const useOrientation = permissionGranted && alpha !== null && beta !== null && !useTouchMode;
-        const cameraYaw = useOrientation 
-          ? ((alpha || 0) * Math.PI) / 180
-          : touchRotation.yaw;
+        let cameraYaw = touchRotation.yaw;
+        
+        if (sensorMode === 'gyroscope' && gyro.alpha !== null) {
+          cameraYaw = (gyro.alpha * Math.PI) / 180;
+        } else if (sensorMode === 'orientation' && orientation.alpha !== null) {
+          cameraYaw = (orientation.alpha * Math.PI) / 180;
+        }
+        
         spawnMicrobe(cameraYaw);
       }
     }, spawnInterval);
 
     return () => clearInterval(interval);
-  }, [isPaused, microbes.length, spawnMicrobe, alpha, beta, touchRotation, permissionGranted, useTouchMode]);
+  }, [isPaused, microbes.length, spawnMicrobe, orientation.alpha, gyro.alpha, touchRotation, sensorMode, useTouchMode]);
 
   // Power-up spawn logic
   useEffect(() => {
@@ -234,19 +278,6 @@ export const ARMicrobeCanvas = ({
     return () => clearInterval(comboResetInterval);
   }, [combo, onComboChange]);
 
-  // Runtime check: if orientation permission granted but no data after 2 seconds, switch to touch
-  useEffect(() => {
-    if (permissionGranted === true && !useTouchMode) {
-      const checkTimeout = setTimeout(() => {
-        if (alpha === null || beta === null) {
-          console.warn("⚠️ Orientation permission granted but no data received - switching to touch mode");
-          setUseTouchMode(true);
-        }
-      }, 2000);
-
-      return () => clearTimeout(checkTimeout);
-    }
-  }, [permissionGranted, alpha, beta, useTouchMode]);
 
   // Game loop
   useEffect(() => {
@@ -269,14 +300,27 @@ export const ARMicrobeCanvas = ({
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
 
-      // Determine control mode: orientation works if permission granted AND data is available AND not forced touch mode
-      const useOrientation = (permissionGranted === true) && (alpha !== null && beta !== null) && !useTouchMode;
-      const cameraYaw = useOrientation 
-        ? ((alpha || 0) * Math.PI) / 180 
-        : touchRotation.yaw; // Fallback to touch rotation
-      const cameraPitch = useOrientation 
-        ? ((beta ? beta - 90 : 0) * Math.PI) / 180 
-        : touchRotation.pitch;
+      // Camera control with smart sensor selection
+      let cameraYaw = 0;
+      let cameraPitch = 0;
+      let activeSensorData: any = null;
+
+      if (sensorMode === 'gyroscope' && gyro.alpha !== null) {
+        // Use Gyroscope API (best for Android)
+        cameraYaw = (gyro.alpha * Math.PI) / 180;
+        cameraPitch = Math.max(-45, Math.min(45, ((gyro.beta || 0) - 90) * Math.PI / 180));
+        activeSensorData = { type: 'Gyroscope', alpha: gyro.alpha, beta: gyro.beta, gamma: gyro.gamma };
+      } else if (sensorMode === 'orientation' && orientation.alpha !== null) {
+        // Use DeviceOrientation
+        cameraYaw = (orientation.alpha * Math.PI) / 180;
+        cameraPitch = Math.max(-45, Math.min(45, ((orientation.beta || 0) - 90) * Math.PI / 180));
+        activeSensorData = { type: 'DeviceOrientation', alpha: orientation.alpha, beta: orientation.beta, gamma: orientation.gamma };
+      } else {
+        // Fallback to touch mode
+        cameraYaw = touchRotation.yaw;
+        cameraPitch = touchRotation.pitch;
+        activeSensorData = { type: 'Touch', yaw: touchRotation.yaw, pitch: touchRotation.pitch };
+      }
 
       // Debug logging every second
       if (showDebug && now % 1000 < 16) {
@@ -293,13 +337,7 @@ export const ARMicrobeCanvas = ({
         }).length;
         
         console.log('📊 AR Debug:', {
-          mode: useOrientation ? 'Orientation' : 'Touch',
-          orientation: {
-            alpha: alpha?.toFixed(1) || 'null',
-            beta: beta?.toFixed(1) || 'null',
-            gamma: gamma?.toFixed(1) || 'null',
-            permissionGranted
-          },
+          sensorMode: activeSensorData?.type || 'None',
           camera: {
             yaw: (cameraYaw * 180 / Math.PI).toFixed(1) + '°',
             pitch: (cameraPitch * 180 / Math.PI).toFixed(1) + '°'
@@ -504,22 +542,24 @@ export const ARMicrobeCanvas = ({
 
       // Enhanced debug overlay
       if (showDebug) {
-        const useOrientationDisplay = alpha !== null && beta !== null && !useTouchMode;
-        ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
-        ctx.fillRect(10, canvas.height - 140, 280, 130);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+        ctx.fillRect(10, 10, 320, 180);
+        ctx.fillStyle = "#00ff00";
+        ctx.font = "bold 16px monospace";
+        ctx.fillText(`🎮 Sensor: ${activeSensorData?.type || 'None'}`, 20, 30);
         
-        // Mode indicator
-        ctx.fillStyle = useOrientationDisplay ? "#00ff00" : "#ffaa00";
         ctx.font = "14px monospace";
-        ctx.fillText(useOrientationDisplay ? "📱 Orientation Mode" : "👆 Touch Mode", 20, canvas.height - 120);
+        ctx.fillStyle = "white";
+        ctx.fillText(`Camera: yaw=${(cameraYaw * 180 / Math.PI).toFixed(1)}° pitch=${(cameraPitch * 180 / Math.PI).toFixed(1)}°`, 20, 55);
         
-        // Camera info
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "12px monospace";
-        ctx.fillText(`Yaw: ${(cameraYaw * 180 / Math.PI).toFixed(0)}°`, 20, canvas.height - 100);
-        ctx.fillText(`Pitch: ${(cameraPitch * 180 / Math.PI).toFixed(0)}°`, 20, canvas.height - 82);
+        if (activeSensorData) {
+          if (activeSensorData.type === 'Touch') {
+            ctx.fillText(`Touch Δ: ${activeSensorData.yaw.toFixed(1)}°, ${activeSensorData.pitch.toFixed(1)}°`, 20, 75);
+          } else {
+            ctx.fillText(`α=${activeSensorData.alpha?.toFixed(1) ?? 'null'} β=${activeSensorData.beta?.toFixed(1) ?? 'null'} γ=${activeSensorData.gamma?.toFixed(1) ?? 'null'}`, 20, 75);
+          }
+        }
         
-        // Microbe count
         const visibleCount = microbes.filter(m => {
           const viewZ = m.worldZ - cameraWorldPos.z;
           const viewX = m.worldX - cameraWorldPos.x;
@@ -528,16 +568,11 @@ export const ARMicrobeCanvas = ({
           const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
           return rotatedZ < 0;
         }).length;
-        ctx.fillText(`Microbes: ${microbes.length} (${visibleCount} visible)`, 20, canvas.height - 64);
         
-        // Sensor status
-        if (!useOrientationDisplay) {
-          ctx.fillStyle = "#ffaa00";
-          ctx.font = "10px monospace";
-          ctx.fillText("Drag to look around", 20, canvas.height - 46);
-          ctx.fillText(`Permission: ${permissionGranted ? 'OK' : 'Denied'}`, 20, canvas.height - 32);
-          ctx.fillText(`Alpha: ${alpha?.toFixed(0) || 'null'}`, 20, canvas.height - 18);
-        }
+        ctx.fillText(`Microbes: ${microbes.length} (${visibleCount} visible)`, 20, 95);
+        ctx.fillText(`Gyro: ${gyro.sensorAvailable ? '✅' : '❌'} | Orient: ${orientation.permissionGranted ? '✅' : '❌'}`, 20, 115);
+        ctx.fillText(`Score: ${score} | Combo: ${combo}x`, 20, 135);
+        ctx.fillText(`Lives: ${lives}`, 20, 155);
       }
 
       animationFrameRef.current = requestAnimationFrame(render);
@@ -550,12 +585,12 @@ export const ARMicrobeCanvas = ({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isPaused, alpha, beta, gamma, touchRotation, microbes, onLifeLost, permissionGranted, useTouchMode]);
+  }, [microbes, powerUps, particles, lives, isPaused, combo, activePowerUp, useTouchMode, touchRotation, sensorMode, gyro, orientation, showDebug, score, onLifeLost, onScoreChange, onComboChange, onMicrobeEliminated]);
 
   // Handle touch drag for camera control (primary when orientation unavailable)
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
     e.preventDefault();
-    const shouldUseTouchControl = permissionGranted === false || alpha === null || beta === null || useTouchMode;
+    const shouldUseTouchControl = sensorMode === 'touch' || useTouchMode;
     if (!shouldUseTouchControl) return;
     
     const touch = e.touches[0];
@@ -573,7 +608,7 @@ export const ARMicrobeCanvas = ({
     }));
 
     setLastTouch({ x: touch.clientX, y: touch.clientY });
-  }, [permissionGranted, alpha, beta, useTouchMode, lastTouch]);
+  }, [sensorMode, useTouchMode, lastTouch]);
 
   const handleTouchEnd = useCallback(() => {
     setLastTouch(null);
@@ -598,10 +633,17 @@ export const ARMicrobeCanvas = ({
       // Fire laser beam
       setLaserFiring(Date.now());
 
-      // Use device orientation OR touch fallback (same logic as render loop)
-      const useOrientation = (permissionGranted === true) && (alpha !== null && beta !== null) && !useTouchMode;
-      const cameraYaw = useOrientation ? ((alpha || 0) * Math.PI) / 180 : touchRotation.yaw;
-      const cameraPitch = useOrientation ? ((beta ? beta - 90 : 0) * Math.PI) / 180 : touchRotation.pitch;
+      // Use sensor data based on current mode
+      let cameraYaw = touchRotation.yaw;
+      let cameraPitch = touchRotation.pitch;
+      
+      if (sensorMode === 'gyroscope' && gyro.alpha !== null) {
+        cameraYaw = (gyro.alpha * Math.PI) / 180;
+        cameraPitch = Math.max(-45, Math.min(45, ((gyro.beta || 0) - 90) * Math.PI / 180));
+      } else if (sensorMode === 'orientation' && orientation.alpha !== null) {
+        cameraYaw = (orientation.alpha * Math.PI) / 180;
+        cameraPitch = Math.max(-45, Math.min(45, ((orientation.beta || 0) - 90) * Math.PI / 180));
+      }
 
       // Check microbe collision at crosshair (center of screen)
       let hitMicrobe = false;
@@ -696,7 +738,7 @@ export const ARMicrobeCanvas = ({
         });
       }
     },
-    [isPaused, alpha, beta, touchRotation, lastTouch, microbes, combo, activePowerUp, permissionGranted, useTouchMode, onScoreChange, onComboChange, onMicrobeEliminated]
+    [isPaused, gyro.alpha, gyro.beta, orientation.alpha, orientation.beta, touchRotation, lastTouch, microbes, combo, activePowerUp, sensorMode, onScoreChange, onComboChange, onMicrobeEliminated, cameraWorldPos]
   );
 
   // Handle active power-up expiration
@@ -741,6 +783,92 @@ export const ARMicrobeCanvas = ({
         className="absolute inset-0 w-full h-full touch-none"
         style={{ width: "100%", height: "100%" }}
       />
+      
+      {/* Sensor diagnostics panel */}
+      {showDiagnostics && (
+        <div className="absolute top-4 right-4 bg-black/90 text-white p-4 rounded-lg text-sm max-w-sm z-50">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold">📱 Sensor Diagnostics</h3>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowDiagnostics(false)}
+              className="h-6 w-6 p-0"
+            >
+              ✕
+            </Button>
+          </div>
+          
+          <div className="space-y-2 font-mono text-xs">
+            <div className="border-b border-white/20 pb-2">
+              <div className="font-bold text-green-400">Active: {sensorMode.toUpperCase()}</div>
+            </div>
+            
+            <div>
+              <div className="font-semibold">Gyroscope API:</div>
+              <div>Available: {gyro.sensorAvailable ? '✅ Yes' : '❌ No'}</div>
+              <div>Permission: {gyro.permissionGranted === true ? '✅ Granted' : gyro.permissionGranted === false ? '❌ Denied' : '⏳ Unknown'}</div>
+              <div>Data: α={gyro.alpha?.toFixed(1) ?? 'null'} β={gyro.beta?.toFixed(1) ?? 'null'} γ={gyro.gamma?.toFixed(1) ?? 'null'}</div>
+            </div>
+            
+            <div>
+              <div className="font-semibold">DeviceOrientation:</div>
+              <div>Permission: {orientation.permissionGranted === true ? '✅ Granted' : orientation.permissionGranted === false ? '❌ Denied' : '⏳ Unknown'}</div>
+              <div>Data: α={orientation.alpha?.toFixed(1) ?? 'null'} β={orientation.beta?.toFixed(1) ?? 'null'} γ={orientation.gamma?.toFixed(1) ?? 'null'}</div>
+            </div>
+            
+            <div>
+              <div className="font-semibold">Touch Controls:</div>
+              <div>Yaw: {(touchRotation.yaw * 180 / Math.PI).toFixed(1)}°</div>
+              <div>Pitch: {(touchRotation.pitch * 180 / Math.PI).toFixed(1)}°</div>
+            </div>
+            
+            <div className="border-t border-white/20 pt-2">
+              <div>Browser: {navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Other'}</div>
+              <div>HTTPS: {window.isSecureContext ? '✅' : '❌'}</div>
+              <div>Protocol: {window.location.protocol}</div>
+            </div>
+            
+            <Button
+              size="sm"
+              onClick={async () => {
+                await gyro.requestPermission();
+                await orientation.requestPermission();
+              }}
+              className="w-full mt-2"
+            >
+              🔄 Request Permissions
+            </Button>
+          </div>
+        </div>
+      )}
+      
+      {/* Control buttons */}
+      <div className="absolute bottom-24 left-4 flex flex-col gap-2 z-40">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setShowDiagnostics(!showDiagnostics)}
+          className="opacity-70 hover:opacity-100"
+        >
+          <Info className="w-4 h-4 mr-1" />
+          Sensors
+        </Button>
+        
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => {
+            const newTouchMode = !useTouchMode;
+            setUseTouchMode(newTouchMode);
+            setSensorMode(newTouchMode ? 'touch' : (gyro.sensorAvailable ? 'gyroscope' : 'orientation'));
+          }}
+          className="opacity-70 hover:opacity-100"
+        >
+          {sensorMode === 'touch' ? '📱 Touch' : sensorMode === 'gyroscope' ? '🎯 Gyro' : '🔄 Orient'}
+        </Button>
+      </div>
+      
       {activePowerUp && <PowerUp type={activePowerUp.type} endTime={activePowerUp.endTime} />}
     </>
   );

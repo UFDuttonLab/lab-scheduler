@@ -17,8 +17,19 @@ export const useDeviceOrientation = () => {
   const requestPermission = useCallback(async () => {
     // Check if DeviceOrientationEvent is available
     if (typeof DeviceOrientationEvent === "undefined") {
+      console.log('❌ DeviceOrientationEvent not available');
       setPermissionGranted(false);
       return false;
+    }
+
+    // Check for feature policy
+    if ('permissions' in navigator) {
+      try {
+        const result = await navigator.permissions.query({ name: 'accelerometer' as PermissionName });
+        console.log('🔐 Accelerometer permission:', result.state);
+      } catch (e) {
+        console.log('⚠️ Could not query sensor permissions');
+      }
     }
 
     // For iOS 13+ devices, need explicit permission
@@ -28,6 +39,7 @@ export const useDeviceOrientation = () => {
       try {
         const permission = await (DeviceOrientationEvent as any).requestPermission();
         const granted = permission === "granted";
+        console.log('🔐 iOS DeviceOrientation permission:', granted);
         setPermissionGranted(granted);
         return granted;
       } catch (error) {
@@ -36,7 +48,8 @@ export const useDeviceOrientation = () => {
         return false;
       }
     } else {
-      // For other devices, permission is automatically granted
+      // For other devices, assume permission granted but verify data flow
+      console.log('✅ DeviceOrientation permission auto-granted (Android/Desktop)');
       setPermissionGranted(true);
       return true;
     }
@@ -50,8 +63,12 @@ export const useDeviceOrientation = () => {
 
     const handleOrientation = (event: DeviceOrientationEvent) => {
       const now = Date.now();
+      const wasFirstEvent = !eventReceived;
       eventReceived = true;
       lastEventTime = now;
+      
+      // Check if we're getting actual data (not null)
+      const hasData = event.alpha !== null || event.beta !== null || event.gamma !== null;
       
       setOrientation({
         alpha: event.alpha,
@@ -60,12 +77,18 @@ export const useDeviceOrientation = () => {
       });
       
       // Log first event
-      if (!eventReceived) {
+      if (wasFirstEvent) {
         console.log('✅ Device orientation events working:', {
           alpha: event.alpha,
           beta: event.beta,
-          gamma: event.gamma
+          gamma: event.gamma,
+          absolute: event.absolute,
+          hasData
         });
+        
+        if (!hasData) {
+          console.warn('⚠️ DeviceOrientation events firing but all values are NULL');
+        }
       }
     };
 
