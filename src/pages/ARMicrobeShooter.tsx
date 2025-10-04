@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { ARCamera } from "@/components/game/ARCamera";
@@ -129,7 +129,7 @@ const ARMicrobeShooter = () => {
     setGameState("playing");
   };
 
-  const endGame = async () => {
+  const endGame = useCallback(async () => {
     setGameState("gameover");
 
     if (!user) return;
@@ -167,9 +167,9 @@ const ARMicrobeShooter = () => {
       console.error("Failed to save score:", error);
       toast.error("Failed to save score");
     }
-  };
+  }, [user, score, microbesEliminated, totalTaps, combo]);
 
-  const handleLifeLost = () => {
+  const handleLifeLost = useCallback(() => {
     setLives((prev) => {
       const newLives = prev - 1;
       if (newLives <= 0) {
@@ -177,12 +177,12 @@ const ARMicrobeShooter = () => {
       }
       return newLives;
     });
-  };
+  }, [endGame]);
 
-  const handleMicrobeEliminated = () => {
+  const handleMicrobeEliminated = useCallback(() => {
     setMicrobesEliminated((prev) => prev + 1);
     setTotalTaps((prev) => prev + 1);
-  };
+  }, []);
 
   const handleTap = () => {
     setTotalTaps((prev) => prev + 1);
