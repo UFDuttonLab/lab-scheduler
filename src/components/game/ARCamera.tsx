@@ -69,11 +69,7 @@ export const ARCamera = ({ onStreamReady, children }: ARCameraProps) => {
   }
 
   return (
-    <div 
-      className="relative w-full h-screen overflow-hidden bg-black"
-      onTouchStart={(e) => console.log('📱 ARCamera wrapper touch:', e.touches[0].clientX, e.touches[0].clientY)}
-      onClick={(e) => console.log('📱 ARCamera wrapper click:', e.clientX, e.clientY)}
-    >
+    <div className="relative w-full h-screen overflow-hidden bg-black">
       {/* FIX #4: Video feed with lower z-index to not block canvas touches */}
       <video
         ref={videoRef}

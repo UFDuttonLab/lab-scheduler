@@ -906,19 +906,13 @@ export const ARMicrobeCanvas = ({
 
   return (
     <>
-      {/* TOUCH FIX: Canvas with HIGHEST z-index (z-50), defensive CSS, and debug logging */}
+      {/* Canvas with proper z-index and touch handling */}
       <canvas
         ref={canvasRef}
-        onTouchStart={(e) => {
-          console.log('🖐️ CANVAS TOUCH DETECTED at:', e.touches[0].clientX, e.touches[0].clientY);
-          handleTap(e);
-        }}
-        onClick={(e) => {
-          console.log('🖱️ CANVAS CLICK DETECTED at:', e.clientX, e.clientY);
-          handleTap(e);
-        }}
-        className="absolute inset-0 z-50 pointer-events-auto cursor-pointer select-none"
-        style={{ touchAction: "none", userSelect: "none" }}
+        onTouchStart={handleTap}
+        onClick={handleTap}
+        className="absolute inset-0 z-40 pointer-events-auto cursor-crosshair"
+        style={{ touchAction: "none" }}
       />
 
       {/* HUD - moved to bottom-left to avoid overlap with score/lives */}
