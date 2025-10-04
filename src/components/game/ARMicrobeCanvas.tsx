@@ -264,8 +264,12 @@ export const ARMicrobeCanvas = ({
               setTimeout(() => setMicrobes((m) => [...m, clone]), 0);
             }
 
-            // Calculate relative angle to camera
-            const relativeAngle = microbe.angle - cameraYaw;
+            // Calculate relative angle to camera with proper wrapping
+            let relativeAngle = microbe.angle - cameraYaw;
+            // Normalize to -PI to PI range
+            while (relativeAngle > Math.PI) relativeAngle -= Math.PI * 2;
+            while (relativeAngle < -Math.PI) relativeAngle += Math.PI * 2;
+            
             const relativeElevation = microbe.elevation - cameraPitch;
 
             // Add wobble for realism
