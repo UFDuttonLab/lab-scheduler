@@ -789,7 +789,7 @@ export const ARMicrobeCanvas = ({
           console.log('✅ Particles now:', particlesRef.current.length);
           
           // Update microbe state with CURRENT data
-          return currentMicrobes.map((m) => {
+          const updatedMicrobes = currentMicrobes.map((m) => {
             if (m.id !== microbe.id) return m;
 
             if (newHealth <= 0) {
@@ -820,11 +820,13 @@ export const ARMicrobeCanvas = ({
 
             return { ...m, health: newHealth };
           }).filter(Boolean) as Microbe[];
+          
+          console.log('🔄 After hit - remaining microbes:', updatedMicrobes.length);
+          return updatedMicrobes; // Return the updated array
         } else {
           console.log('❌ NO HIT - Microbes:', currentMicrobes.length, 'Center:', centerX, centerY, 'Yaw:', (cameraYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (cameraPitch * 180 / Math.PI).toFixed(1), '°');
+          return currentMicrobes; // No hit, no change
         }
-        
-        return currentMicrobes; // No hit, no change
       });
     },
     [isPaused, gyro.alpha, gyro.beta, gyro.gamma, orientation.alpha, orientation.beta, orientation.gamma, combo, activePowerUp, sensorMode, onScoreChange, onComboChange, onMicrobeEliminated, cameraWorldPos]
