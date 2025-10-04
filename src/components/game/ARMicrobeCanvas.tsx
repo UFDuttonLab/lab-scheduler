@@ -116,39 +116,39 @@ export const ARMicrobeCanvas = ({
     let type: Microbe["type"] = "basic";
     let health = 1;
     let points = 10;
-    let speed = 0.5;
+    let speed = 0.8; // Increased from 0.5
     let size = 40;
 
     if (gameTime > 90 && rand < 5) {
       type = "boss";
       health = 10;
       points = 250;
-      speed = 0.3;
+      speed = 0.5; // Increased from 0.3
       size = 80;
     } else if (rand < 5) {
       type = "golden";
       health = 1;
       points = 100;
-      speed = 0.8;
+      speed = 1.2; // Increased from 0.8
       size = 35;
     } else if (gameTime > 60 && rand < 15) {
       type = "tank";
       health = 3;
       points = 50;
-      speed = 0.2;
+      speed = 0.4; // Increased from 0.2
       size = 60;
     } else if (gameTime > 30 && rand < 30) {
       type = "fast";
       health = 1;
       points = 25;
-      speed = 1.2;
+      speed = 1.8; // Increased from 1.2
       size = 30;
     }
 
     // Generate spawn position in forward-facing cone relative to current camera direction
     const relativeAngle = (Math.random() - 0.5) * Math.PI * 0.8; // -72° to +72°
     const elevation = (Math.random() - 0.5) * Math.PI * 0.5; // -45° to +45°
-    const distance = 3 + Math.random() * 2;
+    const distance = 15 + Math.random() * 10; // Spawn 15-25 units away
 
     // Convert to world coordinates (spawn in front of where camera is currently pointing)
     const worldAngle = cameraYaw + relativeAngle;
@@ -449,7 +449,7 @@ export const ARMicrobeCanvas = ({
 
             // Project to screen with perspective using absolute depth
             const depth = Math.abs(finalZ);
-            const fov = 800;
+            const fov = 1200; // Narrower FOV for better sizing
             const screenX = centerX + (rotatedX / depth) * fov + wobbleOffset * 50;
             const screenY = centerY + (finalY / depth) * fov;
             
@@ -459,7 +459,11 @@ export const ARMicrobeCanvas = ({
 
             // Only render microbes in front of camera
             if (finalZ >= 0) {
-              console.log('⚠️ Microbe behind camera, skipping render');
+              return { ...microbe, worldX: newWorldX, worldY: newWorldY, worldZ: newWorldZ, wobble: newWobble, opacity };
+            }
+
+            // Skip rendering if too close (prevents giant microbes)
+            if (depth < 8) {
               return { ...microbe, worldX: newWorldX, worldY: newWorldY, worldZ: newWorldZ, wobble: newWobble, opacity };
             }
 
