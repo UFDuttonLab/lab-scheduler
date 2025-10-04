@@ -101,6 +101,7 @@ const Schedule = () => {
       
       // Accumulate shake time
       if (lastFrameTimeRef.current === null) {
+        console.log('Starting shake timer');
         lastFrameTimeRef.current = Date.now();
       } else {
         const now = Date.now();
@@ -109,6 +110,7 @@ const Schedule = () => {
         lastFrameTimeRef.current = now;
         
         const progress = Math.min((totalShakeTimeRef.current / 5000) * 100, 100);
+        console.log('Shake detected! Progress:', Math.round(progress), '% | Total time:', totalShakeTimeRef.current, 'ms');
         setShakeProgress(progress);
         
         if (progress >= 100) {
@@ -120,7 +122,7 @@ const Schedule = () => {
       // Paused - reset frame timer but keep total time and dialog open
       lastFrameTimeRef.current = null;
     }
-  }, [isShaking, navigate, isShakeDetectionActive, isARUnlocked, showUnlockDialog]);
+  }, [isShaking, navigate, isShakeDetectionActive, isARUnlocked]);
 
   // Pre-select equipment if passed via URL, but don't auto-open dialog
   useEffect(() => {
