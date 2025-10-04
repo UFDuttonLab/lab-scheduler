@@ -909,7 +909,7 @@ export const ARMicrobeCanvas = ({
       <canvas
         ref={canvasRef}
         onTouchEnd={handleTap}
-        className="absolute inset-0 w-full h-full z-10"
+        className="absolute inset-0 w-full h-full"
         style={{ width: "100%", height: "100%" }}
       />
 
