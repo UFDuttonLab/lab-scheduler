@@ -1,19 +1,27 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
 import { toast } from "sonner";
 
 interface ARCameraProps {
   onStreamReady?: (stream: MediaStream) => void;
+  onError?: (error: string) => void;
   children?: React.ReactNode;
 }
 
-export const ARCamera = ({ onStreamReady, children }: ARCameraProps) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [error, setError] = useState<string | null>(null);
+export interface ARCameraHandle {
+  startCamera: () => Promise<void>;
+  stopCamera: () => void;
+}
 
-  useEffect(() => {
-    const initCamera = async () => {
+export const ARCamera = forwardRef<ARCameraHandle, ARCameraProps>(
+  ({ onStreamReady, onError, children }, ref) => {
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const [stream, setStream] = useState<MediaStream | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [isInitialized, setIsInitialized] = useState(false);
+
+    const startCamera = async () => {
       try {
+        setError(null);
         // Request rear-facing camera
         const mediaStream = await navigator.mediaDevices.getUserMedia({
           video: {
@@ -25,6 +33,7 @@ export const ARCamera = ({ onStreamReady, children }: ARCameraProps) => {
         });
 
         setStream(mediaStream);
+        setIsInitialized(true);
 
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
@@ -41,46 +50,47 @@ export const ARCamera = ({ onStreamReady, children }: ARCameraProps) => {
           : "Failed to access camera. Please check your device settings.";
         setError(errorMessage);
         toast.error(errorMessage);
+        if (onError) {
+          onError(errorMessage);
+        }
+        throw err;
       }
     };
 
-    initCamera();
-
-    return () => {
-      // Clean up camera stream
+    const stopCamera = () => {
       if (stream) {
         stream.getTracks().forEach((track) => track.stop());
+        setStream(null);
+        setIsInitialized(false);
       }
     };
-  }, []);
 
-  if (error) {
+    useImperativeHandle(ref, () => ({
+      startCamera,
+      stopCamera,
+    }));
+
+    useEffect(() => {
+      return () => {
+        // Clean up camera stream on unmount
+        stopCamera();
+      };
+    }, [stream]);
+
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background text-foreground p-6">
-        <div className="text-center max-w-md">
-          <h2 className="text-2xl font-bold mb-4">Camera Access Required</h2>
-          <p className="text-muted-foreground mb-6">{error}</p>
-          <p className="text-sm text-muted-foreground">
-            This AR game requires access to your device camera to work properly.
-          </p>
-        </div>
+      <div className="relative w-full h-screen overflow-hidden bg-black">
+        {/* FIX #4: Video feed with lower z-index to not block canvas touches */}
+        <video
+          ref={videoRef}
+          className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0"
+          autoPlay
+          playsInline
+          muted
+        />
+        
+        {/* Overlay content (game canvas, UI, etc.) */}
+        {children}
       </div>
     );
   }
-
-  return (
-    <div className="relative w-full h-screen overflow-hidden bg-black">
-      {/* FIX #4: Video feed with lower z-index to not block canvas touches */}
-      <video
-        ref={videoRef}
-        className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0"
-        autoPlay
-        playsInline
-        muted
-      />
-      
-      {/* Overlay content (game canvas, UI, etc.) */}
-      {children}
-    </div>
-  );
-};
+);

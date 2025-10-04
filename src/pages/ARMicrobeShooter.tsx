@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { ARCamera } from "@/components/game/ARCamera";
+import { ARCamera, ARCameraHandle } from "@/components/game/ARCamera";
 import { ARMicrobeCanvas } from "@/components/game/ARMicrobeCanvas";
 import { Leaderboard } from "@/components/game/Leaderboard";
 import { Button } from "@/components/ui/button";
@@ -14,12 +14,13 @@ import { useDeviceOrientation } from "@/hooks/useDeviceOrientation";
 import { useGyroscope } from "@/hooks/useGyroscope";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-type GameState = "menu" | "playing" | "paused" | "gameover";
+type GameState = "menu" | "requesting-permissions" | "playing" | "paused" | "gameover";
 
 const ARMicrobeShooter = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isMobile = useIsMobile();
+  const cameraRef = useRef<ARCameraHandle>(null);
   const [gameState, setGameState] = useState<GameState>("menu");
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
@@ -27,50 +28,56 @@ const ARMicrobeShooter = () => {
   const [microbesEliminated, setMicrobesEliminated] = useState(0);
   const [totalTaps, setTotalTaps] = useState(0);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [permissionsGranted, setPermissionsGranted] = useState(false);
-  const [permissionStatus, setPermissionStatus] = useState<string>("");
-  const [requestingPermissions, setRequestingPermissions] = useState(false); // FIX #3: Prevent double requests
+  const [permissionError, setPermissionError] = useState<string | null>(null);
   const gameStartTimeRef = useRef<number>(0);
   const { requestPermission: requestMotionPermission } = useDeviceMotion();
   const { requestPermission: requestOrientationPermission } = useDeviceOrientation();
   const gyro = useGyroscope();
 
-  const handleRequestPermissions = async (): Promise<boolean> => {
-    // Prevent double requests
-    if (requestingPermissions) {
-      console.log('⏳ Already requesting permissions...');
-      return false;
-    }
+  const startGame = useCallback(async () => {
+    console.log("🎮 Starting AR Microbe Shooter - Requesting Permissions");
+    setGameState("requesting-permissions");
+    setPermissionError(null);
 
-    setRequestingPermissions(true);
-    setPermissionStatus("Requesting permissions...");
-    console.log("🔐 Requesting all permissions...");
-    
     try {
+      // Step 1: Request camera permission
+      if (!cameraRef.current) {
+        throw new Error("Camera component not ready");
+      }
+      await cameraRef.current.startCamera();
+      console.log("✅ Camera permission granted");
+
+      // Step 2: Request motion/orientation permissions
       const motionGranted = await requestMotionPermission();
       const orientationGranted = await requestOrientationPermission();
       const gyroGranted = await gyro.requestPermission();
-
-      console.log('🔐 Permission results:', { motionGranted, orientationGranted, gyroGranted });
-
-      if (motionGranted || orientationGranted || gyroGranted) {
-        setPermissionsGranted(true);
-        setPermissionStatus("✅ Permissions granted! Stabilizing sensors...");
-        
-        // FIX #3: Wait for sensors to stabilize (500ms)
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        toast.success("Sensors ready!");
-        return true;
+      
+      if (!motionGranted && !orientationGranted && !gyroGranted) {
+        toast.warning("Motion sensors not available - using touch controls only");
       } else {
-        setPermissionStatus("⚠️ Touch controls will be used instead.");
-        toast.warning("No sensor permissions granted - using touch controls");
-        return false;
+        console.log("✅ Sensor permissions granted");
+        // Wait for sensors to stabilize
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
-    } finally {
-      setRequestingPermissions(false);
+
+      console.log("✅ All permissions granted - Starting game");
+      
+      // Initialize game state
+      setScore(0);
+      setLives(3);
+      setCombo(0);
+      setMicrobesEliminated(0);
+      setTotalTaps(0);
+      gameStartTimeRef.current = Date.now();
+      setGameState("playing");
+    } catch (err: any) {
+      console.error("❌ Permission error:", err);
+      const errorMsg = err.message || "Failed to get required permissions";
+      setPermissionError(errorMsg);
+      setGameState("menu");
+      toast.error("Permission Denied", { description: errorMsg });
     }
-  };
+  }, [requestMotionPermission, requestOrientationPermission, gyro]);
 
   // Check unlock status and device capability
   useEffect(() => {
@@ -129,22 +136,6 @@ const ARMicrobeShooter = () => {
     return () => clearTimeout(checkUnlock);
   }, [navigate, isMobile]);
 
-  const startGame = async () => {
-    if (!permissionsGranted) {
-      toast.error("Please grant permissions first");
-      return;
-    }
-    
-    console.log("✅ Starting game with permissions already granted");
-    // Initialize game state
-    setScore(0);
-    setLives(3);
-    setCombo(0);
-    setMicrobesEliminated(0);
-    setTotalTaps(0);
-    gameStartTimeRef.current = Date.now();
-    setGameState("playing");
-  };
 
   const pauseGame = () => {
     setGameState("paused");
@@ -254,27 +245,22 @@ const ARMicrobeShooter = () => {
               <li>Camera access for AR view</li>
               <li>Device orientation for aiming (or use touch controls)</li>
             </ul>
-            {permissionStatus && (
-              <p className="mt-2 font-medium text-center">{permissionStatus}</p>
-            )}
           </div>
+
+          {permissionError && (
+            <div className="bg-destructive/10 border border-destructive rounded-lg p-4">
+              <p className="text-sm text-destructive font-medium">{permissionError}</p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Please allow camera and sensor permissions to play.
+              </p>
+            </div>
+          )}
           
           <div className="space-y-3">
-            {!permissionsGranted ? (
-              <Button 
-                onClick={handleRequestPermissions} 
-                size="lg" 
-                className="w-full"
-                disabled={requestingPermissions}
-              >
-                {requestingPermissions ? "⏳ Requesting..." : "🔐 Grant Permissions"}
-              </Button>
-            ) : (
-              <Button onClick={startGame} size="lg" className="w-full">
-                <Play className="mr-2 h-5 w-5" />
-                Start Game
-              </Button>
-            )}
+            <Button onClick={startGame} size="lg" className="w-full">
+              <Play className="mr-2 h-5 w-5" />
+              Start Game
+            </Button>
             <Button onClick={() => setShowLeaderboard(!showLeaderboard)} variant="outline" className="w-full">
               <Trophy className="mr-2 h-4 w-4" />
               {showLeaderboard ? "Hide Leaderboard" : "View Leaderboard"}
@@ -303,6 +289,18 @@ const ARMicrobeShooter = () => {
             </ul>
           </div>
         </Card>
+      </div>
+    );
+  }
+
+  if (gameState === "requesting-permissions") {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto"></div>
+          <p className="text-lg font-medium">Requesting permissions...</p>
+          <p className="text-sm text-muted-foreground">Please allow camera and sensor access</p>
+        </div>
       </div>
     );
   }
@@ -376,7 +374,7 @@ const ARMicrobeShooter = () => {
 
   // Playing state - AR view
   return (
-    <ARCamera>
+    <ARCamera ref={cameraRef}>
       <ARMicrobeCanvas
         onScoreChange={handleScoreChange}
         onLifeLost={handleLifeLost}
