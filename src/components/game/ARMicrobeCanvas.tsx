@@ -116,39 +116,39 @@ export const ARMicrobeCanvas = ({
     let type: Microbe["type"] = "basic";
     let health = 1;
     let points = 10;
-    let speed = 1.5; // Increased for 50-80 unit spawn distance
+    let speed = 0.6; // Reduced for closer spawn distance (15-30 units)
     let size = 40;
 
     if (gameTime > 90 && rand < 5) {
       type = "boss";
       health = 10;
       points = 250;
-      speed = 0.9; // Increased for 50-80 unit spawn distance
+      speed = 0.35; // Reduced for closer spawn distance
       size = 80;
     } else if (rand < 5) {
       type = "golden";
       health = 1;
       points = 100;
-      speed = 2.2; // Increased for 50-80 unit spawn distance
+      speed = 0.9; // Reduced for closer spawn distance
       size = 35;
     } else if (gameTime > 60 && rand < 15) {
       type = "tank";
       health = 3;
       points = 50;
-      speed = 0.8; // Increased for 50-80 unit spawn distance
+      speed = 0.3; // Reduced for closer spawn distance
       size = 60;
     } else if (gameTime > 30 && rand < 30) {
       type = "fast";
       health = 1;
       points = 25;
-      speed = 3.0; // Increased for 50-80 unit spawn distance
+      speed = 1.2; // Reduced for closer spawn distance
       size = 30;
     }
 
     // Generate spawn position in forward-facing cone relative to current camera direction
     const relativeAngle = (Math.random() - 0.5) * Math.PI * 0.8; // -72° to +72°
     const elevation = (Math.random() - 0.5) * Math.PI * 0.5; // -45° to +45°
-    const distance = 50 + Math.random() * 30; // Spawn 50-80 units away
+    const distance = 15 + Math.random() * 15; // Spawn 15-30 units away (closer to camera)
 
     // Convert to world coordinates (spawn in front of where camera is currently pointing)
     const worldAngle = cameraYaw + relativeAngle;
@@ -319,6 +319,71 @@ export const ARMicrobeCanvas = ({
     return () => clearInterval(comboResetInterval);
   }, [combo, onComboChange]);
 
+  // Microbe Update Loop (SEPARATE from render loop)
+  useEffect(() => {
+    if (isPaused) return;
+
+    const updateInterval = setInterval(() => {
+      const now = Date.now();
+
+      setMicrobes((prev) => {
+        return prev
+          .map((microbe) => {
+            const age = (now - microbe.spawnTime) / 1000;
+            const newWobble = microbe.wobble + 0.02;
+
+            // Calculate distance to camera in world space
+            const dx = microbe.worldX - cameraWorldPos.x;
+            const dy = microbe.worldY - cameraWorldPos.y;
+            const dz = microbe.worldZ - cameraWorldPos.z;
+            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+            // Check if reached camera or despawned
+            if (distance < 0.5 || age > 20) {
+              onLifeLost();
+              return null;
+            }
+
+            // Move microbe toward camera in world space
+            const dirX = -dx / distance;
+            const dirY = -dy / distance;
+            const dirZ = -dz / distance;
+            const moveAmount = microbe.speed * 0.016;
+            
+            const newWorldX = microbe.worldX + dirX * moveAmount;
+            const newWorldY = microbe.worldY + dirY * moveAmount;
+            const newWorldZ = microbe.worldZ + dirZ * moveAmount;
+
+            // Camouflage effect for tank/boss
+            let opacity = microbe.opacity;
+            if ((microbe.type === "tank" || microbe.type === "boss") && Math.floor(age) % 5 === 0 && age % 1 < 0.5) {
+              opacity = 0.5;
+            }
+
+            // Multiplication for basic microbes
+            if (microbe.type === "basic" && age > 15 && Math.random() < 0.001) {
+              const offsetAngle = (Math.random() - 0.5) * 0.5;
+              const offsetDist = 0.3;
+              const clone: Microbe = {
+                ...microbe,
+                id: `microbe-clone-${Date.now()}-${Math.random()}`,
+                worldX: newWorldX + Math.sin(offsetAngle) * offsetDist,
+                worldY: newWorldY + (Math.random() - 0.5) * 0.2,
+                worldZ: newWorldZ + Math.cos(offsetAngle) * offsetDist,
+                spawnTime: now,
+              };
+              setTimeout(() => setMicrobes((m) => [...m, clone]), 0);
+            }
+
+            return { ...microbe, worldX: newWorldX, worldY: newWorldY, worldZ: newWorldZ, wobble: newWobble, opacity };
+          })
+          .filter(Boolean) as Microbe[];
+      });
+    }, 16); // 60fps update rate
+
+    return () => clearInterval(updateInterval);
+  }, [isPaused, onLifeLost, cameraWorldPos]);
+
 
   // Game loop
   useEffect(() => {
@@ -376,118 +441,65 @@ export const ARMicrobeCanvas = ({
         console.log('🎨 Render loop active - Microbes:', microbes.length, 'Visible on canvas');
       }
 
-      // Update and render microbes with world-space movement
-      setMicrobes((prev) => {
-        return prev
-          .map((microbe) => {
-            const age = (now - microbe.spawnTime) / 1000;
-            const newWobble = microbe.wobble + 0.02;
+      // Render microbes (READ-ONLY - no state updates!)
+      microbes.forEach((microbe) => {
+        // Transform world position to camera-relative view space
+        const viewX = microbe.worldX - cameraWorldPos.x;
+        const viewY = microbe.worldY - cameraWorldPos.y;
+        const viewZ = microbe.worldZ - cameraWorldPos.z;
 
-            // Calculate distance to camera in world space
-            const dx = microbe.worldX - cameraWorldPos.x;
-            const dy = microbe.worldY - cameraWorldPos.y;
-            const dz = microbe.worldZ - cameraWorldPos.z;
-            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        // Rotate by camera yaw (around Y axis)
+        const cosYaw = Math.cos(cameraYaw);
+        const sinYaw = Math.sin(cameraYaw);
+        const rotatedX = viewX * cosYaw - viewZ * sinYaw;
+        const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
+        
+        // Apply pitch rotation (around X axis)
+        const cosPitch = Math.cos(cameraPitch);
+        const sinPitch = Math.sin(cameraPitch);
+        const finalY = viewY * cosPitch - rotatedZ * sinPitch;
+        const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
 
-            // Check if reached camera or despawned
-            if (distance < 0.5 || age > 20) {
-              onLifeLost();
-              return null;
-            }
+        // Add wobble for realism
+        const wobbleOffset = Math.sin(microbe.wobble) * 0.05;
 
-            // Move microbe toward camera in world space
-            const dirX = -dx / distance;
-            const dirY = -dy / distance;
-            const dirZ = -dz / distance;
-            const moveAmount = microbe.speed * 0.016;
-            
-            const newWorldX = microbe.worldX + dirX * moveAmount;
-            const newWorldY = microbe.worldY + dirY * moveAmount;
-            const newWorldZ = microbe.worldZ + dirZ * moveAmount;
+        // Project to screen with perspective using absolute depth
+        const depth = Math.abs(finalZ);
+        const fov = 1200; // Narrower FOV for better sizing
+        const screenX = centerX + (rotatedX / depth) * fov + wobbleOffset * 50;
+        const screenY = centerY + (finalY / depth) * fov;
+        
+        // Size based on camera-relative depth
+        const scale = 300 / depth;
+        const size = microbe.size * scale;
 
-            // Camouflage effect for tank/boss
-            let opacity = microbe.opacity;
-            if ((microbe.type === "tank" || microbe.type === "boss") && Math.floor(age) % 5 === 0 && age % 1 < 0.5) {
-              opacity = 0.5;
-            }
+        // Only render microbes in front of camera AND not too close
+        if (finalZ < 0 && depth >= 8) {
+          // Render microbe
+          ctx.save();
+          ctx.globalAlpha = microbe.opacity;
+          ctx.font = `${size}px Arial`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(getMicrobeEmoji(microbe.type), screenX, screenY);
 
-            // Multiplication for basic microbes
-            if (microbe.type === "basic" && age > 15 && Math.random() < 0.001) {
-              const offsetAngle = (Math.random() - 0.5) * 0.5;
-              const offsetDist = 0.3;
-              const clone: Microbe = {
-                ...microbe,
-                id: `microbe-clone-${Date.now()}-${Math.random()}`,
-                worldX: newWorldX + Math.sin(offsetAngle) * offsetDist,
-                worldY: newWorldY + (Math.random() - 0.5) * 0.2,
-                worldZ: newWorldZ + Math.cos(offsetAngle) * offsetDist,
-                spawnTime: now,
-              };
-              setTimeout(() => setMicrobes((m) => [...m, clone]), 0);
-            }
+          // Health bar for tank/boss
+          if ((microbe.type === "tank" || microbe.type === "boss") && microbe.health < microbe.maxHealth) {
+            const barWidth = size * 1.5;
+            const barHeight = 5;
+            ctx.fillStyle = "#333";
+            ctx.fillRect(screenX - barWidth / 2, screenY + size / 2 + 5, barWidth, barHeight);
+            ctx.fillStyle = getMicrobeColor(microbe.type);
+            ctx.fillRect(
+              screenX - barWidth / 2,
+              screenY + size / 2 + 5,
+              (barWidth * microbe.health) / microbe.maxHealth,
+              barHeight
+            );
+          }
 
-            // Transform world position to camera-relative view space
-            const viewX = newWorldX - cameraWorldPos.x;
-            const viewY = newWorldY - cameraWorldPos.y;
-            const viewZ = newWorldZ - cameraWorldPos.z;
-
-            // Rotate by camera yaw (around Y axis)
-            const cosYaw = Math.cos(cameraYaw);
-            const sinYaw = Math.sin(cameraYaw);
-            const rotatedX = viewX * cosYaw - viewZ * sinYaw;
-            const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
-            
-            // Apply pitch rotation (around X axis)
-            const cosPitch = Math.cos(cameraPitch);
-            const sinPitch = Math.sin(cameraPitch);
-            const finalY = viewY * cosPitch - rotatedZ * sinPitch;
-            const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
-
-            
-            // Add wobble for realism
-            const wobbleOffset = Math.sin(newWobble) * 0.05;
-
-            // Project to screen with perspective using absolute depth
-            const depth = Math.abs(finalZ);
-            const fov = 1200; // Narrower FOV for better sizing
-            const screenX = centerX + (rotatedX / depth) * fov + wobbleOffset * 50;
-            const screenY = centerY + (finalY / depth) * fov;
-            
-            // Size based on camera-relative depth
-            const scale = 300 / depth;
-            const size = microbe.size * scale;
-
-            // Only render microbes in front of camera AND not too close
-            if (finalZ < 0 && depth >= 8) {
-              // Render microbe
-              ctx.save();
-              ctx.globalAlpha = opacity;
-              ctx.font = `${size}px Arial`;
-              ctx.textAlign = "center";
-              ctx.textBaseline = "middle";
-              ctx.fillText(getMicrobeEmoji(microbe.type), screenX, screenY);
-
-              // Health bar for tank/boss
-              if ((microbe.type === "tank" || microbe.type === "boss") && microbe.health < microbe.maxHealth) {
-                const barWidth = size * 1.5;
-                const barHeight = 5;
-                ctx.fillStyle = "#333";
-                ctx.fillRect(screenX - barWidth / 2, screenY + size / 2 + 5, barWidth, barHeight);
-                ctx.fillStyle = getMicrobeColor(microbe.type);
-                ctx.fillRect(
-                  screenX - barWidth / 2,
-                  screenY + size / 2 + 5,
-                  (barWidth * microbe.health) / microbe.maxHealth,
-                  barHeight
-                );
-              }
-
-              ctx.restore();
-            }
-
-            return { ...microbe, worldX: newWorldX, worldY: newWorldY, worldZ: newWorldZ, wobble: newWobble, opacity };
-          })
-          .filter(Boolean) as Microbe[];
+          ctx.restore();
+        }
       });
 
       // Update and render power-ups (keep simple fixed positioning for now)
