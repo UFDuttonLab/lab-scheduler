@@ -499,18 +499,24 @@ export const ARMicrobeCanvas = ({
           if (isOnScreen) {
             // Draw hit detection circle as the primary game element
             const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
-            // Color based on distance from crosshair
-            const circleColor = distanceFromCrosshair < 120 ? 'rgba(0, 255, 0, 0.6)' : 
-                                distanceFromCrosshair < 150 ? 'rgba(255, 255, 0, 0.6)' : 
-                                'rgba(255, 0, 0, 0.6)';
+            
+            // Draw dark background circle for contrast
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, (size / 2) + 4, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw main colored circle (FULLY OPAQUE)
+            const circleColor = distanceFromCrosshair < 120 ? 'rgba(0, 255, 0, 1.0)' : 
+                                distanceFromCrosshair < 150 ? 'rgba(255, 255, 0, 1.0)' : 
+                                'rgba(255, 0, 0, 1.0)';
             ctx.fillStyle = circleColor;
             ctx.beginPath();
             ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
             ctx.fill();
-            // Add outline for clarity
-            ctx.strokeStyle = distanceFromCrosshair < 120 ? '#00ff00' : 
-                              distanceFromCrosshair < 150 ? '#ffff00' : 
-                              '#ff0000';
+            
+            // Add white outline for maximum clarity
+            ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 3;
             ctx.stroke();
           }
