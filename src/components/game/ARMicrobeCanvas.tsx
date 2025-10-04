@@ -74,7 +74,7 @@ export const ARMicrobeCanvas = ({
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [showPermissionOverlay, setShowPermissionOverlay] = useState(true); // Show on game start
   const [permissionStatus, setPermissionStatus] = useState("Sensors needed for best experience");
-  const [cameraWorldPos] = useState({ x: 0, y: 0, z: 0 }); // Camera stays at origin
+  const cameraWorldPosRef = useRef({ x: 0, y: 0, z: 0 }); // Camera stays at origin
   const lastComboTimeRef = useRef<number>(Date.now());
   const gameStartTimeRef = useRef<number>(Date.now());
   const lastSpawnTimeRef = useRef<number>(Date.now());
@@ -82,6 +82,8 @@ export const ARMicrobeCanvas = ({
   const animationFrameRef = useRef<number>();
   const orientationCheckRef = useRef<number>(Date.now());
   const lastDataCheckRef = useRef<number>(Date.now());
+  const comboRef = useRef(0);
+  const activePowerUpRef = useRef<{ type: string; endTime: number } | null>(null);
 
   const getMicrobeEmoji = (type: string): string => {
     switch (type) {
@@ -307,6 +309,16 @@ export const ARMicrobeCanvas = ({
     return () => clearInterval(comboResetInterval);
   }, [combo, onComboChange]);
 
+  // Keep combo ref in sync
+  useEffect(() => {
+    comboRef.current = combo;
+  }, [combo]);
+
+  // Keep activePowerUp ref in sync
+  useEffect(() => {
+    activePowerUpRef.current = activePowerUp;
+  }, [activePowerUp]);
+
   // Microbe Update Loop (SEPARATE from render loop)
   useEffect(() => {
     if (isPaused) return;
@@ -321,9 +333,9 @@ export const ARMicrobeCanvas = ({
             const newWobble = microbe.wobble + 0.02;
 
             // Calculate distance to camera in world space
-            const dx = microbe.worldX - cameraWorldPos.x;
-            const dy = microbe.worldY - cameraWorldPos.y;
-            const dz = microbe.worldZ - cameraWorldPos.z;
+            const dx = microbe.worldX - cameraWorldPosRef.current.x;
+            const dy = microbe.worldY - cameraWorldPosRef.current.y;
+            const dz = microbe.worldZ - cameraWorldPosRef.current.z;
             const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
             // Check if reached camera or despawned
@@ -370,7 +382,7 @@ export const ARMicrobeCanvas = ({
     }, 16); // 60fps update rate
 
     return () => clearInterval(updateInterval);
-  }, [isPaused, onLifeLost, cameraWorldPos]);
+  }, [isPaused, onLifeLost]);
 
   // Set canvas dimensions IMMEDIATELY on mount and handle resize
   useEffect(() => {
@@ -434,8 +446,8 @@ export const ARMicrobeCanvas = ({
       }
 
       // Update camera world position based on rotation
-      cameraWorldPos.x = Math.sin(cameraYaw) * 0.1;
-      cameraWorldPos.z = -Math.cos(cameraYaw) * 0.1;
+      cameraWorldPosRef.current.x = Math.sin(cameraYaw) * 0.1;
+      cameraWorldPosRef.current.z = -Math.cos(cameraYaw) * 0.1;
 
       // Render loop verification logging (reduced frequency)
       if (now % 3000 < 16) { // Log every 3 seconds
@@ -445,9 +457,9 @@ export const ARMicrobeCanvas = ({
       // Render microbes (READ-ONLY - no state updates!)
       microbes.forEach((microbe) => {
         // Transform world position to camera-relative view space
-        const viewX = microbe.worldX - cameraWorldPos.x;
-        const viewY = microbe.worldY - cameraWorldPos.y;
-        const viewZ = microbe.worldZ - cameraWorldPos.z;
+        const viewX = microbe.worldX - cameraWorldPosRef.current.x;
+        const viewY = microbe.worldY - cameraWorldPosRef.current.y;
+        const viewZ = microbe.worldZ - cameraWorldPosRef.current.z;
 
         // Rotate by camera yaw (around Y axis)
         const cosYaw = Math.cos(cameraYaw);
@@ -626,8 +638,8 @@ export const ARMicrobeCanvas = ({
         }
         
         const visibleCount = microbes.filter(m => {
-          const viewZ = m.worldZ - cameraWorldPos.z;
-          const viewX = m.worldX - cameraWorldPos.x;
+          const viewZ = m.worldZ - cameraWorldPosRef.current.z;
+          const viewX = m.worldX - cameraWorldPosRef.current.x;
           const cosYaw = Math.cos(-cameraYaw);
           const sinYaw = Math.sin(-cameraYaw);
           const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
@@ -660,7 +672,7 @@ export const ARMicrobeCanvas = ({
       }
       window.removeEventListener('resize', handleResize);
     };
-  }, [microbes, powerUps, lives, isPaused, combo, activePowerUp, sensorMode, gyro, orientation, showDebug, score, onLifeLost, onScoreChange, onComboChange, onMicrobeEliminated]);
+  }, [isPaused]); // ONLY isPaused - everything else uses refs or fresh reads
 
   const handleTap = useCallback(
     (e: React.TouchEvent<HTMLCanvasElement>) => {
@@ -702,9 +714,9 @@ export const ARMicrobeCanvas = ({
         // Find closest microbe to crosshair using CURRENT microbe data
         currentMicrobes.forEach((microbe) => {
           // Transform world position to camera-relative view space
-          const viewX = microbe.worldX - cameraWorldPos.x;
-          const viewY = microbe.worldY - cameraWorldPos.y;
-          const viewZ = microbe.worldZ - cameraWorldPos.z;
+          const viewX = microbe.worldX - cameraWorldPosRef.current.x;
+          const viewY = microbe.worldY - cameraWorldPosRef.current.y;
+          const viewZ = microbe.worldZ - cameraWorldPosRef.current.z;
 
           // Rotate by camera yaw (around Y axis)
           const cosYaw = Math.cos(cameraYaw);
@@ -794,10 +806,10 @@ export const ARMicrobeCanvas = ({
 
             if (newHealth <= 0) {
               // Microbe eliminated - update score and combo
-              const newCombo = combo + 1;
+              const newCombo = comboRef.current + 1;
               const comboMultiplier = 1 + Math.floor(newCombo / 5) * 0.5;
               const pointsEarned = Math.floor(
-                m.points * comboMultiplier * (activePowerUp?.type === "double" ? 2 : 1)
+                m.points * comboMultiplier * (activePowerUpRef.current?.type === "double" ? 2 : 1)
               );
 
               setScore((prev) => {
@@ -829,7 +841,7 @@ export const ARMicrobeCanvas = ({
         }
       });
     },
-    [isPaused, gyro.alpha, gyro.beta, gyro.gamma, orientation.alpha, orientation.beta, orientation.gamma, combo, activePowerUp, sensorMode, onScoreChange, onComboChange, onMicrobeEliminated, cameraWorldPos]
+    [isPaused, sensorMode, onScoreChange, onComboChange, onMicrobeEliminated]
   );
 
   // Handle active power-up expiration
