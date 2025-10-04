@@ -375,7 +375,7 @@ const ARMicrobeShooter = () => {
   // Playing state - AR view
   // Always render ARCamera to ensure ref exists, but hide when not playing
   return (
-    <div className={gameState === "playing" ? "block" : "hidden"}>
+    <div className={gameState === "playing" ? "block" : "fixed inset-0 invisible pointer-events-none"}>
       <ARCamera ref={cameraRef}>
         <ARMicrobeCanvas
           onScoreChange={handleScoreChange}
