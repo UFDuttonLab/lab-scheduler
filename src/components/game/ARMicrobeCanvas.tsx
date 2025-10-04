@@ -433,6 +433,9 @@ export const ARMicrobeCanvas = ({
 
       // Clear canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Add semi-transparent background to ensure circles are visible over video
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       const now = Date.now();
       const centerX = canvas.width / 2;
