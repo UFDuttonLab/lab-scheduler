@@ -422,6 +422,22 @@ export const ARMicrobeCanvas = ({
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
 
+      // 🔍 COMPREHENSIVE SENSOR DIAGNOSTIC
+      console.log('🔍 SENSOR CHECK:', {
+        sensorMode,
+        orientationAlpha: orientation.current.alpha,
+        orientationBeta: orientation.current.beta,
+        orientationGamma: orientation.current.gamma,
+        gyroAlpha: gyro.current.alpha,
+        gyroBeta: gyro.current.beta,
+        gyroGamma: gyro.current.gamma,
+        sensorDataRefYaw: sensorDataRef.current.yaw,
+        sensorDataRefPitch: sensorDataRef.current.pitch,
+        orientationPermission,
+        gyroPermission,
+        gyroAvailable
+      });
+
       // One-time initialization: if we have a sensor mode but sensorDataRef is still zero, initialize it
       if (sensorMode && sensorDataRef.current.yaw === 0 && sensorDataRef.current.pitch === 0) {
         if (sensorMode === 'orientation' && orientation.current.alpha !== null) {
