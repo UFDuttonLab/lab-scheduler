@@ -491,18 +491,18 @@ export const ARMicrobeCanvas = ({
         // Add wobble for realism
         const wobbleOffset = Math.sin(microbe.wobble) * 0.05;
 
-        // Project to screen with perspective (use finalZ directly, positive = in front)
-        const depth = finalZ;
+        // Project to screen with perspective (negative Z = in front of camera)
+        const depth = Math.abs(finalZ);
         const fov = 1200; // Narrower FOV for better sizing
         const screenX = centerX + (rotatedX / depth) * fov + wobbleOffset * 50;
         const screenY = centerY + (finalY / depth) * fov;
         
         // Size based on camera-relative depth
-        const scale = 300 / depth;
+        const scale = 300 / Math.max(0.1, depth);
         const size = microbe.size * scale;
 
-        // Only render microbes in FRONT of camera (any depth)
-        if (finalZ > 0) {
+        // Only render microbes in FRONT of camera (negative Z = in front)
+        if (finalZ < 0) {
           // Debug: Draw hit detection circle around microbe
           const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
           if (distanceFromCrosshair < 150) {
@@ -745,9 +745,9 @@ export const ARMicrobeCanvas = ({
           const finalY = viewY * cosPitch - rotatedZ * sinPitch;
           const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
 
-          // Use finalZ directly (positive = in front, negative = behind)
-          const depth = finalZ;
-          if (finalZ <= 0) {
+          // Use finalZ with correct sign convention (negative = in front, positive = behind)
+          const depth = Math.abs(finalZ);
+          if (finalZ >= 0) {
             console.log('⏭️ Skipping microbe - behind camera, finalZ:', finalZ.toFixed(1));
             return;
           }
@@ -762,7 +762,7 @@ export const ARMicrobeCanvas = ({
           console.log('🔍 Microbe projection - screen:', screenX.toFixed(0), screenY.toFixed(0), 'depth:', depth.toFixed(1));
           
           // Use depth-based scale like rendering
-          const scale = 300 / depth;
+          const scale = 300 / Math.max(0.1, depth);
           const size = microbe.size * scale;
 
           const distance = Math.hypot(screenX - centerX, screenY - centerY);
