@@ -492,47 +492,28 @@ export const ARMicrobeCanvas = ({
 
         // Render microbes in any direction within visible range (5-130 units)
         if (depth >= 5 && depth <= 130) {
-          // Debug: Draw filled hit detection circle around microbe
-          const distanceFromCrosshair = Math.hypot(screenX - centerX, centerY - screenY);
-          // Color based on distance from crosshair
-          const circleColor = distanceFromCrosshair < 120 ? 'rgba(0, 255, 0, 0.3)' : 
-                              distanceFromCrosshair < 150 ? 'rgba(255, 255, 0, 0.3)' : 
-                              'rgba(255, 0, 0, 0.3)';
-          ctx.fillStyle = circleColor;
-          ctx.beginPath();
-          ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
-          ctx.fill();
-          // Add outline for clarity
-          ctx.strokeStyle = distanceFromCrosshair < 120 ? '#00ff00' : 
-                            distanceFromCrosshair < 150 ? '#ffff00' : 
-                            '#ff0000';
-          ctx.lineWidth = 2;
-          ctx.stroke();
+          // Only draw circles if microbe is within canvas bounds
+          const isOnScreen = screenX >= 0 && screenX <= canvas.width && 
+                             screenY >= 0 && screenY <= canvas.height;
           
-          // Render microbe
-          ctx.save();
-          ctx.globalAlpha = microbe.opacity;
-          ctx.font = `${size}px Arial`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(getMicrobeEmoji(microbe.type), screenX, screenY);
-
-          // Health bar for tank/boss
-          if ((microbe.type === "tank" || microbe.type === "boss") && microbe.health < microbe.maxHealth) {
-            const barWidth = size * 1.5;
-            const barHeight = 5;
-            ctx.fillStyle = "#333";
-            ctx.fillRect(screenX - barWidth / 2, screenY + size / 2 + 5, barWidth, barHeight);
-            ctx.fillStyle = getMicrobeColor(microbe.type);
-            ctx.fillRect(
-              screenX - barWidth / 2,
-              screenY + size / 2 + 5,
-              (barWidth * microbe.health) / microbe.maxHealth,
-              barHeight
-            );
+          if (isOnScreen) {
+            // Draw hit detection circle as the primary game element
+            const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
+            // Color based on distance from crosshair
+            const circleColor = distanceFromCrosshair < 120 ? 'rgba(0, 255, 0, 0.6)' : 
+                                distanceFromCrosshair < 150 ? 'rgba(255, 255, 0, 0.6)' : 
+                                'rgba(255, 0, 0, 0.6)';
+            ctx.fillStyle = circleColor;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
+            ctx.fill();
+            // Add outline for clarity
+            ctx.strokeStyle = distanceFromCrosshair < 120 ? '#00ff00' : 
+                              distanceFromCrosshair < 150 ? '#ffff00' : 
+                              '#ff0000';
+            ctx.lineWidth = 3;
+            ctx.stroke();
           }
-
-          ctx.restore();
         }
       });
 
