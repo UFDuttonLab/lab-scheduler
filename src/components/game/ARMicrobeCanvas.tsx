@@ -264,32 +264,42 @@ export const ARMicrobeCanvas = ({
               setTimeout(() => setMicrobes((m) => [...m, clone]), 0);
             }
 
-            // Calculate relative angle to camera with proper wrapping
-            let relativeAngle = microbe.angle - cameraYaw;
-            // Normalize to -PI to PI range
-            while (relativeAngle > Math.PI) relativeAngle -= Math.PI * 2;
-            while (relativeAngle < -Math.PI) relativeAngle += Math.PI * 2;
-            
-            const relativeElevation = microbe.elevation - cameraPitch;
+            // Convert microbe's spherical coordinates to 3D world position
+            const worldX = Math.sin(microbe.angle) * Math.cos(microbe.elevation) * microbe.distance;
+            const worldY = Math.sin(microbe.elevation) * microbe.distance;
+            const worldZ = -Math.cos(microbe.angle) * Math.cos(microbe.elevation) * microbe.distance;
 
-            // Add wobble for realism
-            const wobbleOffset = Math.sin(newWobble) * 0.05;
+            // Rotate world position by camera orientation
+            // Yaw rotation (around Y axis)
+            const cosYaw = Math.cos(cameraYaw);
+            const sinYaw = Math.sin(cameraYaw);
+            const rotX = worldX * cosYaw - worldZ * sinYaw;
+            const rotZ = worldX * sinYaw + worldZ * cosYaw;
 
-            // Check if microbe is within field of view (~90° horizontal, ~70° vertical)
-            const isInView = Math.abs(relativeAngle) < Math.PI / 2 && Math.abs(relativeElevation) < Math.PI / 2.5;
-            
-            if (!isInView) {
+            // Pitch rotation (around X axis)
+            const cosPitch = Math.cos(cameraPitch);
+            const sinPitch = Math.sin(cameraPitch);
+            const viewY = worldY * cosPitch - rotZ * sinPitch;
+            const viewZ = worldY * sinPitch + rotZ * cosPitch;
+            const viewX = rotX;
+
+            // Only render if in front of camera (negative Z in view space)
+            if (viewZ >= 0) {
               // Keep microbe but don't render
               return { ...microbe, distance: newDistance, wobble: newWobble, opacity };
             }
 
-            // Project to screen space
-            const fov = 1.2; // Field of view factor
-            const screenX = centerX + (Math.sin(relativeAngle) * newDistance * 150 * fov) + wobbleOffset * 50;
-            const screenY = centerY + (Math.sin(relativeElevation) * newDistance * 150 * fov);
+            // Add wobble for realism
+            const wobbleOffset = Math.sin(newWobble) * 0.05;
+
+            // Project to screen with perspective
+            const fov = 800; // Field of view factor (controls how wide the view is)
+            const screenX = centerX + (viewX / -viewZ) * fov + wobbleOffset * 50;
+            const screenY = centerY + (viewY / -viewZ) * fov;
             
-            // Size based on distance
-            const scale = 3 / newDistance;
+            // Size based on actual view distance (not original distance)
+            const viewDistance = Math.sqrt(viewX * viewX + viewY * viewY + viewZ * viewZ);
+            const scale = 3 / viewDistance;
             const size = microbe.size * scale;
 
             // Render microbe
