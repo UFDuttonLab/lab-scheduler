@@ -71,7 +71,7 @@ export const ARMicrobeCanvas = ({
   const [touchRotation, setTouchRotation] = useState({ yaw: 0, pitch: 0 });
   const [lastTouch, setLastTouch] = useState<{ x: number; y: number } | null>(null);
   const [useTouchMode, setUseTouchMode] = useState(false);
-  const [showDebug] = useState(true); // Enabled for debugging
+  const [showDebug, setShowDebug] = useState(true); // Enabled for debugging
   const [sensorMode, setSensorMode] = useState<'gyroscope' | 'orientation' | 'touch'>('touch');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [showPermissionOverlay, setShowPermissionOverlay] = useState(false); // Testing: start hidden to check spawning
@@ -108,6 +108,7 @@ export const ARMicrobeCanvas = ({
   };
 
   const spawnMicrobe = useCallback((cameraYaw: number) => {
+    console.log('🦠 spawnMicrobe called, current count:', microbes.length);
     const gameTime = (Date.now() - gameStartTimeRef.current) / 1000;
     
     // Determine microbe type based on spawn rate and game time
@@ -179,7 +180,11 @@ export const ARMicrobeCanvas = ({
       distance: distance.toFixed(2)
     });
 
-    setMicrobes((prev) => [...prev, microbe]);
+    setMicrobes((prev) => {
+      const updated = [...prev, microbe];
+      console.log('✅ Microbe added! New count:', updated.length, 'Position:', microbe.worldX.toFixed(2), microbe.worldZ.toFixed(2));
+      return updated;
+    });
   }, []);
 
   const spawnPowerUp = useCallback(() => {
@@ -296,7 +301,7 @@ export const ARMicrobeCanvas = ({
       console.log('🎯 Cleaning up spawn interval');
       clearInterval(interval);
     };
-  }, [isPaused, microbes.length, spawnMicrobe, orientation.alpha, gyro.alpha, touchRotation, sensorMode, useTouchMode]);
+  }, [isPaused, spawnMicrobe, orientation.alpha, gyro.alpha, touchRotation, sensorMode, useTouchMode]);
 
   // Power-up spawn logic
   useEffect(() => {
@@ -876,49 +881,6 @@ export const ARMicrobeCanvas = ({
 
   return (
     <>
-      {/* Permission Request Overlay */}
-      {showPermissionOverlay && (
-        <div className="absolute inset-0 bg-black/90 flex items-center justify-center z-50 pointer-events-auto">
-          <div className="bg-background/95 rounded-lg p-8 max-w-md mx-4 text-center space-y-4">
-            <h2 className="text-2xl font-bold">🎯 Ready to Play?</h2>
-            <p className="text-muted-foreground">
-              Request sensor permissions for the best experience, or use touch controls.
-            </p>
-            
-            {permissionStatus && (
-              <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-sm">
-                {permissionStatus}
-              </div>
-            )}
-            
-            <div className="space-y-2">
-              <Button onClick={handleRequestPermissions} className="w-full" size="lg">
-                Request Sensor Permissions
-              </Button>
-              <Button 
-                onClick={() => {
-                  setShowPermissionOverlay(false);
-                  setUseTouchMode(true);
-                  setSensorMode('touch');
-                }} 
-                variant="outline" 
-                className="w-full"
-              >
-                Use Touch Controls
-              </Button>
-            </div>
-            
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p>Gyroscope: {gyro.sensorAvailable ? "✅" : "❌"}</p>
-              <p>Gyroscope Perm: {gyro.permissionGranted ? "✅" : "❌"}</p>
-              <p>Gyroscope Data: {gyro.alpha !== null ? "✅ " + gyro.alpha.toFixed(1) + "°" : "❌"}</p>
-              <p>Orientation Perm: {orientation.permissionGranted ? "✅" : "❌"}</p>
-              <p>Orientation Data: {orientation.alpha !== null ? "✅ " + orientation.alpha.toFixed(1) + "°" : "❌"}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
       <canvas
         ref={canvasRef}
         onTouchStart={handleTouchMove}
@@ -931,8 +893,8 @@ export const ARMicrobeCanvas = ({
         style={{ width: "100%", height: "100%" }}
       />
 
-      {/* Real-time Debug Overlay - Always Visible */}
-      {showDebug && !showPermissionOverlay && (
+      {/* Real-time Debug Overlay - Toggle to show/hide */}
+      {showDebug && (
         <div className="absolute top-4 left-4 bg-black/80 text-white p-3 rounded-lg text-xs font-mono max-w-xs z-40 pointer-events-none">
           <h3 className="font-bold mb-2 text-yellow-400">Live Sensor Data</h3>
           <div className="space-y-1">
@@ -1024,6 +986,14 @@ export const ARMicrobeCanvas = ({
       
       {/* Control buttons */}
       <div className="absolute bottom-24 left-4 flex flex-col gap-2 z-40">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setShowDebug(!showDebug)}
+          className="opacity-70 hover:opacity-100"
+        >
+          {showDebug ? "Hide" : "Show"} Sensor Data
+        </Button>
         <Button
           size="sm"
           variant="secondary"
