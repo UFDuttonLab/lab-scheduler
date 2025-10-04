@@ -532,24 +532,24 @@ export const ARMicrobeCanvas = ({
         });
       });
 
-      // Update and render particles
-      // Update and render particles directly (no state update!)
-      particlesRef.current = particlesRef.current
-        .map((particle) => {
-          particle.x += particle.vx;
-          particle.y += particle.vy;
-          particle.life -= 0.02;
+      // Update and render particles in-place (no reassignment!)
+      for (let i = particlesRef.current.length - 1; i >= 0; i--) {
+        const particle = particlesRef.current[i];
+        particle.x += particle.vx;
+        particle.y += particle.vy;
+        particle.life -= 0.02;
 
-          if (particle.life <= 0) return null;
-
+        if (particle.life <= 0) {
+          // Remove dead particle
+          particlesRef.current.splice(i, 1);
+        } else {
+          // Render live particle
           ctx.fillStyle = particle.color;
           ctx.globalAlpha = particle.life;
           ctx.fillRect(particle.x, particle.y, 4, 4);
           ctx.globalAlpha = 1;
-
-          return particle;
-        })
-        .filter(Boolean) as Particle[];
+        }
+      }
 
       // Render laser beam if firing - red with tapered effect
       if (laserFiring > 0 && now - laserFiring < 150) {
