@@ -827,7 +827,7 @@ export const ARMicrobeCanvas = ({
         return currentMicrobes; // No hit, no change
       });
     },
-    [isPaused, gyro.alpha, gyro.beta, gyro.gamma, orientation.alpha, orientation.beta, orientation.gamma, combo, activePowerUp, sensorMode, onScoreChange, onComboChange, onMicrobeEliminated, cameraWorldPos, microbes.length]
+    [isPaused, gyro.alpha, gyro.beta, gyro.gamma, orientation.alpha, orientation.beta, orientation.gamma, combo, activePowerUp, sensorMode, onScoreChange, onComboChange, onMicrobeEliminated, cameraWorldPos]
   );
 
   // Handle active power-up expiration
