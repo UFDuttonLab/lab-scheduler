@@ -116,39 +116,39 @@ export const ARMicrobeCanvas = ({
     let type: Microbe["type"] = "basic";
     let health = 1;
     let points = 10;
-    let speed = 1.2; // Increased for 30-50 unit spawn distance
+    let speed = 1.5; // Increased for 50-80 unit spawn distance
     let size = 40;
 
     if (gameTime > 90 && rand < 5) {
       type = "boss";
       health = 10;
       points = 250;
-      speed = 0.7; // Increased for 30-50 unit spawn distance
+      speed = 0.9; // Increased for 50-80 unit spawn distance
       size = 80;
     } else if (rand < 5) {
       type = "golden";
       health = 1;
       points = 100;
-      speed = 1.8; // Increased for 30-50 unit spawn distance
+      speed = 2.2; // Increased for 50-80 unit spawn distance
       size = 35;
     } else if (gameTime > 60 && rand < 15) {
       type = "tank";
       health = 3;
       points = 50;
-      speed = 0.6; // Increased for 30-50 unit spawn distance
+      speed = 0.8; // Increased for 50-80 unit spawn distance
       size = 60;
     } else if (gameTime > 30 && rand < 30) {
       type = "fast";
       health = 1;
       points = 25;
-      speed = 2.5; // Increased for 30-50 unit spawn distance
+      speed = 3.0; // Increased for 50-80 unit spawn distance
       size = 30;
     }
 
     // Generate spawn position in forward-facing cone relative to current camera direction
     const relativeAngle = (Math.random() - 0.5) * Math.PI * 0.8; // -72° to +72°
     const elevation = (Math.random() - 0.5) * Math.PI * 0.5; // -45° to +45°
-    const distance = 30 + Math.random() * 20; // Spawn 30-50 units away
+    const distance = 50 + Math.random() * 30; // Spawn 50-80 units away
 
     // Convert to world coordinates (spawn in front of where camera is currently pointing)
     const worldAngle = cameraYaw + relativeAngle;
@@ -454,7 +454,7 @@ export const ARMicrobeCanvas = ({
             const screenY = centerY + (finalY / depth) * fov;
             
             // Size based on camera-relative depth
-            const scale = 1000 / depth;
+            const scale = 300 / depth;
             const size = microbe.size * scale;
 
             // Only render microbes in front of camera
@@ -463,7 +463,7 @@ export const ARMicrobeCanvas = ({
             }
 
             // Skip rendering if too close (prevents giant microbes)
-            if (depth < 8) {
+            if (depth < 20) {
               return { ...microbe, worldX: newWorldX, worldY: newWorldY, worldZ: newWorldZ, wobble: newWobble, opacity };
             }
 
@@ -713,14 +713,14 @@ export const ARMicrobeCanvas = ({
         const viewZ = microbe.worldZ - cameraWorldPos.z;
 
         // Rotate by camera yaw (around Y axis)
-        const cosYaw = Math.cos(-cameraYaw);
-        const sinYaw = Math.sin(-cameraYaw);
+        const cosYaw = Math.cos(cameraYaw);
+        const sinYaw = Math.sin(cameraYaw);
         const rotatedX = viewX * cosYaw - viewZ * sinYaw;
         const rotatedZ = viewZ * cosYaw + viewX * sinYaw;
         
         // Apply pitch rotation (around X axis)
-        const cosPitch = Math.cos(-cameraPitch);
-        const sinPitch = Math.sin(-cameraPitch);
+        const cosPitch = Math.cos(cameraPitch);
+        const sinPitch = Math.sin(cameraPitch);
         const finalY = viewY * cosPitch - rotatedZ * sinPitch;
         const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
 
@@ -729,7 +729,7 @@ export const ARMicrobeCanvas = ({
 
         // Skip if too close (same culling as rendering)
         const depth = Math.abs(finalZ);
-        if (depth < 8) return;
+        if (depth < 20) return;
 
         const wobbleOffset = Math.sin(microbe.wobble) * 0.05;
         const fov = 1200; // Match rendering FOV
@@ -737,8 +737,8 @@ export const ARMicrobeCanvas = ({
         const screenY = centerY + (finalY / depth) * fov;
         
         // Use depth-based scale like rendering
-        const scale = 1 / depth;
-        const size = microbe.size * scale * 300;
+        const scale = 300 / depth;
+        const size = microbe.size * scale;
 
         const distance = Math.hypot(screenX - centerX, screenY - centerY);
         
@@ -796,6 +796,8 @@ export const ARMicrobeCanvas = ({
             return { ...m, health: newHealth };
           }).filter(Boolean) as Microbe[];
         });
+      } else {
+        console.log('❌ NO HIT - Microbes in view:', microbes.length);
       }
     },
     [isPaused, gyro.alpha, gyro.beta, orientation.alpha, orientation.beta, touchRotation, lastTouch, microbes, combo, activePowerUp, sensorMode, onScoreChange, onComboChange, onMicrobeEliminated, cameraWorldPos]
