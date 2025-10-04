@@ -246,6 +246,7 @@ export const ARMicrobeCanvas = ({
   // Refs to access current sensor values without causing re-renders
   const sensorDataRef = useRef({ yaw: 0, pitch: 0 });
   const microbeCountRef = useRef(0);
+  const removedMicrobesRef = useRef<Set<string>>(new Set());
 
   // Update refs when sensor data changes - PRIORITIZE DeviceOrientation for absolute positioning
   useEffect(() => {
@@ -338,6 +339,7 @@ export const ARMicrobeCanvas = ({
 
       setMicrobes((prev) => {
         return prev
+          .filter(m => !removedMicrobesRef.current.has(m.id)) // Skip removed microbes
           .map((microbe) => {
             const age = (now - microbe.spawnTime) / 1000;
             const newWobble = microbe.wobble + 0.02;
@@ -391,7 +393,15 @@ export const ARMicrobeCanvas = ({
       });
     }, 16); // 60fps update rate
 
-    return () => clearInterval(updateInterval);
+    // Clear removed microbes set every 5 seconds to prevent memory leak
+    const cleanupInterval = setInterval(() => {
+      removedMicrobesRef.current.clear();
+    }, 5000);
+
+    return () => {
+      clearInterval(updateInterval);
+      clearInterval(cleanupInterval);
+    };
   }, [isPaused, onLifeLost]);
 
   // Set canvas dimensions IMMEDIATELY on mount and handle resize
@@ -833,6 +843,8 @@ export const ARMicrobeCanvas = ({
               microbeCountRef.current = Math.max(0, microbeCountRef.current - 1);
               console.log('🗑️ Microbe removed, count now:', microbeCountRef.current);
 
+              // Mark for removal to prevent animation loop from resurrecting
+              removedMicrobesRef.current.add(microbe.id);
               return null; // Remove microbe
             }
 
