@@ -375,13 +375,13 @@ const ARMicrobeShooter = () => {
       </div>
 
       {/* Controls */}
-      <div className="absolute bottom-4 right-4 flex gap-2 pointer-events-auto">
+      <div className="absolute bottom-4 right-4 flex gap-2 pointer-events-auto z-20">
         <Button onClick={pauseGame} size="icon" variant="secondary" className="rounded-full h-12 w-12">
           <Pause className="h-6 w-6" />
         </Button>
       </div>
 
-      <div className="absolute bottom-4 left-4 pointer-events-auto">
+      <div className="absolute bottom-4 left-4 pointer-events-auto z-20">
         <div className="bg-black/60 backdrop-blur-sm rounded-lg p-2 text-white text-sm">
           <p>🦠 {microbesEliminated}</p>
         </div>

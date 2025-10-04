@@ -437,11 +437,31 @@ export const ARMicrobeCanvas = ({
 
       // Update sensorDataRef with latest sensor values - PRIORITIZE DeviceOrientation
       if (sensorMode === 'orientation' && orientation.current.alpha !== null && orientation.current.beta !== null) {
-        sensorDataRef.current.yaw = ((orientation.current.alpha || 0) * Math.PI) / 180;
-        sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((orientation.current.beta || 0) * Math.PI) / 180));
+        const newYaw = ((orientation.current.alpha || 0) * Math.PI) / 180;
+        const newPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((orientation.current.beta || 0) * Math.PI) / 180));
+        console.log('🔄 UPDATING sensorDataRef from ORIENTATION:', {
+          alpha: orientation.current.alpha,
+          beta: orientation.current.beta,
+          oldYaw: sensorDataRef.current.yaw,
+          newYaw,
+          oldPitch: sensorDataRef.current.pitch,
+          newPitch
+        });
+        sensorDataRef.current.yaw = newYaw;
+        sensorDataRef.current.pitch = newPitch;
       } else if (sensorMode === 'gyroscope' && gyro.current.alpha !== null && gyro.current.beta !== null) {
-        sensorDataRef.current.yaw = ((gyro.current.alpha || 0) * Math.PI) / 180;
-        sensorDataRef.current.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((gyro.current.beta || 0) * Math.PI) / 180));
+        const newYaw = ((gyro.current.alpha || 0) * Math.PI) / 180;
+        const newPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ((gyro.current.beta || 0) * Math.PI) / 180));
+        console.log('🔄 UPDATING sensorDataRef from GYROSCOPE:', {
+          alpha: gyro.current.alpha,
+          beta: gyro.current.beta,
+          oldYaw: sensorDataRef.current.yaw,
+          newYaw,
+          oldPitch: sensorDataRef.current.pitch,
+          newPitch
+        });
+        sensorDataRef.current.yaw = newYaw;
+        sensorDataRef.current.pitch = newPitch;
       }
 
       // Camera control - use sensor data from ref for consistency
