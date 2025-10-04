@@ -385,6 +385,24 @@ export const ARMicrobeCanvas = ({
     return () => clearInterval(updateInterval);
   }, [isPaused, onLifeLost, cameraWorldPos]);
 
+  // Set canvas dimensions IMMEDIATELY on mount and handle resize
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const updateCanvasSize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      console.log('📐 Canvas resized to:', canvas.width, 'x', canvas.height);
+    };
+
+    // Set immediately
+    updateCanvasSize();
+
+    // Handle window resize
+    window.addEventListener('resize', updateCanvasSize);
+    return () => window.removeEventListener('resize', updateCanvasSize);
+  }, []);
 
   // Game loop
   useEffect(() => {
