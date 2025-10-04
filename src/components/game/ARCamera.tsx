@@ -70,10 +70,10 @@ export const ARCamera = ({ onStreamReady, children }: ARCameraProps) => {
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-black">
-      {/* Video feed - hidden but playing */}
+      {/* FIX #4: Video feed with lower z-index to not block canvas touches */}
       <video
         ref={videoRef}
-        className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+        className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0"
         autoPlay
         playsInline
         muted

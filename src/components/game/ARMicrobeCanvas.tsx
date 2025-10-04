@@ -152,16 +152,16 @@ export const ARMicrobeCanvas = ({
       size = 30;
     }
 
-    // Spawn microbes biased toward camera's current view (within ±90° of yaw)
-    const angleOffset = (Math.random() - 0.5) * Math.PI; // ±90° from camera direction
+    // FIX #1: Spawn microbes in front hemisphere only (±60° from camera direction)
+    const angleOffset = (Math.random() - 0.5) * (Math.PI / 1.5); // ±60° from camera
     const worldAngle = cameraYaw + angleOffset;
-    const elevation = (Math.random() - 0.5) * Math.PI; // Full 180° vertical
-    const distance = 20 + Math.random() * 200; // Spawn 20-220 units away
+    const elevation = (Math.random() - 0.5) * (Math.PI / 3); // ±30° vertical
+    const distance = 80 + Math.random() * 140; // Spawn 80-220 units away
 
-    // Convert to world coordinates (biased toward camera's front hemisphere)
+    // Convert to world coordinates - ensure Z is ALWAYS negative (in front)
     const worldX = Math.sin(worldAngle) * Math.cos(elevation) * distance;
-    const worldY = Math.sin(elevation) * distance;
-    const worldZ = -Math.cos(worldAngle) * Math.cos(elevation) * distance;
+    const worldY = Math.sin(elevation) * distance * 0.5; // Reduced vertical spread
+    const worldZ = -Math.abs(Math.cos(worldAngle) * Math.cos(elevation) * distance); // Force negative
 
     const microbe: Microbe = {
       id: `microbe-${Date.now()}-${Math.random()}`,
@@ -178,6 +178,8 @@ export const ARMicrobeCanvas = ({
       opacity: 1,
       wobble: 0,
     };
+
+    console.log(`🎯 SPAWNED: id=${microbe.id.slice(-4)}, type=${type}, worldPos=(${worldX.toFixed(1)}, ${worldY.toFixed(1)}, ${worldZ.toFixed(1)}), distance=${distance.toFixed(1)}`);
 
     setMicrobes((prev) => [...prev, microbe]);
   }, []);
@@ -525,8 +527,9 @@ export const ARMicrobeCanvas = ({
         const scale = 300 / Math.max(0.1, depth);
         const size = microbe.size * scale;
 
-        // Only render microbes in FRONT of camera (negative Z = in front)
-        if (finalZ < 0) {
+        // FIX #2: Only render microbes clearly in front of camera with better distance check
+        if (finalZ < -1 && depth > 0.5 && depth < 300) {
+          console.log(`✅ RENDERING: id=${microbe.id.slice(-4)}, screen=(${screenX.toFixed(0)}, ${screenY.toFixed(0)}), depth=${depth.toFixed(1)}, finalZ=${finalZ.toFixed(1)}`);
           // Debug: Draw hit detection circle around microbe
           const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
           if (distanceFromCrosshair < 150) {
@@ -561,6 +564,11 @@ export const ARMicrobeCanvas = ({
           }
 
           ctx.restore();
+        } else {
+          // FIX #5: Log skipped microbes
+          if (now % 3000 < 16) { // Log every 3 seconds
+            console.log(`❌ SKIPPED: id=${microbe.id.slice(-4)}, finalZ=${finalZ.toFixed(1)}, depth=${depth.toFixed(1)}`);
+          }
         }
       });
 
@@ -697,9 +705,9 @@ export const ARMicrobeCanvas = ({
   }, [isPaused]); // ONLY isPaused - everything else uses refs or fresh reads
 
   const handleTap = useCallback(
-    (e: React.TouchEvent<HTMLCanvasElement>) => {
+    (e: React.TouchEvent<HTMLCanvasElement> | React.MouseEvent<HTMLCanvasElement>) => {
       e.preventDefault(); // FIX #6: Prevent default touch behavior
-      console.log('🔴 handleTap CALLED! Touch event received');
+      console.log('🖐️ TOUCH/CLICK DETECTED at canvas!', e.type);
       
       if (isPaused || !canvasRef.current) {
         console.log('🔴 EARLY RETURN:', isPaused ? 'PAUSED' : 'NO CANVAS');
@@ -937,11 +945,12 @@ export const ARMicrobeCanvas = ({
 
   return (
     <>
-      {/* FIX #6: Canvas with touch-action: none and onTouchStart */}
+      {/* FIX #3 & #6: Canvas with higher z-index, pointer-events-auto, and both touch/click handlers */}
       <canvas
         ref={canvasRef}
         onTouchStart={handleTap}
-        className="absolute inset-0 z-10"
+        onClick={handleTap}
+        className="absolute inset-0 z-30 pointer-events-auto"
         style={{ touchAction: "none" }}
       />
 
