@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 
 interface GyroscopeState {
   alpha: number | null; // Calculated from gyroscope
@@ -10,7 +10,7 @@ interface GyroscopeState {
 }
 
 export const useGyroscope = () => {
-  const [gyroState, setGyroState] = useState<GyroscopeState>({
+  const gyroStateRef = useRef<GyroscopeState>({
     alpha: null,
     beta: null,
     gamma: null,
@@ -101,14 +101,14 @@ export const useGyroscope = () => {
         // Clamp gamma to -90 to 90
         accumulatedGamma = Math.max(-90, Math.min(90, accumulatedGamma));
 
-        setGyroState({
+        gyroStateRef.current = {
           alpha: accumulatedAlpha,
           beta: accumulatedBeta,
           gamma: accumulatedGamma,
           rotationRateAlpha,
           rotationRateBeta,
           rotationRateGamma,
-        });
+        };
       });
 
       gyroscope.addEventListener('error', (event: any) => {
@@ -136,7 +136,7 @@ export const useGyroscope = () => {
   }, [permissionGranted, sensorAvailable]);
 
   return {
-    ...gyroState,
+    gyroStateRef,
     permissionGranted,
     sensorAvailable,
     requestPermission,

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 
 interface DeviceOrientationState {
   alpha: number | null; // Rotation around z-axis (0-360)
@@ -7,7 +7,7 @@ interface DeviceOrientationState {
 }
 
 export const useDeviceOrientation = () => {
-  const [orientation, setOrientation] = useState<DeviceOrientationState>({
+  const orientationRef = useRef<DeviceOrientationState>({
     alpha: null,
     beta: null,
     gamma: null,
@@ -70,11 +70,11 @@ export const useDeviceOrientation = () => {
       // Check if we're getting actual data (not null)
       const hasData = event.alpha !== null || event.beta !== null || event.gamma !== null;
       
-      setOrientation({
+      orientationRef.current = {
         alpha: event.alpha,
         beta: event.beta,
         gamma: event.gamma,
-      });
+      };
       
       // Log first event
       if (wasFirstEvent) {
@@ -122,7 +122,7 @@ export const useDeviceOrientation = () => {
   }, [permissionGranted]);
 
   return {
-    ...orientation,
+    orientationRef,
     permissionGranted,
     requestPermission,
   };
