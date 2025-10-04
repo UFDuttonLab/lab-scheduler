@@ -284,7 +284,7 @@ export const ARMicrobeCanvas = ({
             const viewX = rotX;
 
             // Only render if in front of camera (negative Z in view space)
-            if (viewZ >= 0) {
+            if (viewZ > 0) {
               // Keep microbe but don't render
               return { ...microbe, distance: newDistance, wobble: newWobble, opacity };
             }
