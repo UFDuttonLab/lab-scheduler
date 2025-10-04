@@ -148,7 +148,7 @@ export const ARMicrobeCanvas = ({
     const angleOffset = (Math.random() - 0.5) * Math.PI; // ±90° from camera direction
     const worldAngle = cameraYaw + angleOffset;
     const elevation = (Math.random() - 0.5) * Math.PI; // Full 180° vertical
-    const distance = 80 + Math.random() * 40; // Spawn 80-120 units away
+    const distance = 20 + Math.random() * 200; // Spawn 20-220 units away
 
     // Convert to world coordinates (biased toward camera's front hemisphere)
     const worldX = Math.sin(worldAngle) * Math.cos(elevation) * distance;
@@ -480,8 +480,8 @@ export const ARMicrobeCanvas = ({
         // Add wobble for realism
         const wobbleOffset = Math.sin(microbe.wobble) * 0.05;
 
-        // Project to screen with perspective using absolute depth
-        const depth = Math.abs(finalZ);
+        // Project to screen with perspective (use finalZ directly, positive = in front)
+        const depth = finalZ;
         const fov = 1200; // Narrower FOV for better sizing
         const screenX = centerX + (rotatedX / depth) * fov + wobbleOffset * 50;
         const screenY = centerY + (finalY / depth) * fov;
@@ -490,8 +490,8 @@ export const ARMicrobeCanvas = ({
         const scale = 300 / depth;
         const size = microbe.size * scale;
 
-        // Render microbes in any direction within visible range (5-130 units)
-        if (depth >= 5 && depth <= 130) {
+        // Only render microbes in FRONT of camera (any depth)
+        if (finalZ > 0) {
           // Debug: Draw hit detection circle around microbe
           const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
           if (distanceFromCrosshair < 150) {
@@ -734,10 +734,10 @@ export const ARMicrobeCanvas = ({
           const finalY = viewY * cosPitch - rotatedZ * sinPitch;
           const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
 
-          // Skip if out of visible range (must match rendering range 5-130 units)
-          const depth = Math.abs(finalZ);
-          if (depth < 5 || depth > 130) {
-            console.log('⏭️ Skipping microbe - out of visible range, depth:', depth.toFixed(1));
+          // Use finalZ directly (positive = in front, negative = behind)
+          const depth = finalZ;
+          if (finalZ <= 0) {
+            console.log('⏭️ Skipping microbe - behind camera, finalZ:', finalZ.toFixed(1));
             return;
           }
           
