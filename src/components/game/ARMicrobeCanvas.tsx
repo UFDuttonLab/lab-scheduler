@@ -708,7 +708,8 @@ export const ARMicrobeCanvas = ({
 
       // Use setMicrobes with callback to get FRESH microbe data
       setMicrobes((currentMicrobes) => {
-        console.log('🔴 CHECKING', currentMicrobes.length, 'microbes - Array:', currentMicrobes);
+        console.log('🔴 TAP DETECTED! Checking', currentMicrobes.length, 'microbes for hits...');
+        console.log('📐 Camera state - Yaw:', (cameraYaw * 180 / Math.PI).toFixed(1), '° Pitch:', (cameraPitch * 180 / Math.PI).toFixed(1), '° Crosshair at center:', centerX, centerY);
         
         let hitMicrobe = false;
         let closestMicrobe: { microbe: Microbe; screenX: number; screenY: number; size: number } | null = null;
@@ -735,10 +736,12 @@ export const ARMicrobeCanvas = ({
 
           // Skip if out of visible range (must match rendering range 5-130 units)
           const depth = Math.abs(finalZ);
-          if (depth < 0.1 || depth > 130) {
-            console.log('⏭️ Skipping microbe - out of range, depth:', depth.toFixed(1));
+          if (depth < 5 || depth > 130) {
+            console.log('⏭️ Skipping microbe - out of visible range, depth:', depth.toFixed(1));
             return;
           }
+          
+          console.log('✅ Microbe IN RANGE - Type:', microbe.type, 'Depth:', depth.toFixed(1), 'World pos:', microbe.worldX.toFixed(1), microbe.worldY.toFixed(1), microbe.worldZ.toFixed(1));
 
           const wobbleOffset = Math.sin(microbe.wobble) * 0.05;
           const fov = 1200; // Match rendering FOV
