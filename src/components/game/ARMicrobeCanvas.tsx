@@ -71,7 +71,7 @@ export const ARMicrobeCanvas = ({
   const [touchRotation, setTouchRotation] = useState({ yaw: 0, pitch: 0 });
   const [lastTouch, setLastTouch] = useState<{ x: number; y: number } | null>(null);
   const [useTouchMode, setUseTouchMode] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
+  const [showDebug] = useState(true); // Enabled for debugging
   const [sensorMode, setSensorMode] = useState<'gyroscope' | 'orientation' | 'touch'>('touch');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [cameraWorldPos] = useState({ x: 0, y: 0, z: 0 }); // Camera stays at origin
@@ -284,6 +284,10 @@ export const ARMicrobeCanvas = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // Set canvas size to match window
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -420,8 +424,8 @@ export const ARMicrobeCanvas = ({
             const finalY = viewY * cosPitch - rotatedZ * sinPitch;
             const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
 
-            // Skip rendering if behind camera (finalZ <= 0 means behind with negative Z forward)
-            if (finalZ <= 0) {
+            // Skip rendering if behind camera (negative Z = in front, positive Z = behind)
+            if (finalZ >= 0) {
               if (showDebug && Math.random() < 0.01) {
                 console.log('❌ Microbe behind camera:', {
                   id: microbe.id,
@@ -432,28 +436,29 @@ export const ARMicrobeCanvas = ({
               return null;
             }
             
+            // Add wobble for realism
+            const wobbleOffset = Math.sin(newWobble) * 0.05;
+
+            // Project to screen with perspective using absolute depth
+            const depth = Math.abs(finalZ);
+            const fov = 800;
+            const screenX = centerX + (rotatedX / depth) * fov + wobbleOffset * 50;
+            const screenY = centerY + (finalY / depth) * fov;
+            
+            // Size based on camera-relative depth
+            const scale = 1000 / depth;
+            const size = microbe.size * scale;
+
             // Debug successful render (log occasionally)
             if (Math.random() < 0.05) {
               console.log('✅ Rendering microbe:', {
                 id: microbe.id,
                 worldPos: `(${newWorldX.toFixed(2)}, ${newWorldY.toFixed(2)}, ${newWorldZ.toFixed(2)})`,
                 finalZ: finalZ.toFixed(2),
-                screenPos: `(${(centerX + (rotatedX / finalZ) * 800).toFixed(0)}, ${(centerY + (finalY / finalZ) * 800).toFixed(0)})`
+                depth: depth.toFixed(2),
+                screenPos: `(${screenX.toFixed(0)}, ${screenY.toFixed(0)})`
               });
             }
-
-            // Add wobble for realism
-            const wobbleOffset = Math.sin(newWobble) * 0.05;
-
-            // Project to screen with perspective
-            const fov = 800;
-            const screenX = centerX + (rotatedX / finalZ) * fov + wobbleOffset * 50;
-            const screenY = centerY + (finalY / finalZ) * fov;
-            
-            // Size based on distance
-            const newDistance = Math.sqrt(newWorldX * newWorldX + newWorldY * newWorldY + newWorldZ * newWorldZ);
-            const scale = 3 / newDistance;
-            const size = microbe.size * scale;
 
             // Render microbe
             ctx.save();
@@ -613,10 +618,20 @@ export const ARMicrobeCanvas = ({
 
     animationFrameRef.current = requestAnimationFrame(render);
 
+    // Handle window resize
+    const handleResize = () => {
+      if (canvas) {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+    };
+    window.addEventListener('resize', handleResize);
+
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
+      window.removeEventListener('resize', handleResize);
     };
   }, [microbes, powerUps, particles, lives, isPaused, combo, activePowerUp, useTouchMode, touchRotation, sensorMode, gyro, orientation, showDebug, score, onLifeLost, onScoreChange, onComboChange, onMicrobeEliminated]);
 

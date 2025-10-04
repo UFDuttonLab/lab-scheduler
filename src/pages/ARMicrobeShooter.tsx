@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useDeviceMotion } from "@/hooks/useDeviceMotion";
 import { useDeviceOrientation } from "@/hooks/useDeviceOrientation";
+import { useGyroscope } from "@/hooks/useGyroscope";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 type GameState = "menu" | "playing" | "paused" | "gameover";
@@ -31,16 +32,18 @@ const ARMicrobeShooter = () => {
   const gameStartTimeRef = useRef<number>(0);
   const { requestPermission: requestMotionPermission } = useDeviceMotion();
   const { requestPermission: requestOrientationPermission } = useDeviceOrientation();
+  const gyro = useGyroscope();
 
   const handleRequestPermissions = async () => {
     setPermissionStatus("Requesting permissions...");
     
     const motionGranted = await requestMotionPermission();
     const orientationGranted = await requestOrientationPermission();
+    const gyroGranted = await gyro.requestPermission();
 
-    console.log('🔐 Permission results:', { motionGranted, orientationGranted });
+    console.log('🔐 Permission results:', { motionGranted, orientationGranted, gyroGranted });
 
-    if (motionGranted || orientationGranted) {
+    if (motionGranted || orientationGranted || gyroGranted) {
       setPermissionsGranted(true);
       setPermissionStatus("✅ Permissions granted! Ready to play.");
       toast.success("Sensors ready!");
