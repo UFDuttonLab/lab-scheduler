@@ -21,14 +21,7 @@ export const MobileNavigation = () => {
     { path: "/help", label: "Help", icon: HelpCircle },
   ];
 
-  // Add AR Microbe game if unlocked
-  if (isARMicrobeUnlocked) {
-    baseNavItems.splice(3, 0, { 
-      path: "/ar-microbe-shooter", 
-      label: "AR Game", 
-      icon: (() => <span className="text-xl">🦠</span>) as any
-    });
-  }
+  // AR Microbe game is only accessible from Schedule page after shake unlock
 
   const navItems = baseNavItems.filter(item => !item.requirePermission || permissions[item.requirePermission as keyof typeof permissions]);
 

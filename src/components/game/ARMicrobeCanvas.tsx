@@ -148,7 +148,7 @@ export const ARMicrobeCanvas = ({
     // Generate spawn position in full 360° sphere around player (requires looking around)
     const relativeAngle = Math.random() * Math.PI * 2; // Full 360° horizontal
     const elevation = (Math.random() - 0.5) * Math.PI; // Full 180° vertical
-    const distance = 40 + Math.random() * 20; // Spawn 40-60 units away for 10-20 second approach
+    const distance = 100 + Math.random() * 40; // Spawn 100-140 units away for 50-70 second approach at speed 2
 
     // Convert to world coordinates (spawn in front of where camera is currently pointing)
     const worldAngle = cameraYaw + relativeAngle;
@@ -418,12 +418,12 @@ export const ARMicrobeCanvas = ({
       if (sensorMode === 'gyroscope' && gyro.alpha !== null) {
         // Use Gyroscope API (best for Android)
         cameraYaw = (gyro.gamma * Math.PI) / 180; // Use gamma for left/right tilt
-        cameraPitch = Math.max(-Math.PI/4, Math.min(Math.PI/4, -((gyro.beta || 0) - 90) * Math.PI / 180)); // Inverted pitch
+        cameraPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, (gyro.beta || 0) * Math.PI / 180)); // Direct beta for pitch
         activeSensorData = { type: 'Gyroscope', alpha: gyro.alpha, beta: gyro.beta, gamma: gyro.gamma };
       } else if (sensorMode === 'orientation' && orientation.alpha !== null) {
         // Use DeviceOrientation
         cameraYaw = (orientation.gamma * Math.PI) / 180; // Use gamma for left/right tilt
-        cameraPitch = Math.max(-Math.PI/4, Math.min(Math.PI/4, -((orientation.beta || 0) - 90) * Math.PI / 180)); // Inverted pitch
+        cameraPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, (orientation.beta || 0) * Math.PI / 180)); // Direct beta for pitch
         activeSensorData = { type: 'DeviceOrientation', alpha: orientation.alpha, beta: orientation.beta, gamma: orientation.gamma };
       } else {
         // Fallback to touch mode
@@ -473,8 +473,8 @@ export const ARMicrobeCanvas = ({
         const scale = 300 / depth;
         const size = microbe.size * scale;
 
-        // Render microbes in any direction within visible range (5-70 units)
-        if (depth >= 5 && depth <= 70) {
+        // Render microbes in any direction within visible range (10-150 units for far spawns)
+        if (depth >= 10 && depth <= 150) {
           // Render microbe
           ctx.save();
           ctx.globalAlpha = microbe.opacity;
@@ -730,9 +730,9 @@ export const ARMicrobeCanvas = ({
         const finalY = viewY * cosPitch - rotatedZ * sinPitch;
         const finalZ = rotatedZ * cosPitch + viewY * sinPitch;
 
-        // Skip if out of visible range (must match rendering range 5-70 units)
+        // Skip if out of visible range (must match rendering range 10-150 units)
         const depth = Math.abs(finalZ);
-        if (depth < 5 || depth > 70) {
+        if (depth < 10 || depth > 150) {
           console.log('⏭️ Skipping microbe - out of range, depth:', depth.toFixed(1));
           return;
         }
