@@ -413,12 +413,15 @@ const ARMicrobeShooter = () => {
         )}
       </div>
 
-      {/* Controls - PHASE 2 FIX: Higher z-index than canvas to receive clicks */}
-      <div className="absolute bottom-4 right-4 flex gap-2 pointer-events-auto z-40">
-        <Button onClick={pauseGame} size="icon" variant="secondary" className="rounded-full h-12 w-12">
-          <Pause className="h-6 w-6" />
-        </Button>
-      </div>
+      {/* Controls - TOUCH FIX: Precise positioning with z-60 (above canvas z-50) */}
+      <Button 
+        onClick={pauseGame} 
+        size="icon" 
+        variant="secondary" 
+        className="absolute bottom-4 right-4 rounded-full h-12 w-12 pointer-events-auto z-60"
+      >
+        <Pause className="h-6 w-6" />
+      </Button>
 
     </ARCamera>
   );
