@@ -65,6 +65,7 @@ export const ARMicrobeCanvas = ({
   const [microbes, setMicrobes] = useState<Microbe[]>([]);
   const [powerUps, setPowerUps] = useState<PowerUpItem[]>([]);
   const particlesRef = useRef<Particle[]>([]);
+  const microbesRef = useRef<Microbe[]>([]);
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
   const [activePowerUp, setActivePowerUp] = useState<{ type: string; endTime: number } | null>(null);
@@ -260,6 +261,11 @@ export const ARMicrobeCanvas = ({
     microbeCountRef.current = microbes.length;
   }, [microbes.length]);
 
+  // Update microbesRef when microbes state changes (fix stale closure)
+  useEffect(() => {
+    microbesRef.current = microbes;
+  }, [microbes]);
+
   // Spawn logic - stable interval that doesn't recreate constantly
   useEffect(() => {
     if (isPaused || !sensorMode) return;
@@ -441,11 +447,11 @@ export const ARMicrobeCanvas = ({
 
       // Render loop verification logging (reduced frequency)
       if (now % 3000 < 16) { // Log every 3 seconds
-        console.log('🎨 Render loop active - Microbes:', microbes.length, 'Visible on canvas');
+        console.log('🎨 Render loop active - Microbes:', microbesRef.current.length, 'Visible on canvas');
       }
 
       // Render microbes using simple screen-relative positioning
-      microbes.forEach((microbe) => {
+      microbesRef.current.forEach((microbe) => {
         // Simple screen positioning - always on screen!
         const wobbleOffset = Math.sin(microbe.wobble) * 5; // Wobble in pixels
         const screenX = centerX + microbe.screenOffsetX + wobbleOffset;
@@ -483,7 +489,7 @@ export const ARMicrobeCanvas = ({
       // Draw microbe counter
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 20px monospace';
-      ctx.fillText(`Microbes: ${microbes.length}`, 10, 30);
+      ctx.fillText(`Microbes: ${microbesRef.current.length}`, 10, 30);
 
       // Update and render power-ups (keep simple fixed positioning for now)
       setPowerUps((prev) => {
@@ -597,9 +603,9 @@ export const ARMicrobeCanvas = ({
           ctx.fillText(`α=${activeSensorData.alpha?.toFixed(1) ?? 'null'} β=${activeSensorData.beta?.toFixed(1) ?? 'null'} γ=${activeSensorData.gamma?.toFixed(1) ?? 'null'}`, 20, 75);
         }
         
-        const visibleCount = microbes.length; // All microbes are visible in screen-space model
+        const visibleCount = microbesRef.current.length; // All microbes are visible in screen-space model
         
-        ctx.fillText(`Microbes: ${microbes.length} (${visibleCount} visible)`, 20, 95);
+        ctx.fillText(`Microbes: ${microbesRef.current.length} (${visibleCount} visible)`, 20, 95);
         ctx.fillText(`Gyro: ${gyro.sensorAvailable ? '✅' : '❌'} | Orient: ${orientation.permissionGranted ? '✅' : '❌'}`, 20, 115);
         ctx.fillText(`Score: ${score} | Combo: ${combo}x`, 20, 135);
         ctx.fillText(`Lives: ${lives}`, 20, 155);
@@ -847,7 +853,7 @@ export const ARMicrobeCanvas = ({
 
       {/* Microbe Counter HUD - Always visible */}
       <div className="absolute top-4 left-4 bg-black/60 text-white px-4 py-2 rounded-lg text-sm font-bold z-40 pointer-events-none">
-        🦠 Microbes Active: {microbes.length}
+        🦠 Microbes Active: {microbesRef.current.length}
       </div>
       
       {activePowerUp && <PowerUp type={activePowerUp.type} endTime={activePowerUp.endTime} />}
