@@ -165,36 +165,39 @@ export const ARMicrobeCanvas = ({
     let type: Microbe["type"] = "basic";
     let health = 1;
     let points = 10;
-    let speed = 0.04 + (wave * 0.005);
-    let size = 40;
+    // UPDATED: Increased base speed and wave scaling
+    let speed = 0.06 + (wave * 0.008);
+    // UPDATED: Reduced base size
+    let size = 30;
 
     if (wave > 5 && rand < 5) {
       type = "boss";
       health = 8 + wave;
       points = 250;
-      speed = 0.04 + (wave * 0.003);
-      size = 80;
+      speed = 0.05 + (wave * 0.006);
+      size = 60;
     } else if (rand < 5) {
       type = "golden";
       health = 1;
       points = 100;
-      speed = 0.08 + (wave * 0.005);
-      size = 35;
+      speed = 0.10 + (wave * 0.01);
+      size = 28;
     } else if (wave > 3 && rand < 20) {
       type = "tank";
       health = 2 + Math.floor(wave / 2);
       points = 50;
-      speed = 0.03 + (wave * 0.003);
-      size = 60;
+      speed = 0.05 + (wave * 0.006);
+      size = 45;
     } else if (wave > 2 && rand < 35) {
       type = "fast";
       health = 1;
       points = 25;
-      speed = 0.06 + (wave * 0.005);
-      size = 30;
+      speed = 0.09 + (wave * 0.01);
+      size = 25;
     }
 
-    const spawnDistance = 8 + Math.random() * 4;
+    // UPDATED: Spawn much further away (20-30 units instead of 8-12)
+    const spawnDistance = 20 + Math.random() * 10;
     const angleOffset = (Math.random() - 0.5) * (Math.PI / 3);
     const heightOffset = (Math.random() - 0.5) * 3;
     
@@ -309,7 +312,6 @@ export const ARMicrobeCanvas = ({
     }
   };
 
-  // FIXED: Pitch calculation - subtract 90° so upright phone = 0°
   useEffect(() => {
     if (orientation.alpha !== null && orientation.beta !== null) {
       setSensorMode('orientation');
@@ -328,7 +330,6 @@ export const ARMicrobeCanvas = ({
     }
   }, [gyro.permissionGranted, gyro.sensorAvailable, gyro.alpha, gyro.beta, orientation.alpha, orientation.beta]);
 
-  // FIXED: Pitch calculation - subtract 90° so upright phone = 0°
   useEffect(() => {
     if (sensorMode === 'orientation' && orientation.alpha !== null && orientation.beta !== null) {
       const adjustedBeta = (orientation.beta || 0) - 90;
@@ -373,10 +374,14 @@ export const ARMicrobeCanvas = ({
     };
   }, [waveActive, waveMicrobesSpawned, microbes.length, isPaused, currentWave, startNewWave]);
 
+  // UPDATED: Fixed wave timing - Wave 1 = 20s, Wave 2 = 18s, Wave 3 = 16s, etc.
   useEffect(() => {
     if (isPaused || !sensorMode || !waveActive) return;
     const targetMicrobes = 5 + (currentWave * 3);
-    const spawnInterval = Math.max(1000, 2000 - (currentWave * 100));
+    // Wave duration: 22 - (wave * 2) seconds, minimum 10 seconds
+    const waveDuration = Math.max(10, 22 - (currentWave * 2));
+    // Spawn interval = wave duration / number of microbes
+    const spawnInterval = Math.floor((waveDuration * 1000) / targetMicrobes);
     
     const interval = setInterval(() => {
       if (waveMicrobesSpawnedRef.current < targetMicrobes) {
@@ -429,7 +434,7 @@ export const ARMicrobeCanvas = ({
         const newWobble = microbe.wobble + 0.02;
         const distance = Math.sqrt(microbe.x ** 2 + microbe.y ** 2 + microbe.z ** 2);
         
-        if (distance < 0.5 || age > 25) {
+        if (distance < 0.5 || age > 30) {
           onLifeLost();
           return null;
         }
@@ -464,7 +469,6 @@ export const ARMicrobeCanvas = ({
     return () => window.removeEventListener('resize', updateSize);
   }, []);
 
-  // FIXED: Removed extra dependencies that caused render loop to restart
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -490,6 +494,7 @@ export const ARMicrobeCanvas = ({
         
         const screenX = projection.screenX + Math.sin(microbe.wobble) * 5;
         const screenY = projection.screenY;
+        // Size scales with distance - closer = bigger
         const size = microbe.size * Math.min(300 / projection.distance, 8);
         const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
         
@@ -640,7 +645,7 @@ export const ARMicrobeCanvas = ({
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [isPaused]); // FIXED: Only isPaused dependency
+  }, [isPaused]);
 
   const handleTap = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
     e.preventDefault();
