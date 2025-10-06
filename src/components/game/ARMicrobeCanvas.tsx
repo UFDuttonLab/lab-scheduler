@@ -19,9 +19,8 @@ interface Microbe {
   spawnTime: number;
   opacity: number;
   wobble: number;
-  // NEW: For organic shape generation
-  shapePoints: { angle: number; radius: number }[];
-  tentacles: { angle: number; length: number; wobble: number }[];
+  shapePoints: number[];
+  tentacleAngles: number[];
 }
 
 interface PowerUpItem {
@@ -93,32 +92,6 @@ const projectToScreen = (
   return { screenX, screenY, isVisible, distance, angle };
 };
 
-// NEW: Generate organic microbe shape
-const generateMicrobeShape = (type: string) => {
-  const numPoints = type === "boss" ? 12 : type === "tank" ? 10 : 8;
-  const shapePoints = [];
-  
-  for (let i = 0; i < numPoints; i++) {
-    const angle = (i / numPoints) * Math.PI * 2;
-    const randomness = type === "golden" ? 0.15 : type === "fast" ? 0.25 : 0.2;
-    const radius = 0.8 + (Math.random() - 0.5) * randomness;
-    shapePoints.push({ angle, radius });
-  }
-  
-  // Generate tentacles/cilia
-  const numTentacles = type === "boss" ? 16 : type === "tank" ? 8 : type === "fast" ? 12 : 10;
-  const tentacles = [];
-  for (let i = 0; i < numTentacles; i++) {
-    tentacles.push({
-      angle: (i / numTentacles) * Math.PI * 2 + (Math.random() - 0.5) * 0.3,
-      length: 0.3 + Math.random() * 0.3,
-      wobble: Math.random() * Math.PI * 2
-    });
-  }
-  
-  return { shapePoints, tentacles };
-};
-
 export const ARMicrobeCanvas = ({
   onScoreChange,
   onLifeLost,
@@ -161,6 +134,10 @@ export const ARMicrobeCanvas = ({
   const [browserWarning, setBrowserWarning] = useState("");
 
   useEffect(() => {
+    console.log("🔬 AR Microbe Shooter - Organic Graphics Version Loaded");
+  }, []);
+
+  useEffect(() => {
     const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
                 (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     setIsIOS(iOS);
@@ -193,7 +170,6 @@ export const ARMicrobeCanvas = ({
     let type: Microbe["type"] = "basic";
     let health = 1;
     let points = 10;
-    // UPDATED: Speed for 10 second approach time
     let speed = 0.042 + (wave * 0.005);
     let size = 30;
 
@@ -232,8 +208,22 @@ export const ARMicrobeCanvas = ({
     const z = -Math.cos(spawnYaw) * spawnDistance;
     const y = heightOffset;
 
-    // NEW: Generate organic shape
-    const { shapePoints, tentacles } = generateMicrobeShape(type);
+    // Generate irregular blob shape (8-12 points with random radii)
+    const numPoints = 8 + Math.floor(Math.random() * 5);
+    const shapePoints = [];
+    for (let i = 0; i < numPoints; i++) {
+      const radius = 0.7 + Math.random() * 0.4; // 0.7 to 1.1
+      shapePoints.push(radius);
+    }
+
+    // Generate tentacle angles
+    const numTentacles = type === "boss" ? 16 : type === "fast" ? 12 : 10;
+    const tentacleAngles = [];
+    for (let i = 0; i < numTentacles; i++) {
+      tentacleAngles.push((i / numTentacles) * Math.PI * 2);
+    }
+
+    console.log(`🦠 Spawning ${type} microbe with ${numTentacles} tentacles`);
 
     setMicrobes((prev) => [...prev, {
       id: `microbe-${Date.now()}-${Math.random()}`,
@@ -241,7 +231,7 @@ export const ARMicrobeCanvas = ({
       size, speed, points, spawnTime: Date.now(),
       opacity: 1, wobble: 0,
       shapePoints,
-      tentacles,
+      tentacleAngles,
     }]);
     setWaveMicrobesSpawned(prev => {
       const newCount = prev + 1;
@@ -263,9 +253,8 @@ export const ARMicrobeCanvas = ({
     setPowerUps((prev) => [...prev, { id: `powerup-${Date.now()}`, type, x, y, z, spawnTime: Date.now() }]);
   }, []);
 
-  // NEW: Activate power-up
   const activatePowerUp = useCallback((type: PowerUpItem["type"]) => {
-    const duration = 10000; // 10 seconds
+    const duration = 10000;
     setActivePowerUp({ type, endTime: Date.now() + duration });
     activePowerUpRef.current = { type, endTime: Date.now() + duration };
     
@@ -469,25 +458,22 @@ export const ARMicrobeCanvas = ({
     return () => clearInterval(interval);
   }, [isPaused, onComboChange]);
 
-  // UPDATED: Microbes only move closer (Z axis only), stay at same X,Y
   useEffect(() => {
     if (isPaused) return;
     const interval = setInterval(() => {
       const now = Date.now();
       setMicrobes((prev) => prev.map((microbe) => {
         const age = (now - microbe.spawnTime) / 1000;
-        const newWobble = microbe.wobble + 0.02;
+        const newWobble = microbe.wobble + 0.05;
         const distance = Math.sqrt(microbe.x ** 2 + microbe.y ** 2 + microbe.z ** 2);
         
-        // UPDATED: 10 second time limit instead of 30
         if (distance < 0.5 || age > 10) {
           onLifeLost();
           return null;
         }
 
-        // UPDATED: Only move on Z axis (toward viewer), keep X and Y constant
         const moveSpeed = microbe.speed;
-        const newZ = microbe.z + moveSpeed; // Moving toward 0 (camera)
+        const newZ = microbe.z + moveSpeed;
         
         return {
           ...microbe,
@@ -500,7 +486,6 @@ export const ARMicrobeCanvas = ({
     return () => clearInterval(interval);
   }, [isPaused, onLifeLost]);
 
-  // NEW: Check for expired power-ups
   useEffect(() => {
     if (isPaused) return;
     const interval = setInterval(() => {
@@ -543,7 +528,7 @@ export const ARMicrobeCanvas = ({
       const cameraYaw = sensorDataRef.current.yaw;
       const cameraPitch = sensorDataRef.current.pitch;
 
-      // UPDATED: Draw microbes with organic shapes
+      // Draw microbes with ORGANIC BLOB SHAPES
       microbesRef.current.forEach((microbe) => {
         const projection = projectToScreen(microbe.x, microbe.y, microbe.z, cameraYaw, cameraPitch, canvas.width, canvas.height);
         if (!projection.isVisible) return;
@@ -555,78 +540,83 @@ export const ARMicrobeCanvas = ({
         const size = microbe.size * scaleFactor;
         
         const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
-        const color = getMicrobeColor(microbe.type);
+        const baseColor = getMicrobeColor(microbe.type);
+        const targetColor = distanceFromCrosshair < 150 ? '#00ff00' : baseColor;
         
-        ctx.save();
-        ctx.translate(screenX, screenY);
         ctx.globalAlpha = microbe.opacity;
         
         // Draw tentacles/cilia
-        microbe.tentacles.forEach((tentacle) => {
-          const wobbleOffset = Math.sin(microbe.wobble + tentacle.wobble) * 0.2;
-          const tentacleAngle = tentacle.angle + wobbleOffset;
-          const tentacleLength = size * tentacle.length;
+        microbe.tentacleAngles.forEach((baseAngle, i) => {
+          const wobbleOffset = Math.sin(microbe.wobble * 2 + i * 0.5) * 0.3;
+          const angle = baseAngle + wobbleOffset;
+          const length = size * (0.3 + Math.sin(microbe.wobble + i) * 0.1);
           
-          ctx.strokeStyle = color;
-          ctx.lineWidth = Math.max(1, size * 0.05);
+          const startX = screenX + Math.cos(angle) * (size * 0.4);
+          const startY = screenY + Math.sin(angle) * (size * 0.4);
+          const endX = screenX + Math.cos(angle) * (size * 0.4 + length);
+          const endY = screenY + Math.sin(angle) * (size * 0.4 + length);
+          
+          ctx.strokeStyle = baseColor;
+          ctx.lineWidth = Math.max(1, size * 0.04);
           ctx.beginPath();
-          ctx.moveTo(0, 0);
-          ctx.lineTo(
-            Math.cos(tentacleAngle) * tentacleLength,
-            Math.sin(tentacleAngle) * tentacleLength
-          );
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(endX, endY);
           ctx.stroke();
         });
         
-        // Draw blob body with irregular shape
-        ctx.fillStyle = distanceFromCrosshair < 150 ? 'rgba(0, 255, 0, 0.8)' : color;
+        // Draw irregular blob body
+        ctx.fillStyle = targetColor;
         ctx.beginPath();
-        microbe.shapePoints.forEach((point, i) => {
-          const wobbleOffset = Math.sin(microbe.wobble * 2 + i) * 0.05;
-          const radius = (size / 2) * (point.radius + wobbleOffset);
-          const x = Math.cos(point.angle) * radius;
-          const y = Math.sin(point.angle) * radius;
+        for (let i = 0; i < microbe.shapePoints.length; i++) {
+          const angle = (i / microbe.shapePoints.length) * Math.PI * 2;
+          const wobbleOffset = Math.sin(microbe.wobble * 3 + i) * 0.08;
+          const radius = (size / 2) * (microbe.shapePoints[i] + wobbleOffset);
+          const x = screenX + Math.cos(angle) * radius;
+          const y = screenY + Math.sin(angle) * radius;
           
           if (i === 0) {
             ctx.moveTo(x, y);
           } else {
             ctx.lineTo(x, y);
           }
-        });
+        }
         ctx.closePath();
         ctx.fill();
         
-        // Draw darker nucleus
-        const nucleusColor = microbe.type === "golden" ? "#d97706" : 
-                            microbe.type === "boss" ? "#6b21a8" :
-                            microbe.type === "tank" ? "#991b1b" :
-                            microbe.type === "fast" ? "#1e40af" : "#166534";
-        ctx.fillStyle = nucleusColor;
+        // Draw nucleus (darker center)
+        const nucleusColors: { [key: string]: string } = {
+          basic: "#166534",
+          fast: "#1e40af", 
+          tank: "#991b1b",
+          golden: "#d97706",
+          boss: "#6b21a8"
+        };
+        ctx.fillStyle = nucleusColors[microbe.type] || "#166534";
         ctx.beginPath();
-        ctx.arc(0, 0, size * 0.25, 0, Math.PI * 2);
+        ctx.arc(screenX, screenY, size * 0.2, 0, Math.PI * 2);
         ctx.fill();
         
-        // Draw membrane outline
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        // White outline
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        microbe.shapePoints.forEach((point, i) => {
-          const wobbleOffset = Math.sin(microbe.wobble * 2 + i) * 0.05;
-          const radius = (size / 2) * (point.radius + wobbleOffset);
-          const x = Math.cos(point.angle) * radius;
-          const y = Math.sin(point.angle) * radius;
+        for (let i = 0; i < microbe.shapePoints.length; i++) {
+          const angle = (i / microbe.shapePoints.length) * Math.PI * 2;
+          const wobbleOffset = Math.sin(microbe.wobble * 3 + i) * 0.08;
+          const radius = (size / 2) * (microbe.shapePoints[i] + wobbleOffset);
+          const x = screenX + Math.cos(angle) * radius;
+          const y = screenY + Math.sin(angle) * radius;
           
           if (i === 0) {
             ctx.moveTo(x, y);
           } else {
             ctx.lineTo(x, y);
           }
-        });
+        }
         ctx.closePath();
         ctx.stroke();
         
         ctx.globalAlpha = 1.0;
-        ctx.restore();
 
         // Health bar
         if (microbe.health < microbe.maxHealth) {
@@ -666,10 +656,10 @@ export const ARMicrobeCanvas = ({
         ctx.restore();
       });
 
-      // Radar
-      const radarSize = 120;
+      // Radar - MOVED to avoid overlap with hearts
+      const radarSize = 100;
       const radarX = canvas.width - radarSize - 20;
-      const radarY = 20;
+      const radarY = canvas.height - radarSize - 20; // BOTTOM RIGHT instead of top
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
       ctx.beginPath();
       ctx.arc(radarX + radarSize / 2, radarY + radarSize / 2, radarSize / 2, 0, Math.PI * 2);
@@ -688,18 +678,17 @@ export const ARMicrobeCanvas = ({
         const dotY = radarY + radarSize / 2 + microbe.z * radarScale;
         ctx.fillStyle = getMicrobeColor(microbe.type);
         ctx.beginPath();
-        ctx.arc(dotX, dotY, 4, 0, Math.PI * 2);
+        ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
         ctx.fill();
       });
 
-      // Power-ups
+      // Power-ups with pulse
       powerUpsRef.current.forEach((powerUp) => {
         const age = (now - powerUp.spawnTime) / 1000;
         if (age > 15) return;
         const projection = projectToScreen(powerUp.x, powerUp.y, powerUp.z, cameraYaw, cameraPitch, canvas.width, canvas.height);
         if (!projection.isVisible) return;
         
-        // Pulse effect
         const pulse = 1 + Math.sin(now / 200) * 0.2;
         ctx.font = `${40 * pulse}px Arial`;
         ctx.textAlign = "center";
@@ -769,7 +758,6 @@ export const ARMicrobeCanvas = ({
     };
   }, [isPaused]);
 
-  // UPDATED: Handle tap for both microbes AND power-ups
   const handleTap = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     if (isPaused || !canvasRef.current) return;
@@ -784,10 +772,10 @@ export const ARMicrobeCanvas = ({
     const cameraYaw = sensorDataRef.current.yaw;
     const cameraPitch = sensorDataRef.current.pitch;
 
-    // NEW: Check for power-up collection first
+    // Check power-ups first
     let powerUpCollected = false;
     setPowerUps((currentPowerUps) => {
-      let closestPowerUp: { powerUp: PowerUpItem; distance: number; projection: any } | null = null;
+      let closestPowerUp: { powerUp: PowerUpItem; distance: number } | null = null;
       let minDistance = Infinity;
 
       currentPowerUps.forEach((powerUp) => {
@@ -798,7 +786,7 @@ export const ARMicrobeCanvas = ({
         
         if (screenDistance < 100 && projection.distance < minDistance) {
           minDistance = projection.distance;
-          closestPowerUp = { powerUp, distance: projection.distance, projection };
+          closestPowerUp = { powerUp, distance: projection.distance };
         }
       });
 
@@ -806,18 +794,15 @@ export const ARMicrobeCanvas = ({
         powerUpCollected = true;
         activatePowerUp(closestPowerUp.powerUp.type);
         if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
-        
-        // Remove the collected power-up
         return currentPowerUps.filter(p => p.id !== closestPowerUp!.powerUp.id);
       }
       
       return currentPowerUps;
     });
 
-    // If power-up was collected, don't check for microbe hits
     if (powerUpCollected) return;
 
-    // Check for microbe hits
+    // Check microbes
     setMicrobes((currentMicrobes) => {
       let closestMicrobe: { microbe: Microbe; distance: number; projection: any } | null = null;
       let minDistance = Infinity;
@@ -826,13 +811,11 @@ export const ARMicrobeCanvas = ({
         const projection = projectToScreen(microbe.x, microbe.y, microbe.z, cameraYaw, cameraPitch, canvas.width, canvas.height);
         if (!projection.isVisible) return;
         
-        const screenX = projection.screenX;
-        const screenY = projection.screenY;
-        const screenDistance = Math.hypot(screenX - centerX, screenY - centerY);
+        const screenDistance = Math.hypot(projection.screenX - centerX, projection.screenY - centerY);
         
         if (screenDistance < 150 && projection.distance < minDistance) {
           minDistance = projection.distance;
-          closestMicrobe = { microbe, distance: projection.distance, projection: { screenX, screenY } };
+          closestMicrobe = { microbe, distance: projection.distance, projection: { screenX: projection.screenX, screenY: projection.screenY } };
         }
       });
 
@@ -926,12 +909,14 @@ export const ARMicrobeCanvas = ({
         style={{ width: "100%", height: "100%", touchAction: "none" }}
       />
 
-      <div className="absolute top-16 left-1/2 transform -translate-x-1/2 bg-black/60 text-white px-4 py-2 rounded-lg text-sm font-bold z-40 pointer-events-none">
-        Wave {currentWave} {!waveActive && '- Break'}
+      {/* FIXED: Moved to bottom-left to avoid score overlap */}
+      <div className="absolute bottom-32 left-4 bg-black/60 text-white px-3 py-1.5 rounded-lg text-xs font-bold z-40 pointer-events-none">
+        Microbes: {microbesRef.current.length}
       </div>
 
-      <div className="absolute top-4 left-4 bg-black/60 text-white px-3 py-1.5 rounded-lg text-xs font-bold z-40 pointer-events-none">
-        Microbes: {microbesRef.current.length}
+      {/* Wave counter stays centered */}
+      <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-black/60 text-white px-4 py-2 rounded-lg text-sm font-bold z-40 pointer-events-none">
+        Wave {currentWave} {!waveActive && '- Break'}
       </div>
 
       {showDebug && (
@@ -939,7 +924,7 @@ export const ARMicrobeCanvas = ({
           onClick={() => setShowDebug(false)}
           className="absolute bottom-4 right-4 bg-black/60 text-white px-3 py-2 rounded-lg text-xs z-40"
         >
-          Hide Debug
+          Hide
         </button>
       )}
       
