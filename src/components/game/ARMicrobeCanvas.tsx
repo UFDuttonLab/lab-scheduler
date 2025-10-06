@@ -306,18 +306,20 @@ export const ARMicrobeCanvas = ({
     return () => clearInterval(checkPowerUpSpawn);
   }, [isPaused, powerUps.length, spawnPowerUp]);
 
-  // Combo reset logic
+  // Combo reset logic - FIXED: respect pause state
   useEffect(() => {
+    if (isPaused) return;
+    
     const comboResetInterval = setInterval(() => {
       const timeSinceLastHit = Date.now() - lastComboTimeRef.current;
-      if (timeSinceLastHit > 2000 && combo > 0) {
+      if (timeSinceLastHit > 2000 && comboRef.current > 0) {
         setCombo(0);
         onComboChange(0);
       }
     }, 100);
 
     return () => clearInterval(comboResetInterval);
-  }, [combo, onComboChange]);
+  }, [isPaused, onComboChange]);
 
   // Keep combo ref in sync
   useEffect(() => {
