@@ -8,8 +8,9 @@ interface ARCameraProps {
 
 export const ARCamera = ({ onStreamReady, children }: ARCameraProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     const initCamera = async () => {
@@ -24,12 +25,14 @@ export const ARCamera = ({ onStreamReady, children }: ARCameraProps) => {
           audio: false,
         });
 
-        setStream(mediaStream);
+        streamRef.current = mediaStream;
 
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
-          videoRef.current.play();
+          await videoRef.current.play();
         }
+
+        setIsReady(true);
 
         if (onStreamReady) {
           onStreamReady(mediaStream);
@@ -47,12 +50,13 @@ export const ARCamera = ({ onStreamReady, children }: ARCameraProps) => {
     initCamera();
 
     return () => {
-      // Clean up camera stream
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
+      // FIXED: Clean up camera stream using ref
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
       }
     };
-  }, []);
+  }, [onStreamReady]);
 
   if (error) {
     return (
@@ -70,7 +74,7 @@ export const ARCamera = ({ onStreamReady, children }: ARCameraProps) => {
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-black">
-      {/* Video feed - hidden but playing */}
+      {/* Video feed as background */}
       <video
         ref={videoRef}
         className="absolute inset-0 w-full h-full object-cover pointer-events-none"
@@ -79,8 +83,8 @@ export const ARCamera = ({ onStreamReady, children }: ARCameraProps) => {
         muted
       />
       
-      {/* Overlay content (game canvas, UI, etc.) */}
-      {children}
+      {/* Overlay content (game canvas, UI, etc.) - only render after camera ready */}
+      {isReady && children}
     </div>
   );
 };
