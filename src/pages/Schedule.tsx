@@ -208,14 +208,16 @@ const Schedule = () => {
   const fetchBookings = async () => {
     try {
       // Fetch all data separately to avoid nested join issues
-      const [bookingsRes, equipmentRes, projectsRes, profilesRes] = await Promise.all([
+      const [bookingsRes, usageRecordsRes, equipmentRes, projectsRes, profilesRes] = await Promise.all([
         supabase.from('bookings').select('*').order('start_time'),
+        supabase.from('usage_records').select('*').order('start_time'),
         supabase.from('equipment').select('id, name'),
         supabase.from('projects').select('id, name, color'),
         supabase.from('profiles').select('id, email, full_name, spirit_animal')
       ]);
 
       if (bookingsRes.error) throw bookingsRes.error;
+      if (usageRecordsRes.error) throw usageRecordsRes.error;
 
       // Create lookup maps
       const equipmentMap = new Map(equipmentRes.data?.map(e => [e.id, e]) || []);
@@ -246,11 +248,43 @@ const Schedule = () => {
           gpuCount: booking.gpu_count || undefined,
           samplesProcessed: booking.samples_processed || undefined,
           collaborators: (booking.collaborators as string[]) || [],
-          userId: booking.user_id
+          userId: booking.user_id,
+          source: 'booking'
         };
       });
 
-      setBookings(transformedBookings);
+      // Transform usage records to booking format
+      const transformedUsageRecords: Booking[] = (usageRecordsRes.data || []).map((record: any) => {
+        const equipment = equipmentMap.get(record.equipment_id);
+        const project = record.project_id ? projectMap.get(record.project_id) : null;
+        const profile = profileMap.get(record.user_id);
+
+        return {
+          id: record.id,
+          equipmentId: record.equipment_id,
+          equipmentName: equipment?.name || 'Unknown',
+          studentName: profile?.full_name || 'Unknown',
+          studentEmail: profile?.email || 'Unknown',
+          studentSpiritAnimal: profile?.spirit_animal || undefined,
+          startTime: new Date(record.start_time),
+          endTime: new Date(record.end_time),
+          duration: Math.round((new Date(record.end_time).getTime() - new Date(record.start_time).getTime()) / 60000),
+          projectId: record.project_id || undefined,
+          projectName: project?.name || undefined,
+          purpose: record.notes || undefined,
+          status: 'completed' as const,
+          samplesProcessed: record.samples_processed || undefined,
+          collaborators: (record.collaborators as string[]) || [],
+          userId: record.user_id,
+          source: 'usage_record'
+        };
+      });
+
+      // Combine and sort by start time
+      const allBookings = [...transformedBookings, ...transformedUsageRecords]
+        .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+
+      setBookings(allBookings);
     } catch (error: any) {
       console.error("Error fetching bookings:", error);
       toast.error("Failed to load bookings");
