@@ -343,7 +343,6 @@ export const ARMicrobeCanvas = ({
   useEffect(() => { activePowerUpRef.current = activePowerUp; }, [activePowerUp]);
   useEffect(() => { waveMicrobesSpawnedRef.current = waveMicrobesSpawned; }, [waveMicrobesSpawned]);
 
-  // FIXED: Wave completion with cleanup
   useEffect(() => {
     if (isPaused || !waveActive) return;
     const allSpawned = waveMicrobesSpawned > 0 && waveMicrobesSpawned >= (5 + currentWave * 3);
@@ -402,7 +401,6 @@ export const ARMicrobeCanvas = ({
     return () => clearInterval(interval);
   }, [isPaused]);
 
-  // FIXED: Combo reset respects pause
   useEffect(() => {
     if (isPaused) return;
     
@@ -479,33 +477,45 @@ export const ARMicrobeCanvas = ({
       const cameraYaw = sensorDataRef.current.yaw;
       const cameraPitch = sensorDataRef.current.pitch;
 
+      // DEBUG VERSION - DRAW ALL MICROBES
       microbesRef.current.forEach((microbe) => {
         const projection = projectToScreen(microbe.x, microbe.y, microbe.z, cameraYaw, cameraPitch, canvas.width, canvas.height);
-        if (!projection.isVisible) return;
         
         const screenX = projection.screenX + Math.sin(microbe.wobble) * 5;
         const screenY = projection.screenY;
-        const size = microbe.size * Math.min(300 / projection.distance, 8);
-        const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
+        const size = Math.max(microbe.size * Math.min(300 / projection.distance, 8), 20);
         
+        // Shadow
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
         ctx.beginPath();
         ctx.arc(screenX, screenY, (size / 2) + 4, 0, Math.PI * 2);
         ctx.fill();
         
-        ctx.fillStyle = distanceFromCrosshair < 120 ? 'rgba(0, 255, 0, 1.0)' : 'rgba(255, 0, 0, 1.0)';
+        // Microbe - GREEN if visible, MAGENTA if "invisible"
+        ctx.fillStyle = projection.isVisible ? 'rgba(0, 255, 0, 1.0)' : 'rgba(255, 0, 255, 1.0)';
         ctx.globalAlpha = microbe.opacity;
         ctx.beginPath();
         ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = 1.0;
         
+        // Border
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
         ctx.stroke();
+        
+        // DEBUG TEXT
+        ctx.fillStyle = 'yellow';
+        ctx.font = '14px Arial';
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 3;
+        const debugText = `d:${projection.distance.toFixed(1)} v:${projection.isVisible}`;
+        ctx.strokeText(debugText, screenX - 35, screenY - size/2 - 20);
+        ctx.fillText(debugText, screenX - 35, screenY - size/2 - 20);
 
+        // Health bar
         if (microbe.health < microbe.maxHealth) {
           const barWidth = size;
           const barHeight = 6;
@@ -519,6 +529,7 @@ export const ARMicrobeCanvas = ({
         }
       });
 
+      // Off-screen indicators
       microbesRef.current.forEach((microbe) => {
         const projection = projectToScreen(microbe.x, microbe.y, microbe.z, cameraYaw, cameraPitch, canvas.width, canvas.height);
         if (projection.isVisible || projection.distance > 15) return;
@@ -542,6 +553,7 @@ export const ARMicrobeCanvas = ({
         ctx.restore();
       });
 
+      // Radar
       const radarSize = 120;
       const radarX = canvas.width - radarSize - 20;
       const radarY = 20;
@@ -567,6 +579,7 @@ export const ARMicrobeCanvas = ({
         ctx.fill();
       });
 
+      // Power-ups
       powerUpsRef.current.forEach((powerUp) => {
         const age = (now - powerUp.spawnTime) / 1000;
         if (age > 15) return;
@@ -579,6 +592,7 @@ export const ARMicrobeCanvas = ({
         ctx.fillText(emoji, projection.screenX, projection.screenY);
       });
 
+      // Particles
       for (let i = particlesRef.current.length - 1; i >= 0; i--) {
         const p = particlesRef.current[i];
         p.x += p.vx;
@@ -594,6 +608,7 @@ export const ARMicrobeCanvas = ({
         }
       }
 
+      // Laser
       if (laserFiringRef.current > 0 && now - laserFiringRef.current < 150) {
         const laserAlpha = 1 - (now - laserFiringRef.current) / 150;
         ctx.save();
@@ -612,6 +627,7 @@ export const ARMicrobeCanvas = ({
         ctx.restore();
       }
 
+      // Crosshair
       ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
       ctx.lineWidth = 2;
       ctx.beginPath();
