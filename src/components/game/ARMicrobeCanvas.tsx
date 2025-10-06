@@ -56,7 +56,7 @@ const projectToScreen = (
   cameraPitch: number,
   canvasWidth: number,
   canvasHeight: number
-): { screenX: number; screenY: number; isVisible: boolean; distance: number; angle: number } => {
+): { screenX: number; screenY: number; isVisible: boolean; distance: number; angle: number; finalZ: number } => {
   
   const cosYaw = Math.cos(-cameraYaw);
   const sinYaw = Math.sin(-cameraYaw);
@@ -72,7 +72,7 @@ const projectToScreen = (
   
   if (finalZ >= -0.1) {
     const distance = Math.sqrt(worldX ** 2 + worldY ** 2 + worldZ ** 2);
-    return { screenX: 0, screenY: 0, isVisible: false, distance, angle };
+    return { screenX: 0, screenY: 0, isVisible: false, distance, angle, finalZ };
   }
   
   const fov = 60 * Math.PI / 180;
@@ -87,7 +87,7 @@ const projectToScreen = (
   const isVisible = screenX > -margin && screenX < canvasWidth + margin &&
                     screenY > -margin && screenY < canvasHeight + margin;
   
-  return { screenX, screenY, isVisible, distance, angle };
+  return { screenX, screenY, isVisible, distance, angle, finalZ };
 };
 
 export const ARMicrobeCanvas = ({
@@ -111,7 +111,7 @@ export const ARMicrobeCanvas = ({
   const [combo, setCombo] = useState(0);
   const [activePowerUp, setActivePowerUp] = useState<{ type: string; endTime: number } | null>(null);
   const laserFiringRef = useRef<number>(0);
-  const [showDebug, setShowDebug] = useState(false);
+  const [showDebug, setShowDebug] = useState(true); // ALWAYS SHOW DEBUG NOW
   const [sensorMode, setSensorMode] = useState<'gyroscope' | 'orientation' | null>(null);
   const [showPermissionOverlay, setShowPermissionOverlay] = useState(true);
   const [permissionStatus, setPermissionStatus] = useState("");
@@ -202,6 +202,8 @@ export const ARMicrobeCanvas = ({
     const x = Math.sin(spawnYaw) * spawnDistance;
     const z = -Math.cos(spawnYaw) * spawnDistance;
     const y = heightOffset;
+
+    console.log(`SPAWNING MICROBE: x=${x.toFixed(2)}, y=${y.toFixed(2)}, z=${z.toFixed(2)}, cameraYaw=${cameraYaw.toFixed(2)}`);
 
     setMicrobes((prev) => [...prev, {
       id: `microbe-${Date.now()}-${Math.random()}`,
@@ -477,13 +479,24 @@ export const ARMicrobeCanvas = ({
       const cameraYaw = sensorDataRef.current.yaw;
       const cameraPitch = sensorDataRef.current.pitch;
 
-      // DEBUG VERSION - DRAW ALL MICROBES
-      microbesRef.current.forEach((microbe) => {
+      // DEBUG INFO - ALWAYS SHOW
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.fillRect(10, 80, 300, 120);
+      ctx.fillStyle = 'lime';
+      ctx.font = '14px monospace';
+      ctx.fillText(`Sensor Mode: ${sensorMode || 'NONE'}`, 20, 100);
+      ctx.fillText(`Yaw: ${(cameraYaw * 180 / Math.PI).toFixed(1)}°`, 20, 120);
+      ctx.fillText(`Pitch: ${(cameraPitch * 180 / Math.PI).toFixed(1)}°`, 20, 140);
+      ctx.fillText(`Microbes: ${microbesRef.current.length}`, 20, 160);
+      ctx.fillText(`Alpha: ${orientation.alpha?.toFixed(1) || 'null'}`, 20, 180);
+
+      // DRAW ALL MICROBES - FORCE VISIBLE
+      microbesRef.current.forEach((microbe, idx) => {
         const projection = projectToScreen(microbe.x, microbe.y, microbe.z, cameraYaw, cameraPitch, canvas.width, canvas.height);
         
         const screenX = projection.screenX + Math.sin(microbe.wobble) * 5;
         const screenY = projection.screenY;
-        const size = Math.max(microbe.size * Math.min(300 / projection.distance, 8), 20);
+        const size = Math.max(microbe.size * Math.min(300 / projection.distance, 8), 30);
         
         // Shadow
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
@@ -508,25 +521,15 @@ export const ARMicrobeCanvas = ({
         
         // DEBUG TEXT
         ctx.fillStyle = 'yellow';
-        ctx.font = '14px Arial';
+        ctx.font = '12px Arial';
         ctx.strokeStyle = 'black';
         ctx.lineWidth = 3;
-        const debugText = `d:${projection.distance.toFixed(1)} v:${projection.isVisible}`;
-        ctx.strokeText(debugText, screenX - 35, screenY - size/2 - 20);
-        ctx.fillText(debugText, screenX - 35, screenY - size/2 - 20);
-
-        // Health bar
-        if (microbe.health < microbe.maxHealth) {
-          const barWidth = size;
-          const barHeight = 6;
-          const barX = screenX - barWidth / 2;
-          const barY = screenY - size / 2 - 12;
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-          ctx.fillRect(barX, barY, barWidth, barHeight);
-          const healthPercent = microbe.health / microbe.maxHealth;
-          ctx.fillStyle = healthPercent > 0.5 ? '#22c55e' : healthPercent > 0.25 ? '#fbbf24' : '#ef4444';
-          ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
-        }
+        const debugText1 = `pos(${microbe.x.toFixed(1)},${microbe.y.toFixed(1)},${microbe.z.toFixed(1)})`;
+        const debugText2 = `fZ:${projection.finalZ.toFixed(1)} v:${projection.isVisible}`;
+        ctx.strokeText(debugText1, screenX - 60, screenY - size/2 - 30);
+        ctx.fillText(debugText1, screenX - 60, screenY - size/2 - 30);
+        ctx.strokeText(debugText2, screenX - 60, screenY - size/2 - 15);
+        ctx.fillText(debugText2, screenX - 60, screenY - size/2 - 15);
       });
 
       // Off-screen indicators
@@ -553,80 +556,6 @@ export const ARMicrobeCanvas = ({
         ctx.restore();
       });
 
-      // Radar
-      const radarSize = 120;
-      const radarX = canvas.width - radarSize - 20;
-      const radarY = 20;
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.beginPath();
-      ctx.arc(radarX + radarSize / 2, radarY + radarSize / 2, radarSize / 2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(radarX + radarSize / 2, radarY + radarSize / 2, radarSize / 2, 0, Math.PI * 2);
-      ctx.stroke();
-
-      microbesRef.current.forEach((microbe) => {
-        const distance = Math.sqrt(microbe.x ** 2 + microbe.z ** 2);
-        if (distance > 15) return;
-        const radarScale = (radarSize / 2) / 15;
-        const dotX = radarX + radarSize / 2 + microbe.x * radarScale;
-        const dotY = radarY + radarSize / 2 + microbe.z * radarScale;
-        ctx.fillStyle = getMicrobeColor(microbe.type);
-        ctx.beginPath();
-        ctx.arc(dotX, dotY, 4, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      // Power-ups
-      powerUpsRef.current.forEach((powerUp) => {
-        const age = (now - powerUp.spawnTime) / 1000;
-        if (age > 15) return;
-        const projection = projectToScreen(powerUp.x, powerUp.y, powerUp.z, cameraYaw, cameraPitch, canvas.width, canvas.height);
-        if (!projection.isVisible) return;
-        ctx.font = "40px Arial";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        const emoji = { freeze: "❄️", rapid: "⚡", double: "✨", shield: "🛡️" }[powerUp.type];
-        ctx.fillText(emoji, projection.screenX, projection.screenY);
-      });
-
-      // Particles
-      for (let i = particlesRef.current.length - 1; i >= 0; i--) {
-        const p = particlesRef.current[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.life -= 0.02;
-        if (p.life <= 0) {
-          particlesRef.current.splice(i, 1);
-        } else {
-          ctx.fillStyle = p.color;
-          ctx.globalAlpha = p.life;
-          ctx.fillRect(p.x, p.y, 4, 4);
-          ctx.globalAlpha = 1;
-        }
-      }
-
-      // Laser
-      if (laserFiringRef.current > 0 && now - laserFiringRef.current < 150) {
-        const laserAlpha = 1 - (now - laserFiringRef.current) / 150;
-        ctx.save();
-        ctx.globalAlpha = laserAlpha * 0.8;
-        const gradient = ctx.createLinearGradient(centerX, canvas.height, centerX, centerY);
-        gradient.addColorStop(0, `rgba(255, 50, 50, ${laserAlpha})`);
-        gradient.addColorStop(1, `rgba(255, 150, 150, ${laserAlpha * 0.3})`);
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.moveTo(centerX - 15, canvas.height);
-        ctx.lineTo(centerX - 2, centerY);
-        ctx.lineTo(centerX + 2, centerY);
-        ctx.lineTo(centerX + 15, canvas.height);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-      }
-
       // Crosshair
       ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
       ctx.lineWidth = 2;
@@ -651,7 +580,7 @@ export const ARMicrobeCanvas = ({
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [isPaused]);
+  }, [isPaused, sensorMode, orientation.alpha]);
 
   const handleTap = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
     e.preventDefault();
@@ -782,15 +711,6 @@ export const ARMicrobeCanvas = ({
       <div className="absolute top-4 left-4 bg-black/60 text-white px-4 py-2 rounded-lg text-sm font-bold z-40 pointer-events-none">
         Microbes: {microbesRef.current.length}
       </div>
-
-      <button
-        onClick={() => setShowDebug(!showDebug)}
-        className="absolute bottom-4 right-4 bg-black/60 text-white px-3 py-2 rounded-lg text-xs z-40"
-      >
-        {showDebug ? 'Hide' : 'Debug'}
-      </button>
-      
-      {activePowerUp && <PowerUp type={activePowerUp.type} endTime={activePowerUp.endTime} />}
     </>
   );
 };
