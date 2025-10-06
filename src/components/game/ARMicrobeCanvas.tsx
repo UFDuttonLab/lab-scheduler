@@ -120,7 +120,6 @@ export const ARMicrobeCanvas = ({
   const animationFrameRef = useRef<number>();
   const comboRef = useRef(0);
   const activePowerUpRef = useRef<{ type: string; endTime: number } | null>(null);
-  const waveTransitionTimeoutRef = useRef<number | null>(null);
   
   const [currentWave, setCurrentWave] = useState(1);
   const [waveActive, setWaveActive] = useState(false);
@@ -165,38 +164,36 @@ export const ARMicrobeCanvas = ({
     let type: Microbe["type"] = "basic";
     let health = 1;
     let points = 10;
-    // UPDATED: Increased base speed and wave scaling
-    let speed = 0.06 + (wave * 0.008);
-    // UPDATED: Reduced base size
+    // FIXED: Reduced base speed from 0.06 to 0.03
+    let speed = 0.03 + (wave * 0.004);
     let size = 30;
 
     if (wave > 5 && rand < 5) {
       type = "boss";
       health = 8 + wave;
       points = 250;
-      speed = 0.05 + (wave * 0.006);
+      speed = 0.025 + (wave * 0.003);
       size = 60;
     } else if (rand < 5) {
       type = "golden";
       health = 1;
       points = 100;
-      speed = 0.10 + (wave * 0.01);
+      speed = 0.05 + (wave * 0.005);
       size = 28;
     } else if (wave > 3 && rand < 20) {
       type = "tank";
       health = 2 + Math.floor(wave / 2);
       points = 50;
-      speed = 0.05 + (wave * 0.006);
+      speed = 0.025 + (wave * 0.003);
       size = 45;
     } else if (wave > 2 && rand < 35) {
       type = "fast";
       health = 1;
       points = 25;
-      speed = 0.09 + (wave * 0.01);
+      speed = 0.045 + (wave * 0.005);
       size = 25;
     }
 
-    // UPDATED: Spawn much further away (20-30 units instead of 8-12)
     const spawnDistance = 20 + Math.random() * 10;
     const angleOffset = (Math.random() - 0.5) * (Math.PI / 3);
     const heightOffset = (Math.random() - 0.5) * 3;
@@ -350,37 +347,37 @@ export const ARMicrobeCanvas = ({
   useEffect(() => { activePowerUpRef.current = activePowerUp; }, [activePowerUp]);
   useEffect(() => { waveMicrobesSpawnedRef.current = waveMicrobesSpawned; }, [waveMicrobesSpawned]);
 
+  // FIXED: Wave transition - separated from waveActive monitoring to prevent cleanup
   useEffect(() => {
-    if (isPaused || !waveActive) return;
-    const allSpawned = waveMicrobesSpawned > 0 && waveMicrobesSpawned >= (5 + currentWave * 3);
-    const noneRemaining = microbes.length === 0;
+    if (isPaused) return;
     
-    if (allSpawned && noneRemaining) {
-      setWaveActive(false);
-      waveActiveRef.current = false;
-      toast.success(`Wave ${currentWave} Complete!`);
+    // Check every 500ms if wave should end
+    const checkInterval = setInterval(() => {
+      if (!waveActiveRef.current) return;
       
-      waveTransitionTimeoutRef.current = window.setTimeout(() => {
-        startNewWave();
-        waveTransitionTimeoutRef.current = null;
-      }, 3000);
-    }
-    
-    return () => {
-      if (waveTransitionTimeoutRef.current !== null) {
-        clearTimeout(waveTransitionTimeoutRef.current);
-        waveTransitionTimeoutRef.current = null;
+      const allSpawned = waveMicrobesSpawnedRef.current > 0 && 
+                        waveMicrobesSpawnedRef.current >= (5 + currentWaveRef.current * 3);
+      const noneRemaining = microbesRef.current.length === 0;
+      
+      if (allSpawned && noneRemaining) {
+        setWaveActive(false);
+        waveActiveRef.current = false;
+        toast.success(`Wave ${currentWaveRef.current} Complete!`);
+        
+        // Start next wave after delay
+        setTimeout(() => {
+          startNewWave();
+        }, 3000);
       }
-    };
-  }, [waveActive, waveMicrobesSpawned, microbes.length, isPaused, currentWave, startNewWave]);
+    }, 500);
+    
+    return () => clearInterval(checkInterval);
+  }, [isPaused, startNewWave]);
 
-  // UPDATED: Fixed wave timing - Wave 1 = 20s, Wave 2 = 18s, Wave 3 = 16s, etc.
   useEffect(() => {
     if (isPaused || !sensorMode || !waveActive) return;
     const targetMicrobes = 5 + (currentWave * 3);
-    // Wave duration: 22 - (wave * 2) seconds, minimum 10 seconds
     const waveDuration = Math.max(10, 22 - (currentWave * 2));
-    // Spawn interval = wave duration / number of microbes
     const spawnInterval = Math.floor((waveDuration * 1000) / targetMicrobes);
     
     const interval = setInterval(() => {
@@ -494,8 +491,16 @@ export const ARMicrobeCanvas = ({
         
         const screenX = projection.screenX + Math.sin(microbe.wobble) * 5;
         const screenY = projection.screenY;
-        // Size scales with distance - closer = bigger
-        const size = microbe.size * Math.min(300 / projection.distance, 8);
+        
+        // FIXED: Better size scaling - starts tiny, grows as it approaches
+        // Formula: baseSize * max(0.3, min(3, 8 / distance))
+        // Distance 30: 30 * 0.3 = 9px
+        // Distance 10: 30 * 0.8 = 24px
+        // Distance 5: 30 * 1.6 = 48px
+        // Distance 2: 30 * 3 = 90px
+        const scaleFactor = Math.max(0.3, Math.min(3, 8 / projection.distance));
+        const size = microbe.size * scaleFactor;
+        
         const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
         
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
@@ -503,7 +508,8 @@ export const ARMicrobeCanvas = ({
         ctx.arc(screenX, screenY, (size / 2) + 4, 0, Math.PI * 2);
         ctx.fill();
         
-        ctx.fillStyle = distanceFromCrosshair < 120 ? 'rgba(0, 255, 0, 1.0)' : 'rgba(255, 0, 0, 1.0)';
+        // FIXED: Increased hit radius from 120 to 150
+        ctx.fillStyle = distanceFromCrosshair < 150 ? 'rgba(0, 255, 0, 1.0)' : 'rgba(255, 0, 0, 1.0)';
         ctx.globalAlpha = microbe.opacity;
         ctx.beginPath();
         ctx.arc(screenX, screenY, size / 2, 0, Math.PI * 2);
@@ -673,7 +679,8 @@ export const ARMicrobeCanvas = ({
         const screenY = projection.screenY;
         const screenDistance = Math.hypot(screenX - centerX, screenY - centerY);
         
-        if (screenDistance < 120 && projection.distance < minDistance) {
+        // FIXED: Increased hit detection radius from 120 to 150
+        if (screenDistance < 150 && projection.distance < minDistance) {
           minDistance = projection.distance;
           closestMicrobe = { microbe, distance: projection.distance, projection: { screenX, screenY } };
         }
@@ -769,20 +776,23 @@ export const ARMicrobeCanvas = ({
         style={{ width: "100%", height: "100%", touchAction: "none" }}
       />
 
-      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-black/60 text-white px-4 py-2 rounded-lg text-sm font-bold z-40 pointer-events-none">
+      {/* FIXED: Better positioning to prevent overlap */}
+      <div className="absolute top-16 left-1/2 transform -translate-x-1/2 bg-black/60 text-white px-4 py-2 rounded-lg text-sm font-bold z-40 pointer-events-none">
         Wave {currentWave} {!waveActive && '- Break'}
       </div>
 
-      <div className="absolute top-4 left-4 bg-black/60 text-white px-4 py-2 rounded-lg text-sm font-bold z-40 pointer-events-none">
+      <div className="absolute top-4 left-4 bg-black/60 text-white px-3 py-1.5 rounded-lg text-xs font-bold z-40 pointer-events-none">
         Microbes: {microbesRef.current.length}
       </div>
 
-      <button
-        onClick={() => setShowDebug(!showDebug)}
-        className="absolute bottom-4 right-4 bg-black/60 text-white px-3 py-2 rounded-lg text-xs z-40"
-      >
-        {showDebug ? 'Hide' : 'Debug'}
-      </button>
+      {showDebug && (
+        <button
+          onClick={() => setShowDebug(false)}
+          className="absolute bottom-4 right-4 bg-black/60 text-white px-3 py-2 rounded-lg text-xs z-40"
+        >
+          Hide Debug
+        </button>
+      )}
       
       {activePowerUp && <PowerUp type={activePowerUp.type} endTime={activePowerUp.endTime} />}
     </>
