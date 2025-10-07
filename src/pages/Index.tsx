@@ -4,6 +4,7 @@ import { BookingCard } from "@/components/BookingCard";
 import { EquipmentCard } from "@/components/EquipmentCard";
 import { Footer } from "@/components/Footer";
 import { DadJokeCard } from "@/components/DadJokeCard";
+import { LabFatePredictor } from "@/components/LabFatePredictor";
 import { Calendar, Clock, Settings, TrendingUp, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
@@ -174,6 +175,7 @@ const Index = () => {
         </div>
 
         <DadJokeCard className="mb-6 sm:mb-8" />
+        <LabFatePredictor className="mb-6 sm:mb-8" />
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
           <StatsCard
