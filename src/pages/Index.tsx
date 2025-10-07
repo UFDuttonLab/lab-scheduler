@@ -140,10 +140,6 @@ const Index = () => {
   
   const totalBookedMinutes = weekBookings.reduce((sum, b) => sum + b.duration, 0);
   const totalBookedHours = totalBookedMinutes / 60;
-  const totalPossibleHours = totalEquipment * 7 * 24; // 7 days * 24 hours
-  const usagePercentage = totalPossibleHours > 0 
-    ? Math.round((totalBookedHours / totalPossibleHours) * 100) 
-    : 0;
 
   const upcomingBookings = bookings
     .filter(b => b.status === "scheduled" && b.startTime >= new Date())
@@ -200,10 +196,10 @@ const Index = () => {
             trend={activeTrend}
           />
           <StatsCard
-            title="Usage This Week"
-            value={`${usagePercentage}%`}
+            title="Hours Booked This Week"
+            value={totalBookedHours.toFixed(1)}
             icon={TrendingUp}
-            trend={`${totalBookedHours.toFixed(1)} hours booked`}
+            trend={`${weekBookings.length} bookings this week`}
           />
         </div>
 
