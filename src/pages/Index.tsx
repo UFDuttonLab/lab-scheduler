@@ -175,7 +175,6 @@ const Index = () => {
         </div>
 
         <DadJokeCard className="mb-6 sm:mb-8" />
-        <LabFatePredictor className="mb-6 sm:mb-8" />
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
           <StatsCard
@@ -252,6 +251,8 @@ const Index = () => {
             </div>
           </div>
         </div>
+        
+        <LabFatePredictor className="mb-6 sm:mb-8" />
       </main>
       <Footer />
     </div>
