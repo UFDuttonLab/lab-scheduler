@@ -368,18 +368,26 @@ const Schedule = () => {
         const selectedEq = equipment.find(e => e.id === equipmentId);
         const isHiPerGator = selectedEq?.type === "HiPerGator";
 
+        // Check for overlapping bookings for ALL equipment types
+        const overlappingBookings = bookings.filter(b => 
+          b.equipmentId === equipmentId &&
+          b.status !== 'cancelled' &&
+          (
+            (b.startTime <= startTime && b.endTime > startTime) ||
+            (b.startTime < endTime && b.endTime >= endTime) ||
+            (b.startTime >= startTime && b.endTime <= endTime)
+          )
+        );
+
+        // For regular equipment (not HiPerGator), reject if ANY overlap exists
+        if (!isHiPerGator && overlappingBookings.length > 0) {
+          toast.error(`${selectedEq?.name} is already booked during this time period`);
+          setLoading(false);
+          return;
+        }
+
         // For HiPerGator, check resource availability
         if (isHiPerGator) {
-          const overlappingBookings = bookings.filter(b => 
-            b.equipmentId === equipmentId &&
-            b.status !== 'cancelled' &&
-            (
-              (b.startTime <= startTime && b.endTime > startTime) ||
-              (b.startTime < endTime && b.endTime >= endTime) ||
-              (b.startTime >= startTime && b.endTime <= endTime)
-            )
-          );
-
           const totalCpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.cpuCount || 0), 0);
           const totalGpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.gpuCount || 0), 0);
 
@@ -495,19 +503,27 @@ const Schedule = () => {
       
       const endTime = addMinutes(startTime, parseInt(duration));
 
-      // For HiPerGator, check resource availability (excluding current booking)
-      if (isHiPerGator) {
-        const overlappingBookings = bookings.filter(b => 
-          b.id !== selectedBooking.id &&
-          b.equipmentId === equipmentId &&
-          b.status !== 'cancelled' &&
-          (
-            (b.startTime <= startTime && b.endTime > startTime) ||
-            (b.startTime < endTime && b.endTime >= endTime) ||
-            (b.startTime >= startTime && b.endTime <= endTime)
-          )
-        );
+      // Check for overlapping bookings (excluding current booking)
+      const overlappingBookings = bookings.filter(b => 
+        b.id !== selectedBooking.id &&
+        b.equipmentId === equipmentId &&
+        b.status !== 'cancelled' &&
+        (
+          (b.startTime <= startTime && b.endTime > startTime) ||
+          (b.startTime < endTime && b.endTime >= endTime) ||
+          (b.startTime >= startTime && b.endTime <= endTime)
+        )
+      );
 
+      // For regular equipment (not HiPerGator), reject if ANY overlap exists
+      if (!isHiPerGator && overlappingBookings.length > 0) {
+        toast.error(`${selectedEq?.name} is already booked during this time period`);
+        setLoading(false);
+        return;
+      }
+
+      // For HiPerGator, check resource availability
+      if (isHiPerGator) {
         const totalCpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.cpuCount || 0), 0);
         const totalGpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.gpuCount || 0), 0);
 
