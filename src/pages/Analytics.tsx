@@ -339,7 +339,11 @@ const Analytics = () => {
                       <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
                       <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} />
                       <Tooltip />
-                      <Bar dataKey="hours" fill="hsl(var(--primary))" />
+                      <Bar dataKey="hours">
+                        {projectTimeData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -386,7 +390,11 @@ const Analytics = () => {
                       <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
                       <YAxis label={{ value: 'Samples', angle: -90, position: 'insideLeft' }} />
                       <Tooltip />
-                      <Bar dataKey="samples" fill="hsl(var(--chart-1))" />
+                      <Bar dataKey="samples">
+                        {projectSampleData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
