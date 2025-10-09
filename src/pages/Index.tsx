@@ -204,7 +204,7 @@ const Index = () => {
           />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
           <div>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl sm:text-2xl font-bold">Upcoming Bookings</h2>
