@@ -9,6 +9,7 @@ import { Clock, TrendingUp, Users, FolderKanban, Loader2, Wrench, Beaker } from 
 import { StatsCard } from "@/components/StatsCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { getProjectColor } from "@/lib/projectColors";
 
 const Analytics = () => {
   const { toast } = useToast();
@@ -93,7 +94,7 @@ const Analytics = () => {
       name: project.name,
       hours: totalHours,
       bookings: projectBookings.length,
-      color: project.color || "#8884d8",
+      color: getProjectColor(project.id, projects),
     };
   }).filter(p => p.hours > 0);
 
@@ -134,7 +135,7 @@ const Analytics = () => {
       name: project.name,
       samples: totalSamples,
       sessions: sessionsWithSamples,
-      color: project.color || "#8884d8",
+      color: getProjectColor(project.id, projects),
     };
   }).filter(p => p.samples > 0);
 

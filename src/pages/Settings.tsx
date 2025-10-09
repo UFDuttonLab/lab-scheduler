@@ -13,7 +13,9 @@ import * as Icons from "lucide-react";
 import { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { IconPicker } from "@/components/IconPicker";
+import { ColorPicker } from "@/components/ColorPicker";
 import { supabase } from "@/integrations/supabase/client";
+import { getNextAvailableColor, getUsedColors } from "@/lib/projectColors";
 import { DialogFooter } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -176,6 +178,7 @@ const Settings = () => {
   const [projectName, setProjectName] = useState("");
   const [projectDescription, setProjectDescription] = useState("");
   const [projectIcon, setProjectIcon] = useState("🧪");
+  const [projectColor, setProjectColor] = useState("");
   const [userTab, setUserTab] = useState<"active" | "deactivated">("active");
 
   useEffect(() => {
@@ -190,12 +193,15 @@ const Settings = () => {
       setProjectName(editingProject.name);
       setProjectDescription(editingProject.description || "");
       setProjectIcon(editingProject.icon || "🧪");
+      setProjectColor(editingProject.color || "");
     } else {
       setProjectName("");
       setProjectDescription("");
       setProjectIcon("🧪");
+      // Auto-select next available color for new projects
+      setProjectColor(getNextAvailableColor(projects));
     }
-  }, [editingProject]);
+  }, [editingProject, projects]);
 
   const fetchProjects = async () => {
     try {
@@ -205,6 +211,26 @@ const Settings = () => {
         .order("name");
 
       if (error) throw error;
+      
+      // Auto-assign colors to projects without them
+      const projectsNeedingColors = (data || []).filter(p => !p.color);
+      if (projectsNeedingColors.length > 0) {
+        const existingColors = (data || []).filter(p => p.color).map(p => p.color!);
+        
+        for (const project of projectsNeedingColors) {
+          const newColor = getNextAvailableColor(
+            (data || []).filter(p => p.id !== project.id)
+          );
+          await supabase
+            .from('projects')
+            .update({ color: newColor })
+            .eq('id', project.id);
+          existingColors.push(newColor);
+          // Update the local data
+          project.color = newColor;
+        }
+      }
+      
       setProjects(data || []);
     } catch (error) {
       console.error("Error fetching projects:", error);
@@ -362,7 +388,8 @@ const Settings = () => {
           .update({
             name: projectName,
             description: projectDescription,
-            icon: projectIcon
+            icon: projectIcon,
+            color: projectColor
           })
           .eq("id", editingProject.id);
 
@@ -370,17 +397,19 @@ const Settings = () => {
 
         setProjects(prev => prev.map(p =>
           p.id === editingProject.id
-            ? { ...p, name: projectName, description: projectDescription, icon: projectIcon }
+            ? { ...p, name: projectName, description: projectDescription, icon: projectIcon, color: projectColor }
             : p
         ));
         toast.success("Project updated successfully!");
       } else {
+        const colorToUse = projectColor || getNextAvailableColor(projects);
         const { data, error } = await supabase
           .from("projects")
           .insert({
             name: projectName,
             description: projectDescription,
-            icon: projectIcon
+            icon: projectIcon,
+            color: colorToUse
           })
           .select()
           .single();
@@ -396,6 +425,7 @@ const Settings = () => {
       setProjectName("");
       setProjectDescription("");
       setProjectIcon("🧪");
+      setProjectColor("");
     } catch (error) {
       console.error("Error saving project:", error);
       toast.error(`Failed to ${editingProject ? "update" : "add"} project`);
@@ -737,6 +767,7 @@ const Settings = () => {
                   setProjectName("");
                   setProjectDescription("");
                   setProjectIcon("🧪");
+                  setProjectColor("");
                 }
               }}>
                 <DialogTrigger asChild>
@@ -779,6 +810,18 @@ const Settings = () => {
                     <IconPicker value={projectIcon} onChange={setProjectIcon} />
                   </div>
 
+                  <div className="space-y-2">
+                    <Label>Project Color</Label>
+                    <ColorPicker 
+                      value={projectColor} 
+                      onChange={setProjectColor}
+                      usedColors={getUsedColors(projects.filter(p => p.id !== editingProject?.id))}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Colors in use by other projects are dimmed
+                    </p>
+                  </div>
+
                   <Button type="submit" className="w-full">
                     <Plus className="w-4 h-4 mr-2" />
                     {editingProject ? "Update Project" : "Add Project"}
@@ -799,8 +842,17 @@ const Settings = () => {
                     <Card key={project.id} className="p-4">
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3 flex-1">
-                          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0">
-                            {project.icon || "🧪"}
+                          <div className="relative">
+                            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0">
+                              {project.icon || "🧪"}
+                            </div>
+                            {project.color && (
+                              <div 
+                                className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-background"
+                                style={{ backgroundColor: project.color }}
+                                title={`Project color: ${project.color}`}
+                              />
+                            )}
                           </div>
                           <div className="flex-1">
                             <h3 className="font-semibold mb-1">{project.name}</h3>
