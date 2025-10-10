@@ -472,6 +472,7 @@ export type Database = {
         | "undergrad_student"
         | "manager"
         | "user"
+        | "pi_external"
       entity_type:
         | "booking"
         | "equipment"
@@ -614,6 +615,7 @@ export const Constants = {
         "undergrad_student",
         "manager",
         "user",
+        "pi_external",
       ],
       entity_type: [
         "booking",
