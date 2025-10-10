@@ -1,4 +1,4 @@
-export type AppRole = 'pi' | 'postdoc' | 'grad_student' | 'undergrad_student' | 'manager' | 'user';
+export type AppRole = 'pi' | 'pi_external' | 'postdoc' | 'grad_student' | 'undergrad_student' | 'manager' | 'user';
 
 export interface RolePermissions {
   canManageUsers: boolean;
@@ -10,6 +10,7 @@ export interface RolePermissions {
 
 export const ROLE_LABELS: Record<AppRole, string> = {
   pi: 'Principal Investigator',
+  pi_external: 'External PI',
   postdoc: 'Post-Doc',
   grad_student: 'Graduate Student',
   undergrad_student: 'Undergraduate Student',
@@ -19,6 +20,7 @@ export const ROLE_LABELS: Record<AppRole, string> = {
 
 export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
   pi: 'Full access to all features including user management',
+  pi_external: 'External professor - can manage projects, equipment, and bookings',
   postdoc: 'Can manage projects, equipment, and bookings',
   grad_student: 'Can manage projects, equipment, and bookings',
   undergrad_student: 'Can create and manage their own bookings',
@@ -37,6 +39,7 @@ export const getRolePermissions = (role: AppRole | null): RolePermissions => {
         canManageBookings: true,
         canViewAnalytics: true,
       };
+    case 'pi_external':
     case 'postdoc':
     case 'grad_student':
       return {

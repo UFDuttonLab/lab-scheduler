@@ -66,10 +66,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (error) throw error;
 
-      // Role priority: pi > manager > postdoc > grad_student > undergrad_student > user
+      // Role priority: pi > manager > pi_external/postdoc > grad_student > undergrad_student > user
       const rolePriority: Record<AppRole, number> = {
         pi: 6,
         manager: 5,
+        pi_external: 4,
         postdoc: 4,
         grad_student: 3,
         undergrad_student: 2,
