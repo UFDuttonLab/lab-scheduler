@@ -1101,6 +1101,12 @@ const Settings = () => {
                         <span className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS.pi}</span>
                       </div>
                     </SelectItem>
+                    <SelectItem value="pi_external">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">{ROLE_LABELS.pi_external}</span>
+                        <span className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS.pi_external}</span>
+                      </div>
+                    </SelectItem>
                     <SelectItem value="postdoc">
                       <div className="flex flex-col items-start">
                         <span className="font-medium">{ROLE_LABELS.postdoc}</span>
@@ -1194,6 +1200,12 @@ const Settings = () => {
                       <div className="flex flex-col items-start">
                         <span className="font-medium">{ROLE_LABELS.pi}</span>
                         <span className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS.pi}</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="pi_external">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">{ROLE_LABELS.pi_external}</span>
+                        <span className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS.pi_external}</span>
                       </div>
                     </SelectItem>
                     <SelectItem value="postdoc">
