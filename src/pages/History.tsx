@@ -55,6 +55,13 @@ const History = () => {
       const project = projectMap.get(booking.project_id);
       const profile = profileMap.get(booking.user_id);
 
+      // Enrich project_samples if available
+      const enrichedProjectSamples = booking.project_samples?.map((ps: any) => ({
+        projectId: ps.project_id,
+        projectName: projectMap.get(ps.project_id)?.name || 'Unknown',
+        samples: ps.samples
+      }));
+
       return {
         id: booking.id,
         equipmentId: booking.equipment_id,
@@ -74,7 +81,8 @@ const History = () => {
         samplesProcessed: booking.samples_processed || undefined,
         collaborators: booking.collaborators || undefined,
         userId: booking.user_id,
-        source: 'booking' as const
+        source: 'booking' as const,
+        projectSamples: enrichedProjectSamples
       };
     });
 
@@ -83,6 +91,13 @@ const History = () => {
       const equipment = equipmentMap.get(usage.equipment_id);
       const project = projectMap.get(usage.project_id);
       const profile = profileMap.get(usage.user_id);
+
+      // Enrich project_samples if available
+      const enrichedProjectSamples = usage.project_samples?.map((ps: any) => ({
+        projectId: ps.project_id,
+        projectName: projectMap.get(ps.project_id)?.name || 'Unknown',
+        samples: ps.samples
+      }));
 
       return {
         id: usage.id,
@@ -101,7 +116,8 @@ const History = () => {
         samplesProcessed: usage.samples_processed || undefined,
         collaborators: usage.collaborators || undefined,
         userId: usage.user_id,
-        source: 'usage_record' as const
+        source: 'usage_record' as const,
+        projectSamples: enrichedProjectSamples
       };
     });
 
@@ -127,11 +143,29 @@ const History = () => {
   const filteredBookings = (bookingsList: Booking[]) => {
     if (!searchQuery) return bookingsList;
     
-    return bookingsList.filter(booking => 
-      booking.equipmentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      booking.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      booking.studentEmail.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const query = searchQuery.toLowerCase();
+    return bookingsList.filter(booking => {
+      // Search in basic fields
+      if (booking.equipmentName.toLowerCase().includes(query) ||
+          booking.studentName.toLowerCase().includes(query) ||
+          booking.studentEmail.toLowerCase().includes(query)) {
+        return true;
+      }
+      
+      // Search in project names from projectSamples
+      if (booking.projectSamples?.some(ps => 
+        ps.projectName?.toLowerCase().includes(query)
+      )) {
+        return true;
+      }
+      
+      // Fallback to legacy single project name
+      if (booking.projectName?.toLowerCase().includes(query)) {
+        return true;
+      }
+      
+      return false;
+    });
   };
 
   return (

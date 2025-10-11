@@ -220,9 +220,14 @@ const Analytics = () => {
     // Fallback to old format
     return sum + (record.samples_processed || 0);
   }, 0);
-  const sessionsWithSamples = bookings.filter(r => 
-    r.samples_processed && r.samples_processed > 0
-  ).length;
+  const sessionsWithSamples = bookings.filter(r => {
+    // Check if record has samples in new format
+    if (r.projectSamples && Array.isArray(r.projectSamples) && r.projectSamples.length > 0) {
+      return r.projectSamples.some((ps: any) => ps.samples > 0);
+    }
+    // Fallback to old format
+    return r.samples_processed && r.samples_processed > 0;
+  }).length;
 
   // Calculate equipment analytics
   const equipmentTimeData = equipment.map(eq => {
