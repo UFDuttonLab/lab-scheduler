@@ -571,8 +571,8 @@ const Schedule = () => {
         const totalCpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.cpuCount || 0), 0);
         const totalGpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.gpuCount || 0), 0);
 
-        const maxCpus = selectedEq.maxCpuCount || 32;
-        const maxGpus = selectedEq.maxGpuCount || 4;
+      const maxCpus = selectedEq.maxCpuCount || 32;
+        const maxGpus = selectedEq.maxGpuCount || 2;
 
         if (totalCpuUsed + cpuCount > maxCpus) {
           toast.error(`Not enough CPUs available. Currently ${maxCpus - totalCpuUsed} CPUs free during this time.`);
@@ -667,11 +667,11 @@ const Schedule = () => {
   ];
 
   // Calculate available HiPerGator resources if applicable
-  const getAvailableResources = () => {
+  const getAvailableResources = (excludeBookingId?: string) => {
     if (!isHiPerGator || !bookingDate || !selectedTime) {
       const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
       const maxCpus = hiPerGatorEq?.maxCpuCount || 32;
-      const maxGpus = hiPerGatorEq?.maxGpuCount || 4;
+      const maxGpus = hiPerGatorEq?.maxGpuCount || 2;
       return { availableCpu: maxCpus, availableGpu: maxGpus };
     }
 
@@ -687,10 +687,11 @@ const Schedule = () => {
     });
 
     if (!hiPerGatorId) {
-      return { availableCpu: 32, availableGpu: 4 };
+      return { availableCpu: 32, availableGpu: 2 };
     }
 
     const overlappingBookings = bookings.filter(b => 
+      b.id !== excludeBookingId &&
       b.equipmentId === hiPerGatorId &&
       b.status !== 'cancelled' &&
       (
@@ -705,7 +706,7 @@ const Schedule = () => {
 
     const selectedEq = equipment.find(e => e.id === hiPerGatorId);
     const maxCpus = selectedEq?.maxCpuCount || 32;
-    const maxGpus = selectedEq?.maxGpuCount || 4;
+    const maxGpus = selectedEq?.maxGpuCount || 2;
 
     return {
       availableCpu: maxCpus - usedCpus,
@@ -713,7 +714,9 @@ const Schedule = () => {
     };
   };
 
-  const { availableCpu, availableGpu } = getAvailableResources();
+  const { availableCpu, availableGpu } = getAvailableResources(
+    isEditDialogOpen ? selectedBooking?.id : undefined
+  );
 
   const getDaysWithBookings = () => {
     const daysSet = new Set<string>();
