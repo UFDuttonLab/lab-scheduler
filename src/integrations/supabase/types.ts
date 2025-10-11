@@ -104,6 +104,7 @@ export type Database = {
           gpu_count: number | null
           id: string
           project_id: string | null
+          project_samples: Json | null
           purpose: string | null
           samples_processed: number | null
           start_time: string
@@ -120,6 +121,7 @@ export type Database = {
           gpu_count?: number | null
           id?: string
           project_id?: string | null
+          project_samples?: Json | null
           purpose?: string | null
           samples_processed?: number | null
           start_time: string
@@ -136,6 +138,7 @@ export type Database = {
           gpu_count?: number | null
           id?: string
           project_id?: string | null
+          project_samples?: Json | null
           purpose?: string | null
           samples_processed?: number | null
           start_time?: string
@@ -374,6 +377,7 @@ export type Database = {
           id: string
           notes: string | null
           project_id: string | null
+          project_samples: Json | null
           samples_processed: number | null
           start_time: string
           user_id: string
@@ -387,6 +391,7 @@ export type Database = {
           id?: string
           notes?: string | null
           project_id?: string | null
+          project_samples?: Json | null
           samples_processed?: number | null
           start_time: string
           user_id: string
@@ -400,6 +405,7 @@ export type Database = {
           id?: string
           notes?: string | null
           project_id?: string | null
+          project_samples?: Json | null
           samples_processed?: number | null
           start_time?: string
           user_id?: string

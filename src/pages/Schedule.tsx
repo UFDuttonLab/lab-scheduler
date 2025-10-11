@@ -22,9 +22,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { Equipment, Project, Booking } from "@/lib/types";
+import { Equipment, Project, Booking, ProjectSample } from "@/lib/types";
 import { format, isSameDay, parse, addMinutes, addDays } from "date-fns";
-import { Plus, Clock, Loader2, List, Grid3x3, Cpu, Server, FlaskConical, Users, X, CalendarIcon } from "lucide-react";
+import { Plus, Clock, Loader2, List, Grid3x3, Cpu, Server, Users, X, CalendarIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -35,6 +35,7 @@ import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BookingCard } from "@/components/BookingCard";
 import { Input } from "@/components/ui/input";
+import { ProjectSampleSelector } from "@/components/ProjectSampleSelector";
 
 interface UserProfile {
   id: string;
@@ -62,14 +63,13 @@ const Schedule = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
-  const [selectedProject, setSelectedProject] = useState<string>("");
+  const [projectSamples, setProjectSamples] = useState<ProjectSample[]>([]);
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
   const [selectedTime, setSelectedTime] = useState<string>("");
   const [duration, setDuration] = useState<string>("60");
   const [purpose, setPurpose] = useState<string>("");
   const [cpuCount, setCpuCount] = useState<number>(1);
   const [gpuCount, setGpuCount] = useState<number>(0);
-  const [samplesCount, setSamplesCount] = useState<number>(1);
   const [collaboratorSearch, setCollaboratorSearch] = useState<string>("");
   const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
   const [availableUsers, setAvailableUsers] = useState<UserProfile[]>([]);
@@ -146,7 +146,6 @@ const Schedule = () => {
     } else if (selectedEquipment.length > 0) {
       setDuration("60");
     }
-    setSamplesCount(1);
   }, [selectedEquipment, equipment]);
 
   const fetchProjects = async () => {
@@ -230,6 +229,13 @@ const Schedule = () => {
         const project = booking.project_id ? projectMap.get(booking.project_id) : null;
         const profile = profileMap.get(booking.user_id);
 
+        // Enrich project_samples if available
+        const enrichedProjectSamples = booking.project_samples?.map((ps: any) => ({
+          projectId: ps.project_id,
+          projectName: projectMap.get(ps.project_id)?.name || 'Unknown',
+          samples: ps.samples
+        }));
+
         return {
           id: booking.id,
           equipmentId: booking.equipment_id,
@@ -249,7 +255,8 @@ const Schedule = () => {
           samplesProcessed: booking.samples_processed || undefined,
           collaborators: (booking.collaborators as string[]) || [],
           userId: booking.user_id,
-          source: 'booking'
+          source: 'booking',
+          projectSamples: enrichedProjectSamples
         };
       });
 
@@ -258,6 +265,13 @@ const Schedule = () => {
         const equipment = equipmentMap.get(record.equipment_id);
         const project = record.project_id ? projectMap.get(record.project_id) : null;
         const profile = profileMap.get(record.user_id);
+
+        // Enrich project_samples if available
+        const enrichedProjectSamples = record.project_samples?.map((ps: any) => ({
+          projectId: ps.project_id,
+          projectName: projectMap.get(ps.project_id)?.name || 'Unknown',
+          samples: ps.samples
+        }));
 
         return {
           id: record.id,
@@ -276,7 +290,8 @@ const Schedule = () => {
           samplesProcessed: record.samples_processed || undefined,
           collaborators: (record.collaborators as string[]) || [],
           userId: record.user_id,
-          source: 'usage_record'
+          source: 'usage_record',
+          projectSamples: enrichedProjectSamples
         };
       });
 
@@ -293,11 +308,8 @@ const Schedule = () => {
 
   const availableEquipment = equipment.filter(e => {
     if (e.status !== "available") return false;
-    if (!selectedProject) return true;
-    
-    // Check if this equipment is compatible with the selected project
-    // Note: We need to fetch equipment_projects relationships
-    return true; // For now, show all available equipment
+    // Show all available equipment regardless of project selection
+    return true;
   });
 
   const dayBookings = selectedDate 
@@ -331,6 +343,17 @@ const Schedule = () => {
       return;
     }
 
+    if (projectSamples.length === 0) {
+      toast.error("Please add at least one project with samples");
+      return;
+    }
+
+    const totalSamples = projectSamples.reduce((sum, ps) => sum + ps.samples, 0);
+    if (totalSamples < 1 || totalSamples > 300) {
+      toast.error("Total samples must be between 1 and 300");
+      return;
+    }
+
     // Validate booking is not in the past
     const [hours, minutes] = selectedTime.split(':').map(Number);
     const startTime = new Date(bookingDate);
@@ -360,6 +383,16 @@ const Schedule = () => {
 
       // Generate a booking group ID for linking multiple bookings
       const bookingGroupId = crypto.randomUUID();
+
+      // Build project_samples array for database
+      const project_samples = projectSamples.map(ps => ({
+        project_id: ps.projectId,
+        samples: ps.samples
+      }));
+
+      // For backward compatibility
+      const total_samples = projectSamples.reduce((sum, ps) => sum + ps.samples, 0);
+      const primary_project_id = projectSamples.length > 0 ? projectSamples[0].projectId : null;
 
       // Validate and prepare bookings for each equipment
       const bookingRecords = [];
@@ -411,12 +444,13 @@ const Schedule = () => {
         const bookingData: any = {
           equipment_id: equipmentId,
           user_id: user.id,
-          project_id: selectedProject || null,
+          project_id: primary_project_id,
           start_time: startTime.toISOString(),
           end_time: endTime.toISOString(),
           purpose: purpose || null,
           status: 'scheduled',
-          samples_processed: samplesCount,
+          samples_processed: total_samples,
+          project_samples: project_samples,
           collaborators: selectedCollaborators,
           booking_group_id: selectedEquipment.length > 1 ? bookingGroupId : null
         };
@@ -452,13 +486,12 @@ const Schedule = () => {
       
       setIsBookingDialogOpen(false);
       setBookingDate(new Date());
-      setSelectedProject("");
+      setProjectSamples([]);
       setSelectedEquipment([]);
       setSelectedTime("");
       setPurpose("");
       setCpuCount(1);
       setGpuCount(0);
-      setSamplesCount(1);
       setSelectedCollaborators([]);
       setCollaboratorSearch("");
       
@@ -486,6 +519,17 @@ const Schedule = () => {
 
     if (selectedEquipment.length === 0) {
       toast.error("Please select equipment");
+      return;
+    }
+
+    if (projectSamples.length === 0) {
+      toast.error("Please add at least one project with samples");
+      return;
+    }
+
+    const totalSamples = projectSamples.reduce((sum, ps) => sum + ps.samples, 0);
+    if (totalSamples < 1 || totalSamples > 300) {
+      toast.error("Total samples must be between 1 and 300");
       return;
     }
 
@@ -543,13 +587,24 @@ const Schedule = () => {
         }
       }
 
+      // Build project_samples array for database
+      const project_samples = projectSamples.map(ps => ({
+        project_id: ps.projectId,
+        samples: ps.samples
+      }));
+
+      // For backward compatibility
+      const total_samples = projectSamples.reduce((sum, ps) => sum + ps.samples, 0);
+      const primary_project_id = projectSamples.length > 0 ? projectSamples[0].projectId : null;
+
       const bookingData: any = {
         equipment_id: equipmentId,
-        project_id: selectedProject || null,
+        project_id: primary_project_id,
         start_time: startTime.toISOString(),
         end_time: endTime.toISOString(),
         purpose: purpose || null,
-        samples_processed: samplesCount,
+        samples_processed: total_samples,
+        project_samples: project_samples,
         collaborators: selectedCollaborators
       };
 
@@ -568,13 +623,12 @@ const Schedule = () => {
       toast.success("Booking updated successfully!");
       setIsEditDialogOpen(false);
       setSelectedBooking(null);
-      setSelectedProject("");
+      setProjectSamples([]);
       setSelectedEquipment([]);
       setSelectedTime("");
       setPurpose("");
       setCpuCount(1);
       setGpuCount(0);
-      setSamplesCount(1);
       setSelectedCollaborators([]);
       setCollaboratorSearch("");
       
@@ -849,14 +903,21 @@ const Schedule = () => {
                             onEdit={(booking) => {
                               setSelectedBooking(booking);
                               setIsEditDialogOpen(true);
-                              // Pre-fill form
-                              setSelectedProject(booking.projectId || "");
+                              // Pre-fill form - load project samples or fallback
+                              if (booking.projectSamples && booking.projectSamples.length > 0) {
+                                setProjectSamples(booking.projectSamples);
+                              } else if (booking.projectId && booking.samplesProcessed) {
+                                setProjectSamples([{
+                                  projectId: booking.projectId,
+                                  projectName: booking.projectName,
+                                  samples: booking.samplesProcessed
+                                }]);
+                              }
                               setSelectedEquipment([booking.equipmentId]);
                               setBookingDate(booking.startTime);
                               setSelectedTime(format(booking.startTime, "HH:mm"));
                               setDuration(booking.duration.toString());
                               setPurpose(booking.purpose || "");
-                              setSamplesCount(booking.samplesProcessed || 1);
                               setCpuCount(booking.cpuCount || 1);
                               setGpuCount(booking.gpuCount || 0);
                               setSelectedCollaborators(booking.collaborators || []);
@@ -1103,22 +1164,13 @@ const Schedule = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Select Project</Label>
-                <Select value={selectedProject} onValueChange={setSelectedProject}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose your project" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map(project => (
-                      <SelectItem key={project.id} value={project.id}>
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">{project.icon || "🧪"}</span>
-                          {project.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Projects & Samples *</Label>
+                <ProjectSampleSelector
+                  projects={projects}
+                  value={projectSamples}
+                  onChange={setProjectSamples}
+                  maxTotal={300}
+                />
               </div>
 
               <div className="space-y-2">
@@ -1126,7 +1178,7 @@ const Schedule = () => {
                 <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto">
                   {availableEquipment.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      {selectedProject ? "No compatible equipment available for this project" : "Select a project first"}
+                      No equipment available
                     </p>
                   ) : (
                     availableEquipment.map(eq => (
@@ -1199,24 +1251,6 @@ const Schedule = () => {
                   rows={2}
                   value={purpose}
                   onChange={(e) => setPurpose(e.target.value)}
-                />
-              </div>
-
-              {/* Samples Count Slider */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="flex items-center gap-2">
-                    <FlaskConical className="w-4 h-4" />
-                    Samples: {samplesCount}
-                  </Label>
-                </div>
-                <Slider
-                  value={[samplesCount]}
-                  onValueChange={(value) => setSamplesCount(value[0])}
-                  min={1}
-                  max={300}
-                  step={1}
-                  className="w-full"
                 />
               </div>
 
@@ -1358,7 +1392,7 @@ const Schedule = () => {
               <Button
                 type="submit" 
                 className="w-full" 
-                disabled={!selectedProject || selectedEquipment.length === 0 || !selectedTime || loading}
+                disabled={projectSamples.length === 0 || selectedEquipment.length === 0 || !selectedTime || loading}
               >
                 {loading ? (
                   <>
@@ -1394,13 +1428,20 @@ const Schedule = () => {
                   setIsEditDialogOpen(true);
                   setIsDetailsDialogOpen(false);
                   // Pre-fill form - editing keeps single equipment
-                  setSelectedProject(booking.projectId || "");
+                  if (booking.projectSamples && booking.projectSamples.length > 0) {
+                    setProjectSamples(booking.projectSamples);
+                  } else if (booking.projectId && booking.samplesProcessed) {
+                    setProjectSamples([{
+                      projectId: booking.projectId,
+                      projectName: booking.projectName,
+                      samples: booking.samplesProcessed
+                    }]);
+                  }
                   setSelectedEquipment([booking.equipmentId]);
                   setBookingDate(booking.startTime);
                   setSelectedTime(format(booking.startTime, "HH:mm"));
                   setDuration(booking.duration.toString());
                   setPurpose(booking.purpose || "");
-                  setSamplesCount(booking.samplesProcessed || 1);
                   setCpuCount(booking.cpuCount || 1);
                   setGpuCount(booking.gpuCount || 0);
                   setSelectedCollaborators(booking.collaborators || []);
@@ -1449,22 +1490,13 @@ const Schedule = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Project</Label>
-                <Select value={selectedProject} onValueChange={setSelectedProject}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose your project" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map(project => (
-                      <SelectItem key={project.id} value={project.id}>
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">{project.icon || "🧪"}</span>
-                          {project.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Projects & Samples *</Label>
+                <ProjectSampleSelector
+                  projects={projects}
+                  value={projectSamples}
+                  onChange={setProjectSamples}
+                  maxTotal={300}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1508,22 +1540,6 @@ const Schedule = () => {
                   rows={2}
                   value={purpose}
                   onChange={(e) => setPurpose(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="flex items-center gap-2">
-                    <FlaskConical className="w-4 h-4" />
-                    Samples: {samplesCount}
-                  </Label>
-                </div>
-                <Slider
-                  value={[samplesCount]}
-                  onValueChange={(value) => setSamplesCount(value[0])}
-                  min={1}
-                  max={300}
-                  step={1}
                 />
               </div>
 

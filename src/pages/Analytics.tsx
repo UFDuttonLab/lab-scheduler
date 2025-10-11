@@ -45,9 +45,17 @@ const Analytics = () => {
       const profileMap = new Map(profilesRes.data?.map(u => [u.id, u]) || []);
 
       // Enrich bookings with related data
-      const enrichedBookings = (bookingsRes.data || []).map(booking => ({
-        ...booking,
-        equipment: equipmentMap.get(booking.equipment_id),
+      const enrichedBookings = (bookingsRes.data || []).map(booking => {
+        const enrichedProjectSamples = booking.project_samples?.map((ps: any) => ({
+          projectId: ps.project_id,
+          projectName: projectMap.get(ps.project_id)?.name || 'Unknown',
+          samples: ps.samples
+        }));
+        
+        return {
+          ...booking,
+          equipment: equipmentMap.get(booking.equipment_id),
+          projectSamples: enrichedProjectSamples,
         project: projectMap.get(booking.project_id),
         profile: profileMap.get(booking.user_id),
         source: 'booking' as const
@@ -123,18 +131,28 @@ const Analytics = () => {
 
   // Calculate samples per project
   const projectSampleData = projects.map(project => {
-    const projectRecords = bookings.filter(b => b.project_id === project.id);
-    const totalSamples = projectRecords.reduce((sum, record) => 
-      sum + (record.samples_processed || 0), 0
-    );
-    const sessionsWithSamples = projectRecords.filter(r => 
-      r.samples_processed && r.samples_processed > 0
-    ).length;
+    let totalSamples = 0;
+    const projectRecords: any[] = [];
+    
+    bookings.forEach(record => {
+      // Check new format first
+      if (record.projectSamples && Array.isArray(record.projectSamples)) {
+        const projectEntry = record.projectSamples.find((ps: any) => ps.projectId === project.id);
+        if (projectEntry) {
+          totalSamples += projectEntry.samples;
+          projectRecords.push(record);
+        }
+      } else if (record.project_id === project.id) {
+        // Fallback to old format
+        totalSamples += (record.samples_processed || 0);
+        projectRecords.push(record);
+      }
+    });
     
     return {
       name: project.name,
       samples: totalSamples,
-      sessions: sessionsWithSamples,
+      sessions: projectRecords.length,
       color: getProjectColor(project.id, projects),
     };
   }).filter(p => p.samples > 0);
@@ -148,17 +166,19 @@ const Analytics = () => {
       return isOwner || isCollaborator;
     });
     
-    const totalSamples = userRecords.reduce((sum, record) => 
-      sum + (record.samples_processed || 0), 0
-    );
-    const sessionsWithSamples = userRecords.filter(r => 
-      r.samples_processed && r.samples_processed > 0
-    ).length;
+    const totalSamples = userRecords.reduce((sum, record) => {
+      // Use new format if available
+      if (record.projectSamples && Array.isArray(record.projectSamples)) {
+        return sum + record.projectSamples.reduce((pSum: number, ps: any) => pSum + ps.samples, 0);
+      }
+      // Fallback to old format
+      return sum + (record.samples_processed || 0);
+    }, 0);
     
     return {
       name: user.full_name || user.email,
       samples: totalSamples,
-      sessions: sessionsWithSamples,
+      sessions: userRecords.length,
     };
   }).filter(s => s.samples > 0).sort((a, b) => b.samples - a.samples);
 
@@ -182,9 +202,14 @@ const Analytics = () => {
   const avgBookingDuration = totalBookings > 0 ? Math.round(totalMinutes / totalBookings) : 0;
   
   // Calculate total samples
-  const totalSamples = bookings.reduce((sum, record) => 
-    sum + (record.samples_processed || 0), 0
-  );
+  const totalSamples = bookings.reduce((sum, record) => {
+    // Use new format if available
+    if (record.projectSamples && Array.isArray(record.projectSamples)) {
+      return sum + record.projectSamples.reduce((pSum: number, ps: any) => pSum + ps.samples, 0);
+    }
+    // Fallback to old format
+    return sum + (record.samples_processed || 0);
+  }, 0);
   const sessionsWithSamples = bookings.filter(r => 
     r.samples_processed && r.samples_processed > 0
   ).length;

@@ -14,8 +14,9 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Equipment, Project } from "@/lib/types";
-import { Clock, FlaskConical, CalendarIcon, Users } from "lucide-react";
+import { Equipment, Project, ProjectSample } from "@/lib/types";
+import { Clock, CalendarIcon, Users } from "lucide-react";
+import { ProjectSampleSelector } from "@/components/ProjectSampleSelector";
 import { format, addMinutes } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -38,11 +39,10 @@ export default function QuickAdd() {
   const [collaboratorSearch, setCollaboratorSearch] = useState<string>("");
   const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
 
+  const [projectSamples, setProjectSamples] = useState<ProjectSample[]>([]);
   const [formData, setFormData] = useState({
     equipmentIds: [] as string[],
-    projectId: "",
     duration: "30",
-    samplesProcessed: 1,
     notes: "",
   });
 
@@ -136,6 +136,27 @@ export default function QuickAdd() {
       return;
     }
 
+    if (projectSamples.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please add at least one project with samples",
+        variant: "destructive",
+      });
+      setLoading(false);
+      return;
+    }
+
+    const totalSamples = projectSamples.reduce((sum, ps) => sum + ps.samples, 0);
+    if (totalSamples < 1 || totalSamples > 300) {
+      toast({
+        title: "Error",
+        description: "Total samples must be between 1 and 300",
+        variant: "destructive",
+      });
+      setLoading(false);
+      return;
+    }
+
     // Parse the time and combine with selected date
     const [hours, minutes] = selectedTime.split(':').map(Number);
     const startTime = new Date(selectedDate);
@@ -169,14 +190,25 @@ export default function QuickAdd() {
     // Generate a group ID for linking multiple usage records
     const usageGroupId = formData.equipmentIds.length > 1 ? crypto.randomUUID() : null;
 
+    // Build project_samples array for database
+    const project_samples = projectSamples.map(ps => ({
+      project_id: ps.projectId,
+      samples: ps.samples
+    }));
+
+    // For backward compatibility
+    const total_samples = projectSamples.reduce((sum, ps) => sum + ps.samples, 0);
+    const primary_project_id = projectSamples.length > 0 ? projectSamples[0].projectId : null;
+
     // Create usage records for each equipment
     const usageRecords = formData.equipmentIds.map(equipmentId => ({
       user_id: user.id,
       equipment_id: equipmentId,
-      project_id: formData.projectId || null,
+      project_id: primary_project_id,
       start_time: startTime.toISOString(),
       end_time: endTime.toISOString(),
-      samples_processed: formData.samplesProcessed,
+      samples_processed: total_samples,
+      project_samples: project_samples,
       notes: formData.notes || null,
       booking_group_id: usageGroupId,
       collaborators: selectedCollaborators
@@ -202,11 +234,10 @@ export default function QuickAdd() {
       // Reset form
       setFormData({
         equipmentIds: [],
-        projectId: "",
         duration: "30",
-        samplesProcessed: 1,
         notes: "",
       });
+      setProjectSamples([]);
       setSelectedDate(new Date());
       setSelectedTime("");
       setSelectedCollaborators([]);
@@ -329,29 +360,13 @@ export default function QuickAdd() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="project">Project (Optional)</Label>
-                <Select
-                  value={formData.projectId}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, projectId: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select project" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((project) => {
-                      return (
-                        <SelectItem key={project.id} value={project.id}>
-                          <div className="flex items-center gap-2">
-                            {project.icon && <span className="text-lg">{project.icon}</span>}
-                            <span>{project.name}</span>
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                <Label>Projects & Samples *</Label>
+                <ProjectSampleSelector
+                  projects={projects}
+                  value={projectSamples}
+                  onChange={setProjectSamples}
+                  maxTotal={300}
+                />
               </div>
 
               <div className="space-y-2">
@@ -376,24 +391,6 @@ export default function QuickAdd() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="flex items-center gap-2">
-                    <FlaskConical className="w-4 h-4" />
-                    Samples Processed: {formData.samplesProcessed}
-                  </Label>
-                </div>
-                <Slider
-                  value={[formData.samplesProcessed]}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, samplesProcessed: value[0] })
-                  }
-                  min={1}
-                  max={300}
-                  step={1}
-                  className="w-full"
-                />
-              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="notes">Notes (Optional)</Label>

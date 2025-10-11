@@ -149,12 +149,22 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
           <span className="truncate">{booking.studentEmail}</span>
         </div>
         
-        {booking.projectName && (
-          <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
-            <FolderKanban className="w-3 h-3 flex-shrink-0" />
-            <span className="truncate font-medium">{booking.projectName}</span>
-          </div>
-        )}
+          {booking.projectSamples && booking.projectSamples.length > 0 ? (
+            <div className="space-y-1">
+              {booking.projectSamples.map((ps, idx) => (
+                <div key={idx} className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+                  <FolderKanban className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate font-medium">{ps.projectName || 'Unknown Project'}</span>
+                  <span className="ml-auto text-primary font-semibold">{ps.samples} samples</span>
+                </div>
+              ))}
+            </div>
+          ) : booking.projectName ? (
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+              <FolderKanban className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate font-medium">{booking.projectName}</span>
+            </div>
+          ) : null}
         
         {booking.samplesProcessed && (
           <div className="flex items-center gap-2 text-sm pt-2">

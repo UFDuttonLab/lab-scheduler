@@ -1,3 +1,9 @@
+export interface ProjectSample {
+  projectId: string;
+  projectName?: string; // For display purposes
+  samples: number;
+}
+
 export interface Equipment {
   id: string;
   name: string;
@@ -30,6 +36,7 @@ export interface UsageRecord {
   samplesProcessed?: number;
   notes?: string;
   createdAt: Date;
+  projectSamples?: ProjectSample[];
 }
 
 export interface Student {
@@ -59,6 +66,7 @@ export interface Booking {
   collaborators?: string[]; // Array of user IDs
   userId?: string; // Owner of the booking
   source?: 'booking' | 'usage_record'; // Source table for proper deletion
+  projectSamples?: ProjectSample[];
 }
 
 export interface TimeSlot {
