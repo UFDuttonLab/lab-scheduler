@@ -1214,7 +1214,7 @@ const Schedule = () => {
                   value={[samplesCount]}
                   onValueChange={(value) => setSamplesCount(value[0])}
                   min={1}
-                  max={100}
+                  max={300}
                   step={1}
                   className="w-full"
                 />
@@ -1522,7 +1522,7 @@ const Schedule = () => {
                   value={[samplesCount]}
                   onValueChange={(value) => setSamplesCount(value[0])}
                   min={1}
-                  max={100}
+                  max={300}
                   step={1}
                 />
               </div>

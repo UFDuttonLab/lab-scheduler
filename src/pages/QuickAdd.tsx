@@ -389,7 +389,7 @@ export default function QuickAdd() {
                     setFormData({ ...formData, samplesProcessed: value[0] })
                   }
                   min={1}
-                  max={100}
+                  max={300}
                   step={1}
                   className="w-full"
                 />

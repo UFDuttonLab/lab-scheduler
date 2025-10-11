@@ -198,7 +198,7 @@ const Help = () => {
                 </div>
                 <div className="border-l-4 border-primary pl-3">
                   <p className="font-medium text-foreground">Quantification Equipment</p>
-                  <p className="text-sm">Equipment for measuring and quantifying samples (1-100 samples per session)</p>
+                  <p className="text-sm">Equipment for measuring and quantifying samples (1-300 samples per session)</p>
                 </div>
                 <div className="border-l-4 border-primary pl-3">
                   <p className="font-medium text-foreground">PCR Machines</p>

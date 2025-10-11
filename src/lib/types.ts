@@ -55,7 +55,7 @@ export interface Booking {
   status: "scheduled" | "in-progress" | "completed" | "cancelled";
   cpuCount?: number; // For HiPerGator bookings
   gpuCount?: number; // For HiPerGator bookings
-  samplesProcessed?: number; // Number of samples (1-100)
+  samplesProcessed?: number; // Number of samples (1-300)
   collaborators?: string[]; // Array of user IDs
   userId?: string; // Owner of the booking
   source?: 'booking' | 'usage_record'; // Source table for proper deletion
