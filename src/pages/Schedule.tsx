@@ -149,7 +149,7 @@ const Schedule = () => {
     } else if (selectedEquipment.length > 0) {
       setDuration("60");
     }
-  }, [selectedEquipment, equipment, isEditDialogOpen]);
+  }, [selectedEquipment, equipment]);
 
   const fetchProjects = async () => {
     const { data, error } = await supabase

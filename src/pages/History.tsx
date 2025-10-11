@@ -6,17 +6,52 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Booking } from "@/lib/types";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, CalendarIcon, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format, addMinutes, setHours, setMinutes } from "date-fns";
+import { cn } from "@/lib/utils";
+import { ProjectSampleSelector } from "@/components/ProjectSampleSelector";
+import { Slider } from "@/components/ui/slider";
+import { Badge } from "@/components/ui/badge";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 
 const History = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Edit dialog state
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [bookingDate, setBookingDate] = useState<Date | undefined>();
+  const [selectedTime, setSelectedTime] = useState("");
+  const [duration, setDuration] = useState("60");
+  const [purpose, setPurpose] = useState("");
+  const [projectSamples, setProjectSamples] = useState<Array<{projectId: string, projectName?: string, samples: number}>>([]);
+  const [cpuCount, setCpuCount] = useState(1);
+  const [gpuCount, setGpuCount] = useState(0);
+  const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
+  const [collaboratorSearch, setCollaboratorSearch] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Reference data
+  const [projects, setProjects] = useState<any[]>([]);
+  const [equipment, setEquipment] = useState<any[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<any[]>([]);
 
   useEffect(() => {
     fetchBookings();
+    fetchProjects();
+    fetchEquipment();
+    fetchUsers();
   }, []);
 
   const fetchBookings = async () => {
@@ -134,6 +169,166 @@ const History = () => {
     }
   };
 
+  const fetchProjects = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('name');
+      
+      if (error) throw error;
+      setProjects(data || []);
+    } catch (error) {
+      console.error("Error fetching projects:", error);
+    }
+  };
+
+  const fetchEquipment = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('equipment')
+        .select('*')
+        .order('name');
+      
+      if (error) throw error;
+      setEquipment(data || []);
+    } catch (error) {
+      console.error("Error fetching equipment:", error);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email, full_name')
+        .eq('active', true)
+        .order('full_name');
+      
+      if (error) throw error;
+      setAvailableUsers(data || []);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+    }
+  };
+
+  const handleEditBooking = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!selectedBooking || !bookingDate || !selectedTime) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    if (projectSamples.length === 0 || projectSamples.some(ps => ps.samples <= 0)) {
+      toast.error("Please add at least one project with valid sample count");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const [hours, minutes] = selectedTime.split(':').map(Number);
+      const startTime = setMinutes(setHours(bookingDate, hours), minutes);
+      const endTime = addMinutes(startTime, parseInt(duration));
+
+      // Build project_samples array
+      const project_samples = projectSamples.map(ps => ({
+        project_id: ps.projectId,
+        samples: ps.samples
+      }));
+
+      const tableName = selectedBooking.source === 'usage_record' ? 'usage_records' : 'bookings';
+
+      // Build update data based on source
+      const updateData: any = {
+        start_time: startTime.toISOString(),
+        end_time: endTime.toISOString(),
+        project_samples: project_samples,
+        collaborators: selectedCollaborators,
+      };
+
+      // Add source-specific fields
+      if (selectedBooking.source === 'booking') {
+        updateData.purpose = purpose || null;
+        if (selectedBooking.cpuCount !== undefined) {
+          updateData.cpu_count = cpuCount;
+        }
+        if (selectedBooking.gpuCount !== undefined) {
+          updateData.gpu_count = gpuCount;
+        }
+      } else {
+        updateData.notes = purpose || null;
+      }
+
+      const { error } = await supabase
+        .from(tableName)
+        .update(updateData)
+        .eq('id', selectedBooking.id);
+
+      if (error) throw error;
+
+      toast.success(`${selectedBooking.source === 'usage_record' ? 'Usage record' : 'Booking'} updated successfully`);
+      setIsEditDialogOpen(false);
+      fetchBookings();
+    } catch (error: any) {
+      console.error("Error updating:", error);
+      toast.error(error.message || "Failed to update");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEditClick = (booking: Booking) => {
+    setSelectedBooking(booking);
+    
+    // Pre-fill form
+    if (booking.projectSamples && booking.projectSamples.length > 0) {
+      setProjectSamples(booking.projectSamples.map(ps => ({
+        projectId: ps.projectId,
+        projectName: ps.projectName,
+        samples: ps.samples
+      })));
+    } else if (booking.projectId && booking.samplesProcessed) {
+      setProjectSamples([{
+        projectId: booking.projectId,
+        projectName: booking.projectName,
+        samples: booking.samplesProcessed
+      }]);
+    } else {
+      setProjectSamples([]);
+    }
+    
+    setBookingDate(booking.startTime);
+    setSelectedTime(format(booking.startTime, "HH:mm"));
+    setDuration(booking.duration.toString());
+    setPurpose(booking.purpose || "");
+    setCpuCount(booking.cpuCount || 1);
+    setGpuCount(booking.gpuCount || 0);
+    setSelectedCollaborators(booking.collaborators || []);
+    setCollaboratorSearch("");
+    
+    setIsEditDialogOpen(true);
+  };
+
+  const timeSlots = Array.from({ length: 24 }, (_, i) => {
+    const hour = i.toString().padStart(2, '0');
+    return `${hour}:00`;
+  });
+
+  const durationOptions = [
+    { value: "30", label: "30 minutes" },
+    { value: "60", label: "1 hour" },
+    { value: "120", label: "2 hours" },
+    { value: "180", label: "3 hours" },
+    { value: "240", label: "4 hours" },
+    { value: "480", label: "8 hours" },
+    { value: "1440", label: "24 hours" },
+  ];
+
+  const currentEquipment = selectedBooking ? equipment.find(e => e.id === selectedBooking.equipmentId) : null;
+  const isHiPerGator = currentEquipment?.type === "HiPerGator";
+
   const allBookings = bookings;
   const futureBookings = bookings.filter(b => 
     b.status === "scheduled" || b.status === "in-progress"
@@ -213,7 +408,7 @@ const History = () => {
             ) : filteredBookings(allBookings).length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredBookings(allBookings).map(booking => (
-                  <BookingCard key={booking.id} booking={booking} onDelete={fetchBookings} />
+                  <BookingCard key={booking.id} booking={booking} onDelete={fetchBookings} onEdit={handleEditClick} />
                 ))}
               </div>
             ) : (
@@ -231,7 +426,7 @@ const History = () => {
             ) : filteredBookings(completedBookings).length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredBookings(completedBookings).map(booking => (
-                  <BookingCard key={booking.id} booking={booking} onDelete={fetchBookings} />
+                  <BookingCard key={booking.id} booking={booking} onDelete={fetchBookings} onEdit={handleEditClick} />
                 ))}
               </div>
             ) : (
@@ -249,7 +444,7 @@ const History = () => {
             ) : filteredBookings(futureBookings).length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredBookings(futureBookings).map(booking => (
-                  <BookingCard key={booking.id} booking={booking} onDelete={fetchBookings} />
+                  <BookingCard key={booking.id} booking={booking} onDelete={fetchBookings} onEdit={handleEditClick} />
                 ))}
               </div>
             ) : (
@@ -259,6 +454,226 @@ const History = () => {
             )}
           </TabsContent>
         </Tabs>
+
+        {/* Edit Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+          setIsEditDialogOpen(open);
+          if (!open) {
+            setSelectedBooking(null);
+            setProjectSamples([]);
+            setSelectedCollaborators([]);
+            setCollaboratorSearch("");
+          }
+        }}>
+          <DialogContent className="max-w-[95vw] sm:max-w-[600px] lg:max-w-[700px] max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                Edit {selectedBooking?.source === 'usage_record' ? 'Usage Record' : 'Booking'}
+                {selectedBooking && ` - ${selectedBooking.equipmentName}`}
+              </DialogTitle>
+              <DialogDescription>
+                Update details for {selectedBooking && format(selectedBooking.startTime, "PPP 'at' p")}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <form onSubmit={handleEditBooking} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Date *</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !bookingDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {bookingDate ? format(bookingDate, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={bookingDate}
+                      onSelect={setBookingDate}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Start Time *</Label>
+                  <Select value={selectedTime} onValueChange={setSelectedTime}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select time" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {timeSlots.map(time => (
+                        <SelectItem key={time} value={time}>{time}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Duration *</Label>
+                  <Select value={duration} onValueChange={setDuration}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {durationOptions.map(option => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Projects & Samples *</Label>
+                <ProjectSampleSelector
+                  projects={projects}
+                  value={projectSamples}
+                  onChange={setProjectSamples}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>{selectedBooking?.source === 'usage_record' ? 'Notes' : 'Purpose'}</Label>
+                <Textarea
+                  value={purpose}
+                  onChange={(e) => setPurpose(e.target.value)}
+                  placeholder={`What is this ${selectedBooking?.source === 'usage_record' ? 'usage record' : 'booking'} for?`}
+                  rows={3}
+                />
+              </div>
+
+              {isHiPerGator && (
+                <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+                  <h4 className="font-semibold">HiPerGator Resources</h4>
+                  
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <Label>CPU Count</Label>
+                      <span className="text-sm font-medium">{cpuCount}</span>
+                    </div>
+                    <Slider
+                      value={[cpuCount]}
+                      onValueChange={([value]) => setCpuCount(value)}
+                      min={1}
+                      max={currentEquipment?.max_cpu_count || 128}
+                      step={1}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <Label>GPU Count</Label>
+                      <span className="text-sm font-medium">{gpuCount}</span>
+                    </div>
+                    <Slider
+                      value={[gpuCount]}
+                      onValueChange={([value]) => setGpuCount(value)}
+                      min={0}
+                      max={currentEquipment?.max_gpu_count || 8}
+                      step={1}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label>Collaborators</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start">
+                      {selectedCollaborators.length > 0
+                        ? `${selectedCollaborators.length} selected`
+                        : "Select collaborators"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0" align="start">
+                    <Command>
+                      <CommandInput
+                        placeholder="Search users..."
+                        value={collaboratorSearch}
+                        onValueChange={setCollaboratorSearch}
+                      />
+                      <CommandEmpty>No users found.</CommandEmpty>
+                      <CommandGroup className="max-h-64 overflow-auto">
+                        {availableUsers.map((user) => (
+                          <CommandItem
+                            key={user.id}
+                            onSelect={() => {
+                              setSelectedCollaborators(prev =>
+                                prev.includes(user.id)
+                                  ? prev.filter(id => id !== user.id)
+                                  : [...prev, user.id]
+                              );
+                            }}
+                          >
+                            <div className="flex items-center gap-2 flex-1">
+                              <input
+                                type="checkbox"
+                                checked={selectedCollaborators.includes(user.id)}
+                                readOnly
+                                className="rounded"
+                              />
+                              <span>{user.full_name || user.email}</span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {selectedCollaborators.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {selectedCollaborators.map(userId => {
+                      const user = availableUsers.find(u => u.id === userId);
+                      return (
+                        <Badge key={userId} variant="secondary">
+                          {user?.full_name || user?.email}
+                          <X
+                            className="ml-1 h-3 w-3 cursor-pointer"
+                            onClick={() => setSelectedCollaborators(prev => prev.filter(id => id !== userId))}
+                          />
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditDialogOpen(false)}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    'Update'
+                  )}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
       </main>
       <Footer />
     </div>
