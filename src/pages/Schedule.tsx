@@ -134,6 +134,9 @@ const Schedule = () => {
 
   // Reset duration and resource counts when switching equipment types
   useEffect(() => {
+    // Don't reset if we're in edit mode
+    if (isEditDialogOpen) return;
+    
     const hasHiPerGator = selectedEquipment.some(eqId => {
       const eq = equipment.find(e => e.id === eqId);
       return eq?.type === "HiPerGator";
@@ -146,7 +149,7 @@ const Schedule = () => {
     } else if (selectedEquipment.length > 0) {
       setDuration("60");
     }
-  }, [selectedEquipment, equipment]);
+  }, [selectedEquipment, equipment, isEditDialogOpen]);
 
   const fetchProjects = async () => {
     const { data, error } = await supabase
