@@ -46,7 +46,7 @@ const Analytics = () => {
 
       // Enrich bookings with related data
       const enrichedBookings = (bookingsRes.data || []).map(booking => {
-        const enrichedProjectSamples = booking.project_samples?.map((ps: any) => ({
+        const enrichedProjectSamples = (booking.project_samples as any)?.map?.((ps: any) => ({
           projectId: ps.project_id,
           projectName: projectMap.get(ps.project_id)?.name || 'Unknown',
           samples: ps.samples
@@ -56,19 +56,29 @@ const Analytics = () => {
           ...booking,
           equipment: equipmentMap.get(booking.equipment_id),
           projectSamples: enrichedProjectSamples,
-        project: projectMap.get(booking.project_id),
-        profile: profileMap.get(booking.user_id),
-        source: 'booking' as const
-      }));
+          project: projectMap.get(booking.project_id),
+          profile: profileMap.get(booking.user_id),
+          source: 'booking' as const
+        };
+      });
 
       // Enrich usage records with related data
-      const enrichedUsageRecords = (usageRecordsRes.data || []).map(record => ({
-        ...record,
-        equipment: equipmentMap.get(record.equipment_id),
-        project: projectMap.get(record.project_id),
-        profile: profileMap.get(record.user_id),
-        source: 'usage_record' as const
-      }));
+      const enrichedUsageRecords = (usageRecordsRes.data || []).map(record => {
+        const enrichedProjectSamples = (record.project_samples as any)?.map?.((ps: any) => ({
+          projectId: ps.project_id,
+          projectName: projectMap.get(ps.project_id)?.name || 'Unknown',
+          samples: ps.samples
+        }));
+        
+        return {
+          ...record,
+          equipment: equipmentMap.get(record.equipment_id),
+          projectSamples: enrichedProjectSamples,
+          project: projectMap.get(record.project_id),
+          profile: profileMap.get(record.user_id),
+          source: 'usage_record' as const
+        };
+      });
 
       // Combine bookings and usage records for analytics
       const allRecords = [...enrichedBookings, ...enrichedUsageRecords];
