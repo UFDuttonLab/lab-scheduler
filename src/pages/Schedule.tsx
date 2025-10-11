@@ -1458,18 +1458,30 @@ const Schedule = () => {
         </Dialog>
 
         {/* Edit Booking Dialog */}
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+          setIsEditDialogOpen(open);
+          if (!open) {
+            // Reset form when closing
+            setSelectedBooking(null);
+            setProjectSamples([]);
+            setSelectedCollaborators([]);
+            setCollaboratorSearch("");
+          }
+        }}>
           <DialogContent className="max-w-[95vw] sm:max-w-[600px] lg:max-w-[700px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Edit Booking</DialogTitle>
+              <DialogTitle>
+                Edit Booking
+                {selectedBooking && ` - ${equipment.find(e => e.id === selectedBooking.equipmentId)?.name || 'Unknown Equipment'}`}
+              </DialogTitle>
               <DialogDescription>
-                Update your booking details
+                Update your booking details for {selectedBooking && format(selectedBooking.startTime, "PPP 'at' p")}
               </DialogDescription>
             </DialogHeader>
             
             <form onSubmit={handleEditBooking} className="space-y-4">
               <div className="space-y-2">
-                <Label>Date</Label>
+                <Label>Date *</Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
@@ -1483,7 +1495,7 @@ const Schedule = () => {
                       {bookingDate ? format(bookingDate, "PPP") : <span>Pick a date</span>}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
+                  <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
                     <Calendar
                       mode="single"
                       selected={bookingDate}
