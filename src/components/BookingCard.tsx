@@ -101,7 +101,7 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
         </div>
         <div className="flex items-center gap-2 self-start">
           <Badge className={status.className}>{status.label}</Badge>
-          {canEdit && booking.status === "scheduled" && onEdit && (
+          {canEdit && (booking.status === "scheduled" || permissions.canManageBookings) && onEdit && (
             <Button 
               variant="ghost" 
               size="icon" 
