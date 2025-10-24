@@ -31,25 +31,46 @@ const ARMicrobeShooter = () => {
   const [permissionStatus, setPermissionStatus] = useState<string>("");
   const gameStartTimeRef = useRef<number>(0);
   const { requestPermission: requestMotionPermission } = useDeviceMotion();
-  const { requestPermission: requestOrientationPermission } = useDeviceOrientation();
+  const orientation = useDeviceOrientation();
   const gyro = useGyroscope();
 
   const handleRequestPermissions = async () => {
     setPermissionStatus("Requesting permissions...");
     
     const motionGranted = await requestMotionPermission();
-    const orientationGranted = await requestOrientationPermission();
+    const orientationGranted = await orientation.requestPermission();
     const gyroGranted = await gyro.requestPermission();
 
     console.log('🔐 Permission results:', { motionGranted, orientationGranted, gyroGranted });
 
     if (motionGranted || orientationGranted || gyroGranted) {
-      setPermissionsGranted(true);
-      setPermissionStatus("✅ Permissions granted! Ready to play.");
-      toast.success("Sensors ready!");
+      setPermissionStatus("Waiting for sensor data...");
+      
+      // Wait for actual sensor data to confirm sensors are working
+      const startTime = Date.now();
+      const timeout = 3000; // 3 second timeout
+      
+      while (Date.now() - startTime < timeout) {
+        const hasOrientation = orientation.alpha !== null && orientation.beta !== null;
+        const hasGyro = gyro.alpha !== null && gyro.beta !== null;
+        
+        if (hasOrientation || hasGyro) {
+          setPermissionsGranted(true);
+          setPermissionStatus("✅ Sensors active! Ready to play.");
+          toast.success("Sensors ready! You can now start the game.");
+          return;
+        }
+        
+        // Wait a bit before checking again
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      // Timeout - sensors not responding
+      setPermissionStatus("⚠️ Sensors not responding. Try reloading the page.");
+      toast.error("Sensors not responding - please reload and try again");
     } else {
-      setPermissionStatus("⚠️ Touch controls will be used instead.");
-      toast.warning("No sensor permissions granted - using touch controls");
+      setPermissionStatus("⚠️ Sensor permissions denied. Game cannot work without sensors.");
+      toast.error("Motion sensor permission required for AR game");
     }
   };
 
@@ -224,10 +245,21 @@ const ARMicrobeShooter = () => {
           </div>
           
           <div className="space-y-3">
-            <Button onClick={startGame} size="lg" className="w-full">
-              <Play className="mr-2 h-5 w-5" />
-              Start Game
-            </Button>
+            {!permissionsGranted ? (
+              <Button onClick={handleRequestPermissions} size="lg" className="w-full">
+                🎮 Enable Sensors to Play
+              </Button>
+            ) : (
+              <Button onClick={startGame} size="lg" className="w-full">
+                <Play className="mr-2 h-5 w-5" />
+                Start Game
+              </Button>
+            )}
+            
+            {permissionStatus && (
+              <p className="text-sm text-center text-muted-foreground px-4">{permissionStatus}</p>
+            )}
+            
             <Button onClick={() => setShowLeaderboard(!showLeaderboard)} variant="outline" className="w-full">
               <Trophy className="mr-2 h-4 w-4" />
               {showLeaderboard ? "Hide Leaderboard" : "View Leaderboard"}

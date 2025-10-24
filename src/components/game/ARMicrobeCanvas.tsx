@@ -115,8 +115,6 @@ export const ARMicrobeCanvas = ({
   const laserFiringRef = useRef<number>(0);
   const [showDebug, setShowDebug] = useState(false);
   const [sensorMode, setSensorMode] = useState<'gyroscope' | 'orientation' | null>(null);
-  const [showPermissionOverlay, setShowPermissionOverlay] = useState(true);
-  const [permissionStatus, setPermissionStatus] = useState("");
   const lastComboTimeRef = useRef<number>(Date.now());
   const lastPowerUpSpawnRef = useRef<number>(Date.now());
   const animationFrameRef = useRef<number>();
@@ -130,27 +128,9 @@ export const ARMicrobeCanvas = ({
   const currentWaveRef = useRef(1);
   const waveMicrobesSpawnedRef = useRef(0);
   const sensorDataRef = useRef({ yaw: 0, pitch: 0 });
-  const [isIOS, setIsIOS] = useState(false);
-  const [browserWarning, setBrowserWarning] = useState("");
 
   useEffect(() => {
     console.log("🦠 AR Microbe Shooter V2 - LARGE microbes, close spawn, fast movement");
-  }, []);
-
-  useEffect(() => {
-    const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    setIsIOS(iOS);
-    
-    if (iOS) {
-      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-      if (!isSafari) {
-        setBrowserWarning("iOS detected: Please use Safari browser for best results");
-      }
-      setPermissionStatus("iOS detected - Safari required for motion sensors");
-    } else {
-      setPermissionStatus("Android detected - sensors will activate automatically");
-    }
   }, []);
 
   const getMicrobeColor = (type: string): string => {
@@ -281,73 +261,6 @@ export const ARMicrobeCanvas = ({
       description: `${5 + nextWave * 3} microbes incoming!`
     });
   }, []);
-
-  const handleRequestPermissions = async () => {
-    setPermissionStatus("Activating sensors...");
-    
-    if (isIOS) {
-      try {
-        if (typeof DeviceOrientationEvent !== 'undefined' && 
-            typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
-          const permissionState = await (DeviceOrientationEvent as any).requestPermission();
-          
-          if (permissionState === 'granted') {
-            setPermissionStatus("Waiting for sensor data...");
-            
-            const startTime = Date.now();
-            while (Date.now() - startTime < 3000) {
-              if (orientation.alpha !== null && orientation.beta !== null) {
-                break;
-              }
-              await new Promise(resolve => setTimeout(resolve, 100));
-            }
-            
-            if (orientation.alpha !== null && orientation.beta !== null) {
-              toast.success("Sensors active! Hold phone upright and look around!");
-              setPermissionStatus("Sensors active");
-              setShowPermissionOverlay(false);
-              setWaveActive(true);
-              waveActiveRef.current = true;
-            } else {
-              toast.error("Sensors not responding - please reload");
-              setPermissionStatus("Sensor initialization failed");
-            }
-          } else {
-            toast.error("Motion sensor permission required");
-            setPermissionStatus("Permission denied - game cannot work without sensors");
-          }
-        }
-      } catch (error) {
-        console.error('Permission request failed:', error);
-        toast.error("Failed to enable sensors - ensure you're using Safari");
-        setPermissionStatus("Error: Use Safari browser on iOS");
-      }
-    } else {
-      await gyro.requestPermission();
-      await orientation.requestPermission();
-      
-      setPermissionStatus("Waiting for sensor data...");
-      
-      const startTime = Date.now();
-      while (Date.now() - startTime < 3000) {
-        if (orientation.alpha !== null || (gyro.alpha !== null && gyro.sensorAvailable)) {
-          break;
-        }
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      
-      if (orientation.alpha !== null || (gyro.alpha !== null && gyro.sensorAvailable)) {
-        toast.success("Sensors active! Hold phone upright and look around!");
-        setPermissionStatus("Sensors active");
-        setShowPermissionOverlay(false);
-        setWaveActive(true);
-        waveActiveRef.current = true;
-      } else {
-        toast.error("Sensors not responding - please reload and try again");
-        setPermissionStatus("No sensor data detected");
-      }
-    }
-  };
 
   useEffect(() => {
     if (orientation.alpha !== null && orientation.beta !== null) {
@@ -881,41 +794,6 @@ export const ARMicrobeCanvas = ({
 
   return (
     <>
-      {showPermissionOverlay && (
-        <div className="absolute inset-0 bg-black/90 flex items-center justify-center z-50 pointer-events-auto">
-          <div className="bg-background/95 rounded-lg p-6 max-w-sm mx-4 text-center space-y-4">
-            <h2 className="text-2xl font-bold">AR Microbe Shooter</h2>
-            
-            {browserWarning && (
-              <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 text-sm text-red-200">
-                {browserWarning}
-              </div>
-            )}
-            
-            <div className="bg-muted/50 rounded-lg p-3 text-xs text-left space-y-2">
-              <p className="font-semibold">Platform:</p>
-              <p className="text-muted-foreground">{permissionStatus}</p>
-              <div className="mt-2 space-y-1">
-                <p className="text-muted-foreground">
-                  {orientation.alpha !== null ? "✅" : "❌"} Device Orientation
-                </p>
-                <p className="text-muted-foreground">
-                  {isIOS ? "📱 iOS Device" : "🤖 Android Device"}
-                </p>
-              </div>
-            </div>
-            
-            <Button onClick={handleRequestPermissions} className="w-full" size="lg">
-              {isIOS ? "Grant Permission & Start" : "Start Game"}
-            </Button>
-            
-            <p className="text-xs text-muted-foreground">
-              {isIOS ? "Safari required on iOS" : "Works on any browser"}
-            </p>
-          </div>
-        </div>
-      )}
-
       <canvas
         ref={canvasRef}
         onTouchStart={handleTap}
