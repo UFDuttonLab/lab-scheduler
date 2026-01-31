@@ -25,15 +25,20 @@ export const EquipmentCard = ({ equipment, onSelect, onEdit, onDelete, onClick }
   return (
     <Card 
       className={cn(
-        "p-4 sm:p-6 hover:shadow-md transition-all cursor-pointer animate-fade-in active:scale-[0.98]",
-        onSelect && "hover:border-primary"
+        "p-4 sm:p-6 hover:shadow-md transition-all animate-fade-in",
+        onSelect && "hover:border-primary cursor-pointer"
       )}
-      onClick={(e) => {
-        onClick?.(equipment.name);
-        onSelect?.(equipment);
-      }}
+      onClick={() => onSelect?.(equipment)}
     >
-      <div className="flex items-start justify-between gap-2 sm:gap-3 mb-4">
+      {/* Dedicated clickable area for secret sequence */}
+      <div 
+        className="flex items-start justify-between gap-2 sm:gap-3 mb-4 cursor-pointer active:scale-[0.98] transition-transform"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick?.(equipment.name);
+          onSelect?.(equipment);
+        }}
+      >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-gradient-primary flex items-center justify-center text-xl sm:text-2xl flex-shrink-0">
             {equipment.icon || "🛠️"}
@@ -61,13 +66,12 @@ export const EquipmentCard = ({ equipment, onSelect, onEdit, onDelete, onClick }
       
       {(onEdit || onDelete) && (
         <div className="flex flex-col sm:flex-row gap-2 mt-4 pt-4 border-t">
-          {onEdit && (
+        {onEdit && (
             <Button
               variant="outline"
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                onClick?.(equipment.name);
                 onEdit(equipment);
               }}
               className="flex-1 min-h-[44px]"
@@ -82,7 +86,6 @@ export const EquipmentCard = ({ equipment, onSelect, onEdit, onDelete, onClick }
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                onClick?.(equipment.name);
                 onDelete(equipment);
               }}
               className="flex-1 min-h-[44px]"
