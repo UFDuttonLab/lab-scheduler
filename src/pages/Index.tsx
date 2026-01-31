@@ -143,9 +143,20 @@ const Index = () => {
   const totalBookedHours = totalBookedMinutes / 60;
 
   const upcomingBookings = bookings
-    .filter(b => b.status === "scheduled" && b.startTime >= new Date())
+    .filter(b => {
+      // Exclude cancelled and completed bookings
+      if (b.status === "cancelled" || b.status === "completed") return false;
+      
+      // Include in-progress bookings
+      if (b.status === "in-progress") return true;
+      
+      // Include scheduled bookings that haven't ended yet
+      if (b.status === "scheduled" && b.endTime >= now) return true;
+      
+      return false;
+    })
     .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
-    .slice(0, 3);
+    .slice(0, 5);
 
   const recentEquipment = equipment.filter(e => e.status === "available").slice(0, 3);
 
@@ -207,7 +218,7 @@ const Index = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl sm:text-2xl font-bold">Upcoming Bookings</h2>
+              <h2 className="text-xl sm:text-2xl font-bold">Current & Upcoming</h2>
               <button
                 onClick={() => navigate("/schedule")}
                 className="text-xs sm:text-sm text-primary hover:underline min-h-[44px] flex items-center"
