@@ -450,10 +450,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      get_current_version: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
+      get_current_version: { Args: never; Returns: string }
       has_any_role: {
         Args: {
           _roles: Database["public"]["Enums"]["app_role"][]

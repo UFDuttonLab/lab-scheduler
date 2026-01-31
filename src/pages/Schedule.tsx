@@ -357,13 +357,15 @@ const Schedule = () => {
       return;
     }
 
-    // Validate booking is not in the past
+    // Calculate start and end times
     const [hours, minutes] = selectedTime.split(':').map(Number);
     const startTime = new Date(bookingDate);
     startTime.setHours(hours, minutes, 0, 0);
+    const endTime = addMinutes(startTime, parseInt(duration));
     
-    if (startTime < new Date()) {
-      toast.error("Cannot book equipment in the past");
+    // Allow past start times if the booking extends into the future
+    if (endTime < new Date()) {
+      toast.error("Cannot create a booking that ends in the past. Use Quick Add for past usage.");
       return;
     }
 
