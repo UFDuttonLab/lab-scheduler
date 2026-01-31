@@ -62,6 +62,22 @@ const Index = () => {
         const profile = profilesData?.find(p => p.id === booking.user_id);
         const project = projectsData?.find(p => p.id === booking.project_id);
         
+        const startTime = new Date(booking.start_time);
+        const endTime = new Date(booking.end_time);
+        const now = new Date();
+        
+        // Calculate actual status based on time
+        let calculatedStatus: "scheduled" | "in-progress" | "completed" | "cancelled" = booking.status as "scheduled" | "in-progress" | "completed" | "cancelled";
+        if (booking.status !== "cancelled") {
+          if (endTime < now) {
+            calculatedStatus = "completed";
+          } else if (startTime <= now && endTime >= now) {
+            calculatedStatus = "in-progress";
+          } else {
+            calculatedStatus = "scheduled";
+          }
+        }
+        
         return {
           id: booking.id,
           equipmentId: booking.equipment_id,
@@ -69,13 +85,13 @@ const Index = () => {
           studentName: profile?.full_name || "Unknown Student",
           studentEmail: profile?.email || "",
           studentSpiritAnimal: profile?.spirit_animal || undefined,
-          startTime: new Date(booking.start_time),
-          endTime: new Date(booking.end_time),
-          duration: Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000),
+          startTime: startTime,
+          endTime: endTime,
+          duration: Math.round((endTime.getTime() - startTime.getTime()) / 60000),
           projectId: booking.project_id || undefined,
           projectName: project?.name || undefined,
           purpose: booking.purpose || undefined,
-          status: booking.status as "scheduled" | "in-progress" | "completed" | "cancelled",
+          status: calculatedStatus,
           source: 'booking' as const,
         };
       });
@@ -86,6 +102,20 @@ const Index = () => {
         const profile = profilesData?.find(p => p.id === record.user_id);
         const project = projectsData?.find(p => p.id === record.project_id);
         
+        const startTime = new Date(record.start_time);
+        const endTime = new Date(record.end_time);
+        const now = new Date();
+        
+        // Calculate actual status based on time
+        let calculatedStatus: "scheduled" | "in-progress" | "completed" | "cancelled";
+        if (endTime < now) {
+          calculatedStatus = "completed";
+        } else if (startTime <= now && endTime >= now) {
+          calculatedStatus = "in-progress";
+        } else {
+          calculatedStatus = "scheduled";
+        }
+        
         return {
           id: record.id,
           equipmentId: record.equipment_id,
@@ -93,13 +123,13 @@ const Index = () => {
           studentName: profile?.full_name || "Unknown Student",
           studentEmail: profile?.email || "",
           studentSpiritAnimal: profile?.spirit_animal || undefined,
-          startTime: new Date(record.start_time),
-          endTime: new Date(record.end_time),
-          duration: Math.round((new Date(record.end_time).getTime() - new Date(record.start_time).getTime()) / 60000),
+          startTime: startTime,
+          endTime: endTime,
+          duration: Math.round((endTime.getTime() - startTime.getTime()) / 60000),
           projectId: record.project_id || undefined,
           projectName: project?.name || undefined,
           purpose: record.notes || undefined,
-          status: 'completed' as "scheduled" | "in-progress" | "completed" | "cancelled",
+          status: calculatedStatus,
           source: 'usage_record' as const,
         };
       });
