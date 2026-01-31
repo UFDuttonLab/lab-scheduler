@@ -1,62 +1,90 @@
 
-## Plan: Fix iPhone Compatibility for Zombie Game Unlock
 
-### Root Cause
+## Plan: Fix Zombie Game Unlock for Both Desktop and iPhone
 
-The issue is that on iPhone/mobile, the Edit and Delete buttons cover a significant portion of the card. When tapping the card:
+### Problem
 
-1. The buttons have `stopPropagation()` on their click handlers (lines 68-69, 82-83)
-2. On mobile, touch targets are larger than on desktop
-3. When a user taps near the buttons (which takes up the bottom portion of the card), the tap is captured by the button's touch area, `stopPropagation()` fires, and the card's `onClick` (which tracks the secret sequence) never executes
+The iPhone fix I just implemented broke desktop functionality. Here's what's happening:
 
-This means on iPhone, users must tap very precisely on the upper portion of the card to register clicks for the secret sequence.
+**Before the fix:**
+- Card body click → registers for sequence ✓
+- Edit/Delete buttons → `stopPropagation()` prevents sequence registration ✓
+- iPhone issue: touch targets on buttons are larger, intercepting taps meant for the card
+
+**After the fix:**
+- Card body click → registers for sequence ✓
+- Edit/Delete buttons → NOW ALSO register for sequence ✗
+- This pollutes the sequence on desktop (clicking Edit on any equipment adds to the sequence)
 
 ### Solution
 
-Modify the click tracking to use the entire card area for the secret sequence, regardless of where the tap lands. This can be done by calling `onClick?.(equipment.name)` **before** the button's `stopPropagation()`, or by using a dedicated touch area at the top of the card.
+Create a **dedicated clickable area** at the top of the card (the icon and equipment name section) that explicitly handles the secret sequence. This area will:
+1. Have its own `onClick` handler that calls `onClick?.(equipment.name)`
+2. Be large enough to tap easily on mobile
+3. Not interfere with the Edit/Delete buttons
+
+The buttons will **only** do their specific actions without affecting the sequence.
 
 ### Technical Changes
 
 **File: `src/components/EquipmentCard.tsx`**
 
-Update the Edit and Delete button handlers to also call the `onClick` handler before stopping propagation:
+1. **Remove** `onClick?.(equipment.name)` from Edit and Delete button handlers (revert my previous change)
+
+2. **Add a dedicated clickable area** for the equipment name/icon section:
 
 ```typescript
-{onEdit && (
-  <Button
-    variant="outline"
-    size="sm"
+<Card 
+  className={cn(
+    "p-4 sm:p-6 hover:shadow-md transition-all animate-fade-in",
+    onSelect && "hover:border-primary cursor-pointer"
+  )}
+  onClick={() => onSelect?.(equipment)}  // Only for selection, not secret sequence
+>
+  {/* Dedicated clickable area for secret sequence */}
+  <div 
+    className="flex items-start justify-between gap-2 sm:gap-3 mb-4 cursor-pointer"
     onClick={(e) => {
-      e.stopPropagation();
-      onClick?.(equipment.name); // Track click for secret sequence
-      onEdit(equipment);
+      e.stopPropagation();  // Prevent double-firing with card onClick
+      onClick?.(equipment.name);  // Register for secret sequence
+      onSelect?.(equipment);
     }}
-    className="flex-1 min-h-[44px]"
   >
+    {/* Icon and name content... */}
+  </div>
+  
+  {/* Rest of card content... */}
+  
+  {(onEdit || onDelete) && (
+    <div className="flex flex-col sm:flex-row gap-2 mt-4 pt-4 border-t">
+      {onEdit && (
+        <Button
+          onClick={(e) => {
+            e.stopPropagation();  // Just stop propagation
+            onEdit(equipment);    // Just do the edit action
+          }}
+        >
+          Edit
+        </Button>
+      )}
+      {onDelete && (
+        <Button
+          onClick={(e) => {
+            e.stopPropagation();  // Just stop propagation
+            onDelete(equipment);  // Just do the delete action
+          }}
+        >
+          Delete
+        </Button>
+      )}
+    </div>
+  )}
+</Card>
 ```
-
-And similarly for the Delete button:
-
-```typescript
-{onDelete && (
-  <Button
-    variant="destructive"
-    size="sm"
-    onClick={(e) => {
-      e.stopPropagation();
-      onClick?.(equipment.name); // Track click for secret sequence
-      onDelete(equipment);
-    }}
-    className="flex-1 min-h-[44px]"
-  >
-```
-
-### Alternative Approach (Cleaner)
-
-Instead of modifying button handlers, add a dedicated invisible touch layer at the top of the card that captures clicks for the secret sequence. But the simpler fix is to ensure button clicks also register for the sequence.
 
 ### Result
 
-- Tapping anywhere on the equipment card (including Edit/Delete buttons) will register the click for the secret sequence
-- The Edit/Delete buttons will still work normally
-- The zombie game unlock will work consistently on all devices including iPhone
+- **Desktop**: Click the equipment name/icon area to register for the secret sequence. Edit/Delete buttons work normally without affecting the sequence
+- **iPhone**: Tap the equipment name/icon area (which is now a large, dedicated touch target) to register. Buttons don't interfere
+- Both platforms work correctly because the clickable area for the sequence is explicit and separate from the action buttons
+
