@@ -67,6 +67,7 @@ export const EquipmentCard = ({ equipment, onSelect, onEdit, onDelete, onClick }
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
+                onClick?.(equipment.name);
                 onEdit(equipment);
               }}
               className="flex-1 min-h-[44px]"
@@ -81,6 +82,7 @@ export const EquipmentCard = ({ equipment, onSelect, onEdit, onDelete, onClick }
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
+                onClick?.(equipment.name);
                 onDelete(equipment);
               }}
               className="flex-1 min-h-[44px]"
