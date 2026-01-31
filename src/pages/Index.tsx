@@ -27,30 +27,23 @@ const Index = () => {
     try {
       setLoading(true);
       
-      // Fetch equipment
-      const { data: equipmentData, error: equipmentError } = await supabase
-        .from('equipment')
-        .select('*');
+      // Fetch all data including usage_records (like Schedule page does)
+      const [equipmentRes, bookingsRes, usageRecordsRes, profilesRes, projectsRes] = await Promise.all([
+        supabase.from('equipment').select('*'),
+        supabase.from('bookings').select('*').order('start_time', { ascending: true }),
+        supabase.from('usage_records').select('*').order('start_time', { ascending: true }),
+        supabase.from('profiles').select('id, full_name, email, spirit_animal'),
+        supabase.from('projects').select('id, name')
+      ]);
       
-      if (equipmentError) throw equipmentError;
+      if (equipmentRes.error) throw equipmentRes.error;
+      if (bookingsRes.error) throw bookingsRes.error;
       
-      // Fetch bookings with related data
-      const { data: bookingsData, error: bookingsError } = await supabase
-        .from('bookings')
-        .select('*')
-        .order('start_time', { ascending: true });
-      
-      if (bookingsError) throw bookingsError;
-
-      // Fetch profiles separately
-      const { data: profilesData } = await supabase
-        .from('profiles')
-        .select('id, full_name, email');
-
-      // Fetch projects
-      const { data: projectsData } = await supabase
-        .from('projects')
-        .select('id, name');
+      const equipmentData = equipmentRes.data;
+      const bookingsData = bookingsRes.data || [];
+      const usageRecordsData = usageRecordsRes.data || [];
+      const profilesData = profilesRes.data;
+      const projectsData = projectsRes.data;
       
       // Transform equipment data
       const transformedEquipment: Equipment[] = equipmentData.map(eq => ({
@@ -75,6 +68,7 @@ const Index = () => {
           equipmentName: equipment?.name || "Unknown Equipment",
           studentName: profile?.full_name || "Unknown Student",
           studentEmail: profile?.email || "",
+          studentSpiritAnimal: profile?.spirit_animal || undefined,
           startTime: new Date(booking.start_time),
           endTime: new Date(booking.end_time),
           duration: Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000),
@@ -82,11 +76,39 @@ const Index = () => {
           projectName: project?.name || undefined,
           purpose: booking.purpose || undefined,
           status: booking.status as "scheduled" | "in-progress" | "completed" | "cancelled",
+          source: 'booking' as const,
         };
       });
       
+      // Transform usage records to booking format (same approach as Schedule page)
+      const transformedUsageRecords: Booking[] = usageRecordsData.map(record => {
+        const equipment = equipmentData.find(eq => eq.id === record.equipment_id);
+        const profile = profilesData?.find(p => p.id === record.user_id);
+        const project = projectsData?.find(p => p.id === record.project_id);
+        
+        return {
+          id: record.id,
+          equipmentId: record.equipment_id,
+          equipmentName: equipment?.name || "Unknown Equipment",
+          studentName: profile?.full_name || "Unknown Student",
+          studentEmail: profile?.email || "",
+          studentSpiritAnimal: profile?.spirit_animal || undefined,
+          startTime: new Date(record.start_time),
+          endTime: new Date(record.end_time),
+          duration: Math.round((new Date(record.end_time).getTime() - new Date(record.start_time).getTime()) / 60000),
+          projectId: record.project_id || undefined,
+          projectName: project?.name || undefined,
+          purpose: record.notes || undefined,
+          status: 'completed' as "scheduled" | "in-progress" | "completed" | "cancelled",
+          source: 'usage_record' as const,
+        };
+      });
+      
+      // Combine both sources
+      const allBookings = [...transformedBookings, ...transformedUsageRecords];
+      
       setEquipment(transformedEquipment);
-      setBookings(transformedBookings);
+      setBookings(allBookings);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({
@@ -112,6 +134,11 @@ const Index = () => {
   
   const now = new Date();
   const activeBookings = bookings.filter(b => {
+    // For usage_records, check if currently in progress based on time
+    if (b.source === 'usage_record') {
+      return b.startTime <= now && b.endTime >= now;
+    }
+    // For regular bookings
     return (b.status === "in-progress") || 
            (b.status === "scheduled" && b.startTime <= now && b.endTime >= now);
   }).length;
@@ -144,8 +171,16 @@ const Index = () => {
 
   const upcomingBookings = bookings
     .filter(b => {
-      // Exclude cancelled and completed bookings
-      if (b.status === "cancelled" || b.status === "completed") return false;
+      // Exclude cancelled bookings
+      if (b.status === "cancelled") return false;
+      
+      // For usage_records, check if end time is in the future (still ongoing)
+      if (b.source === 'usage_record') {
+        return b.endTime >= now;
+      }
+      
+      // For regular bookings, exclude completed
+      if (b.status === "completed") return false;
       
       // Include in-progress bookings
       if (b.status === "in-progress") return true;
