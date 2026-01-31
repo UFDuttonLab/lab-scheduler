@@ -1,72 +1,65 @@
 
 
-## Plan: Allow Past Start Times for Schedule Bookings
+## Plan: Show Current and Upcoming Bookings on Dashboard
 
 ### Problem
 
-The Schedule page prevents booking equipment with a start time in the past, even if the end time extends into the future. This blocks legitimate use cases like:
-- Extending an ongoing session for several more days
-- Booking equipment you just started using
-- Correcting/adding a booking you forgot to make earlier
+The "Upcoming Bookings" section on the dashboard currently only shows bookings that start in the future. It excludes bookings that are currently in progress (started earlier but still ongoing), which means users can't see what's happening right now.
 
-### Solution Options
+### Current Code (lines 145-148)
 
-**Option A: Remove the past-time restriction entirely (Simple)**
-- Remove the validation at lines 360-368 in Schedule.tsx
-- Allow any start time (past or future) as long as other validations pass
-- Quick Add remains available for past-only usage records
+```typescript
+const upcomingBookings = bookings
+  .filter(b => b.status === "scheduled" && b.startTime >= new Date())
+  .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+  .slice(0, 3);
+```
 
-**Option B: Allow past start times if end time is in the future (Recommended)**
-- Modify the validation to check if the *end time* is in the future
-- This allows "started in the past, continuing into the future" bookings
-- Keeps strict validation for completely-past bookings (use Quick Add for those)
+### Solution
 
-**Option C: Add a "Log Current Session" mode to Schedule**
-- Add a toggle or option to indicate you're logging an ongoing session
-- When enabled, skip the past-time validation
-- More complex but most explicit about intent
+Update the filter to include:
+1. **In-progress bookings** - status is "in-progress"
+2. **Currently active scheduled bookings** - status is "scheduled", started in the past, but end time is still in the future
+3. **Future scheduled bookings** - status is "scheduled" and start time is in the future
 
-### Recommended Solution: Option B
-
-This is the most balanced approach - it allows your use case (continuing a process for several days) while still directing purely historical entries to Quick Add.
+Also rename the section header to "Current & Upcoming Bookings" to better reflect what it shows.
 
 ### Technical Changes
 
-#### File: `src/pages/Schedule.tsx`
+**File: `src/pages/Index.tsx`**
 
-**Lines 360-368** - Replace current validation:
-
-```typescript
-// Current code:
-if (startTime < new Date()) {
-  toast.error("Cannot book equipment in the past");
-  return;
-}
-```
-
-**With:**
+**Lines 145-148** - Update the filter logic:
 
 ```typescript
-// Allow past start times if the booking extends into the future
-const endTime = addMinutes(startTime, parseInt(duration));
-if (endTime < new Date()) {
-  toast.error("Cannot create a booking that ends in the past. Use Quick Add for past usage.");
-  return;
-}
+const now = new Date(); // Already defined on line 113
+const upcomingBookings = bookings
+  .filter(b => {
+    // Exclude cancelled and completed bookings
+    if (b.status === "cancelled" || b.status === "completed") return false;
+    
+    // Include in-progress bookings
+    if (b.status === "in-progress") return true;
+    
+    // Include scheduled bookings that haven't ended yet
+    if (b.status === "scheduled" && b.endTime >= now) return true;
+    
+    return false;
+  })
+  .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+  .slice(0, 5); // Increase to 5 to show more relevant bookings
 ```
 
-This change:
-- Allows booking if start time is a few hours/days ago but end time is in the future
-- Still prevents creating entirely-past bookings (redirects to Quick Add)
-- No changes needed to edit flow (already allows editing past bookings)
-- No changes to Quick Add (still handles past-only usage records)
+**Line 210** - Update section header:
 
-### Testing Scenarios
+```typescript
+<h2 className="text-xl sm:text-2xl font-bold">Current & Upcoming</h2>
+```
 
-After implementation, verify:
-1. Can book equipment starting "yesterday" ending "tomorrow" - should work
-2. Can book equipment starting "2 hours ago" ending "in 6 hours" - should work  
-3. Can book equipment starting "yesterday" ending "yesterday" - should fail with message pointing to Quick Add
-4. Future bookings continue to work normally
-5. Quick Add still works for purely historical entries
+### Result
+
+After this change, the dashboard will show:
+- Any booking currently in progress
+- Any scheduled booking that hasn't ended yet (even if it started earlier)
+- Sorted by start time so current sessions appear first
+- Up to 5 bookings for better visibility
 
