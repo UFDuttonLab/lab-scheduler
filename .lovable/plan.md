@@ -1,97 +1,62 @@
 
+## Plan: Fix iPhone Compatibility for Zombie Game Unlock
 
-## Plan: Apply Dynamic Status Calculation to Schedule Page
+### Root Cause
 
-### Problem
+The issue is that on iPhone/mobile, the Edit and Delete buttons cover a significant portion of the card. When tapping the card:
 
-The Schedule page (`src/pages/Schedule.tsx`) has the same issue that was just fixed on the Dashboard:
+1. The buttons have `stopPropagation()` on their click handlers (lines 68-69, 82-83)
+2. On mobile, touch targets are larger than on desktop
+3. When a user taps near the buttons (which takes up the bottom portion of the card), the tap is captured by the button's touch area, `stopPropagation()` fires, and the card's `onClick` (which tracks the secret sequence) never executes
 
-1. **Line 255**: Regular bookings use the static database `status` value instead of calculating based on current time
-2. **Line 292**: Usage records are hardcoded as `'completed'` even when currently in progress
-
-Your Nanopore MK1D booking shows "Completed" because it's a `usage_record` that is hardcoded as completed, even though its time range indicates it's currently in progress.
+This means on iPhone, users must tap very precisely on the upper portion of the card to register clicks for the secret sequence.
 
 ### Solution
 
-Apply the same dynamic time-based status calculation that was added to `Index.tsx`.
+Modify the click tracking to use the entire card area for the secret sequence, regardless of where the tap lands. This can be done by calling `onClick?.(equipment.name)` **before** the button's `stopPropagation()`, or by using a dedicated touch area at the top of the card.
 
 ### Technical Changes
 
-**File: `src/pages/Schedule.tsx`**
+**File: `src/components/EquipmentCard.tsx`**
 
-**Lines 230-264** - Update booking transformation to calculate status based on time:
-
-Add dynamic status calculation before the return statement in the bookings map function:
+Update the Edit and Delete button handlers to also call the `onClick` handler before stopping propagation:
 
 ```typescript
-const transformedBookings: Booking[] = (bookingsRes.data || []).map((booking: any) => {
-  const equipment = equipmentMap.get(booking.equipment_id);
-  const project = booking.project_id ? projectMap.get(booking.project_id) : null;
-  const profile = profileMap.get(booking.user_id);
-  
-  const startTime = new Date(booking.start_time);
-  const endTime = new Date(booking.end_time);
-  const now = new Date();
-  
-  // Calculate actual status based on time
-  let calculatedStatus: "scheduled" | "in-progress" | "completed" | "cancelled" = booking.status;
-  if (booking.status !== "cancelled") {
-    if (endTime < now) {
-      calculatedStatus = "completed";
-    } else if (startTime <= now && endTime >= now) {
-      calculatedStatus = "in-progress";
-    } else {
-      calculatedStatus = "scheduled";
-    }
-  }
-  
-  // ... rest of the transformation
-  return {
-    // ... other fields
-    status: calculatedStatus,  // Use calculated status instead of booking.status
-    // ...
-  };
-});
+{onEdit && (
+  <Button
+    variant="outline"
+    size="sm"
+    onClick={(e) => {
+      e.stopPropagation();
+      onClick?.(equipment.name); // Track click for secret sequence
+      onEdit(equipment);
+    }}
+    className="flex-1 min-h-[44px]"
+  >
 ```
 
-**Lines 267-299** - Update usage record transformation to calculate status based on time:
+And similarly for the Delete button:
 
 ```typescript
-const transformedUsageRecords: Booking[] = (usageRecordsRes.data || []).map((record: any) => {
-  const equipment = equipmentMap.get(record.equipment_id);
-  const project = record.project_id ? projectMap.get(record.project_id) : null;
-  const profile = profileMap.get(record.user_id);
-  
-  const startTime = new Date(record.start_time);
-  const endTime = new Date(record.end_time);
-  const now = new Date();
-  
-  // Calculate actual status based on time
-  let calculatedStatus: "scheduled" | "in-progress" | "completed" | "cancelled";
-  if (endTime < now) {
-    calculatedStatus = "completed";
-  } else if (startTime <= now && endTime >= now) {
-    calculatedStatus = "in-progress";
-  } else {
-    calculatedStatus = "scheduled";
-  }
-  
-  // ... rest of the transformation
-  return {
-    // ... other fields
-    status: calculatedStatus,  // Use calculated status instead of hardcoded 'completed'
-    // ...
-  };
-});
+{onDelete && (
+  <Button
+    variant="destructive"
+    size="sm"
+    onClick={(e) => {
+      e.stopPropagation();
+      onClick?.(equipment.name); // Track click for secret sequence
+      onDelete(equipment);
+    }}
+    className="flex-1 min-h-[44px]"
+  >
 ```
+
+### Alternative Approach (Cleaner)
+
+Instead of modifying button handlers, add a dedicated invisible touch layer at the top of the card that captures clicks for the secret sequence. But the simpler fix is to ensure button clicks also register for the sequence.
 
 ### Result
 
-After this change, the Schedule page will show:
-- Your Nanopore MK1D booking as **"In Progress"** (yellow badge) since it's currently running
-- Past sessions as **"Completed"** (green badge)
-- Future sessions as **"Scheduled"** (blue badge)
-- Cancelled bookings remain **"Cancelled"** (red badge)
-
-Both the Dashboard and Schedule pages will now have consistent, dynamic status badges.
-
+- Tapping anywhere on the equipment card (including Edit/Delete buttons) will register the click for the secret sequence
+- The Edit/Delete buttons will still work normally
+- The zombie game unlock will work consistently on all devices including iPhone
