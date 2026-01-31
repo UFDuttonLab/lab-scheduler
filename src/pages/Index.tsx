@@ -107,6 +107,13 @@ const Index = () => {
       // Combine both sources
       const allBookings = [...transformedBookings, ...transformedUsageRecords];
       
+      // Debug: log combined data to verify both sources are loading
+      console.log('Dashboard data loaded:', {
+        bookings: transformedBookings.length,
+        usageRecords: transformedUsageRecords.length,
+        total: allBookings.length
+      });
+      
       setEquipment(transformedEquipment);
       setBookings(allBookings);
     } catch (error) {
