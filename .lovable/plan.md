@@ -1,90 +1,88 @@
 
 
-## Plan: Fix Zombie Game Unlock for Both Desktop and iPhone
+## Plan: Allow Undergrad Students to Manage Equipment
 
-### Problem
+### Overview
+This change will give undergraduate students the ability to add, edit, and delete equipment, matching the permissions that graduate students currently have.
 
-The iPhone fix I just implemented broke desktop functionality. Here's what's happening:
+### Changes Required
 
-**Before the fix:**
-- Card body click → registers for sequence ✓
-- Edit/Delete buttons → `stopPropagation()` prevents sequence registration ✓
-- iPhone issue: touch targets on buttons are larger, intercepting taps meant for the card
+**1. Frontend Permissions (`src/lib/permissions.ts`)**
 
-**After the fix:**
-- Card body click → registers for sequence ✓
-- Edit/Delete buttons → NOW ALSO register for sequence ✗
-- This pollutes the sequence on desktop (clicking Edit on any equipment adds to the sequence)
+Move `undergrad_student` from the restricted group to have equipment management access:
 
-### Solution
+- Change `canManageEquipment` from `false` to `true` for undergrad students
+- Also grant `canViewAnalytics` so they can see usage data for equipment they manage
+- Update the role description to reflect the new capabilities
 
-Create a **dedicated clickable area** at the top of the card (the icon and equipment name section) that explicitly handles the secret sequence. This area will:
-1. Have its own `onClick` handler that calls `onClick?.(equipment.name)`
-2. Be large enough to tap easily on mobile
-3. Not interfere with the Edit/Delete buttons
+**2. Database Security Policies**
 
-The buttons will **only** do their specific actions without affecting the sequence.
+Update two RLS policies to include `undergrad_student`:
 
-### Technical Changes
+- **equipment table**: Add `undergrad_student` to the "manage" policy
+- **equipment_projects table**: Add `undergrad_student` to the "manage" policy
 
-**File: `src/components/EquipmentCard.tsx`**
+---
 
-1. **Remove** `onClick?.(equipment.name)` from Edit and Delete button handlers (revert my previous change)
+### Technical Details
 
-2. **Add a dedicated clickable area** for the equipment name/icon section:
+**File: `src/lib/permissions.ts`**
 
 ```typescript
-<Card 
-  className={cn(
-    "p-4 sm:p-6 hover:shadow-md transition-all animate-fade-in",
-    onSelect && "hover:border-primary cursor-pointer"
-  )}
-  onClick={() => onSelect?.(equipment)}  // Only for selection, not secret sequence
->
-  {/* Dedicated clickable area for secret sequence */}
-  <div 
-    className="flex items-start justify-between gap-2 sm:gap-3 mb-4 cursor-pointer"
-    onClick={(e) => {
-      e.stopPropagation();  // Prevent double-firing with card onClick
-      onClick?.(equipment.name);  // Register for secret sequence
-      onSelect?.(equipment);
-    }}
-  >
-    {/* Icon and name content... */}
-  </div>
-  
-  {/* Rest of card content... */}
-  
-  {(onEdit || onDelete) && (
-    <div className="flex flex-col sm:flex-row gap-2 mt-4 pt-4 border-t">
-      {onEdit && (
-        <Button
-          onClick={(e) => {
-            e.stopPropagation();  // Just stop propagation
-            onEdit(equipment);    // Just do the edit action
-          }}
-        >
-          Edit
-        </Button>
-      )}
-      {onDelete && (
-        <Button
-          onClick={(e) => {
-            e.stopPropagation();  // Just stop propagation
-            onDelete(equipment);  // Just do the delete action
-          }}
-        >
-          Delete
-        </Button>
-      )}
-    </div>
-  )}
-</Card>
+// Update ROLE_DESCRIPTIONS
+undergrad_student: 'Can manage equipment and create bookings',
+
+// Update getRolePermissions - move undergrad_student to the elevated group
+case 'pi_external':
+case 'postdoc':
+case 'grad_student':
+case 'undergrad_student':  // ← Add here
+  return {
+    canManageUsers: false,
+    canManageProjects: true,
+    canManageEquipment: true,
+    canManageBookings: true,
+    canViewAnalytics: true,
+  };
+```
+
+**Database Migration**
+
+```sql
+-- Drop existing policies
+DROP POLICY IF EXISTS "Only PI, Post-Docs, Grad Students, and External PIs can manage " ON public.equipment;
+DROP POLICY IF EXISTS "Only PI, Post-Docs, Grad Students, and External PIs can manage " ON public.equipment_projects;
+
+-- Create updated policies including undergrad_student
+CREATE POLICY "Elevated roles can manage equipment" ON public.equipment
+FOR ALL TO authenticated
+USING (has_any_role(auth.uid(), ARRAY[
+  'pi'::app_role, 
+  'postdoc'::app_role, 
+  'grad_student'::app_role, 
+  'manager'::app_role, 
+  'pi_external'::app_role,
+  'undergrad_student'::app_role
+]));
+
+CREATE POLICY "Elevated roles can manage equipment projects" ON public.equipment_projects
+FOR ALL TO authenticated
+USING (has_any_role(auth.uid(), ARRAY[
+  'pi'::app_role, 
+  'postdoc'::app_role, 
+  'grad_student'::app_role, 
+  'manager'::app_role, 
+  'pi_external'::app_role,
+  'undergrad_student'::app_role
+]));
 ```
 
 ### Result
 
-- **Desktop**: Click the equipment name/icon area to register for the secret sequence. Edit/Delete buttons work normally without affecting the sequence
-- **iPhone**: Tap the equipment name/icon area (which is now a large, dedicated touch target) to register. Buttons don't interfere
-- Both platforms work correctly because the clickable area for the sequence is explicit and separate from the action buttons
+After this change, undergraduate students will be able to:
+- Access the Equipment page
+- Add new equipment
+- Edit existing equipment
+- Delete equipment
+- View analytics
 
