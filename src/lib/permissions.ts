@@ -23,7 +23,7 @@ export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
   pi_external: 'External professor - can manage projects, equipment, and bookings',
   postdoc: 'Can manage projects, equipment, and bookings',
   grad_student: 'Can manage projects, equipment, and bookings',
-  undergrad_student: 'Can create and manage their own bookings',
+  undergrad_student: 'Can manage equipment, projects, and create bookings',
   manager: 'Legacy role with full access',
   user: 'Basic access to create bookings'
 };
@@ -42,6 +42,7 @@ export const getRolePermissions = (role: AppRole | null): RolePermissions => {
     case 'pi_external':
     case 'postdoc':
     case 'grad_student':
+    case 'undergrad_student':
       return {
         canManageUsers: false,
         canManageProjects: true,
@@ -49,7 +50,6 @@ export const getRolePermissions = (role: AppRole | null): RolePermissions => {
         canManageBookings: true,
         canViewAnalytics: true,
       };
-    case 'undergrad_student':
     case 'user':
       return {
         canManageUsers: false,
