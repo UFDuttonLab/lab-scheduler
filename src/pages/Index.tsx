@@ -36,8 +36,22 @@ const Index = () => {
         supabase.from('projects').select('id, name')
       ]);
       
-      if (equipmentRes.error) throw equipmentRes.error;
-      if (bookingsRes.error) throw bookingsRes.error;
+      // Check every query. Previously usage_records/profiles/projects errors were
+      // discarded, so a failed profiles fetch rendered every booking as "Unknown Student"
+      // with no toast, no console error, and a page that looked fine.
+      const failed = [
+        ['equipment', equipmentRes.error],
+        ['bookings', bookingsRes.error],
+        ['usage records', usageRecordsRes.error],
+        ['profiles', profilesRes.error],
+        ['projects', projectsRes.error],
+      ].filter(([, err]) => err) as [string, { message: string }][];
+
+      if (failed.length > 0) {
+        throw new Error(
+          `Could not load ${failed.map(([name]) => name).join(', ')}: ${failed[0][1].message}`
+        );
+      }
       
       const equipmentData = equipmentRes.data;
       const bookingsData = bookingsRes.data || [];
@@ -49,13 +63,17 @@ const Index = () => {
       const transformedEquipment: Equipment[] = equipmentData.map(eq => ({
         id: eq.id,
         name: eq.name,
-        type: eq.type as "robot" | "equipment",
+        type: eq.type as Equipment["type"],
         status: eq.status as "available" | "in-use" | "maintenance",
         location: eq.location,
         description: eq.description || undefined,
         icon: eq.icon || undefined,
+        // These were omitted, so EquipmentCard's CPU/GPU line never rendered on the
+        // dashboard, even for HiPerGator. ?? not ||: a max of 0 is meaningful.
+        maxCpuCount: eq.max_cpu_count ?? undefined,
+        maxGpuCount: eq.max_gpu_count ?? undefined,
       }));
-      
+
       // Transform bookings data
       const transformedBookings: Booking[] = bookingsData.map(booking => {
         const equipment = equipmentData.find(eq => eq.id === booking.equipment_id);
@@ -264,8 +282,7 @@ const Index = () => {
             title="Available Equipment"
             value={`${availableEquipment}/${totalEquipment}`}
             icon={Settings}
-            trend="+2 from yesterday"
-            trendUp
+            trend={`${totalEquipment - availableEquipment} unavailable`}
           />
           <StatsCard
             title="Today's Bookings"

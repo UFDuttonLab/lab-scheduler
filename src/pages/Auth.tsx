@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { readFunctionError } from "@/lib/dbWrite";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,7 +63,12 @@ const Auth = () => {
         body: { email },
       });
 
-      if (error) throw error;
+      // A non-2xx response gives { data: null, error: FunctionsHttpError } whose message
+      // is the useless constant "Edge Function returned a non-2xx status code". The real
+      // payload lives on error.context, so the `data?.error` branch below was dead code.
+      if (error) {
+        throw new Error(await readFunctionError(error, "Failed to send reset email. Please try again."));
+      }
 
       if (data?.error) {
         throw new Error(data.error);

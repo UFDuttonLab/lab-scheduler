@@ -12,6 +12,21 @@ dist
 dist-ssr
 *.local
 
+# Secrets. NOTE: .env is already tracked in git history and currently holds only the
+# public Supabase URL + publishable key, which are safe to ship in a Vite bundle. This
+# entry stops any future service-role / Resend / SMTP key from being committed.
+# To untrack the existing file without deleting it: git rm --cached .env
+.env
+.env.local
+.env.*.local
+
+# Scratch files created by remote/agent sessions. The bridge to a local machine can
+# create files but not delete them, so these get left behind; ignoring them keeps
+# GitHub Desktop's changes list limited to real work. Safe to delete by hand any time.
+_to_delete/
+/COMMIT_MSG.txt
+/ship-it.sh
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

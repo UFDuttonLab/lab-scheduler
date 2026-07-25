@@ -43,19 +43,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const checkUserRole = async (userId: string) => {
     try {
-      // First check if user is active
+      // First check if the user is active.
+      // maybeSingle(), not single(): single() throws PGRST116 when no row comes back,
+      // which jumped straight to the catch block and skipped the deactivation check
+      // entirely - so deactivated students were never actually signed out.
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("active")
         .eq("id", userId)
-        .single();
+        .maybeSingle();
 
       if (profileError) throw profileError;
 
-      // If user is inactive, sign them out
-      if (profile && !profile.active) {
+      // Either no visible profile row, or the row says inactive: the account is not
+      // usable, so sign out rather than leaving a half-working session open.
+      if (!profile || !profile.active) {
+        toast.error("Your account has been deactivated. Contact the lab PI if this is unexpected.");
         await signOut();
-        toast.error("Your account has been deactivated");
         return;
       }
 

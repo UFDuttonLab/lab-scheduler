@@ -17,6 +17,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useForm } from "react-hook-form";
 import { EquipmentIconPicker } from "@/components/EquipmentIconPicker";
 
+/**
+ * Hard ceilings enforced by the bookings CHECK constraints (cpu_count 1-32, gpu_count 0-2).
+ * Advertising a higher max here just produces equipment nobody can actually book at that
+ * size - the insert dies on a raw Postgres constraint error.
+ */
+const DB_MAX_CPU = 32;
+const DB_MAX_GPU = 2;
+
 interface EquipmentFormData {
   name: string;
   type: "robot" | "equipment" | "quantification" | "PCR" | "HiPerGator" | "Sequencer";
@@ -36,8 +44,9 @@ const Equipment = () => {
   const [editingEquipment, setEditingEquipment] = useState<EquipmentType | null>(null);
   const [selectedIcon, setSelectedIcon] = useState<string>("🤖");
   const [selectedType, setSelectedType] = useState<string>("robot");
+  const [selectedStatus, setSelectedStatus] = useState<string>("available");
   const [cpuCount, setCpuCount] = useState<number>(32);
-  const [gpuCount, setGpuCount] = useState<number>(4);
+  const [gpuCount, setGpuCount] = useState<number>(DB_MAX_GPU);
   const [secretClicks, setSecretClicks] = useState<string[]>([]);
   
   const { register, handleSubmit, reset, setValue, watch } = useForm<EquipmentFormData>({
@@ -54,8 +63,9 @@ const Equipment = () => {
     if (editingEquipment) {
       setSelectedIcon(editingEquipment.icon || "🤖");
       setSelectedType(editingEquipment.type);
-      setCpuCount(editingEquipment.maxCpuCount || 32);
-      setGpuCount(editingEquipment.maxGpuCount || 4);
+      setSelectedStatus(editingEquipment.status);
+      setCpuCount(editingEquipment.maxCpuCount ?? DB_MAX_CPU);
+      setGpuCount(editingEquipment.maxGpuCount ?? DB_MAX_GPU);
       reset({
         name: editingEquipment.name,
         type: editingEquipment.type,
@@ -69,8 +79,9 @@ const Equipment = () => {
     } else {
       setSelectedIcon("🤖");
       setSelectedType("robot");
-      setCpuCount(32);
-      setGpuCount(4);
+      setSelectedStatus("available");
+      setCpuCount(DB_MAX_CPU);
+      setGpuCount(DB_MAX_GPU);
       reset({
         name: "",
         type: "robot",
@@ -78,8 +89,8 @@ const Equipment = () => {
         status: "available",
         description: "",
         icon: "🤖",
-        maxCpuCount: 32,
-        maxGpuCount: 4
+        maxCpuCount: DB_MAX_CPU,
+        maxGpuCount: DB_MAX_GPU
       });
     }
   }, [editingEquipment, reset]);
@@ -105,8 +116,9 @@ const Equipment = () => {
         location: eq.location,
         description: eq.description || undefined,
         icon: eq.icon || undefined,
-        maxCpuCount: eq.max_cpu_count || undefined,
-        maxGpuCount: eq.max_gpu_count || undefined,
+        // ?? not ||: a max of 0 is meaningful and `0 || undefined` erased it
+        maxCpuCount: eq.max_cpu_count ?? undefined,
+        maxGpuCount: eq.max_gpu_count ?? undefined,
       }));
       
       setEquipment(transformedEquipment);
@@ -299,14 +311,14 @@ const Equipment = () => {
                       <Slider
                         id="cpuCount"
                         min={1}
-                        max={128}
+                        max={DB_MAX_CPU}
                         step={1}
                         value={[cpuCount]}
                         onValueChange={(value) => setCpuCount(value[0])}
                         className="w-full"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Maximum number of CPUs available (1-128)
+                        Maximum number of CPUs a single booking may request (1-32)
                       </p>
                     </div>
 
@@ -317,14 +329,14 @@ const Equipment = () => {
                       <Slider
                         id="gpuCount"
                         min={0}
-                        max={16}
+                        max={DB_MAX_GPU}
                         step={1}
                         value={[gpuCount]}
                         onValueChange={(value) => setGpuCount(value[0])}
                         className="w-full"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Maximum number of GPUs available (0-16)
+                        Maximum number of GPUs a single booking may request (0-2)
                       </p>
                     </div>
                   </>
@@ -341,9 +353,16 @@ const Equipment = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="status">Status</Label>
-                  <Select 
-                    onValueChange={(value) => setValue("status", value as "available" | "maintenance")}
-                    defaultValue="available"
+                  {/* Controlled, like the Type select above. With only defaultValue, Radix
+                      remounts on every dialog open and always showed "Available", so editing
+                      a machine that was in maintenance displayed the wrong status and picking
+                      "Available" fired no onValueChange. */}
+                  <Select
+                    value={selectedStatus}
+                    onValueChange={(value) => {
+                      setSelectedStatus(value as "available" | "in-use" | "maintenance");
+                      setValue("status", value as "available" | "maintenance");
+                    }}
                   >
                     <SelectTrigger id="status">
                       <SelectValue />

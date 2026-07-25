@@ -27,51 +27,65 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Extract and decode the JWT token to get the authenticated user's ID
+    // Verify the JWT properly.
+    //
+    // This previously base64-decoded the payload and trusted `sub` without ever checking
+    // the signature. That was survivable only because config.toml does not list this
+    // function, so it inherits verify_jwt = true and the gateway validates the signature
+    // before we run. But two other functions in this project already set
+    // verify_jwt = false, and the day someone adds that line here, anyone holding the
+    // public anon key could forge {"sub": "<any uuid>"} and gain create-user /
+    // change-role / deactivate-user. getUser() validates signature and expiry against the
+    // auth server, so this no longer depends on a setting in a different file.
     const token = authHeader.replace('Bearer ', '')
-    let authenticatedUserId: string
-    
-    try {
-      // JWT tokens have 3 parts separated by dots: header.payload.signature
-      // We need to decode the payload (middle part)
-      const payload = token.split('.')[1]
-      const decodedPayload = JSON.parse(atob(payload))
-      authenticatedUserId = decodedPayload.sub
-      
-      console.log('Authenticated user ID:', authenticatedUserId)
-      
-      if (!authenticatedUserId) {
-        throw new Error('No user ID in token')
-      }
-    } catch (error) {
-      console.error('Failed to decode JWT token:', error)
+
+    const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(token)
+
+    if (authError || !authData?.user) {
+      console.error('JWT verification failed:', authError?.message)
       return new Response(JSON.stringify({ error: 'Invalid authentication token' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    // Check if user is a PI or manager using the service role client
-    const { data: roleData, error: roleError } = await supabaseAdmin
+    const authenticatedUserId = authData.user.id
+    console.log('Authenticated user ID:', authenticatedUserId)
+
+    // Check if user is a PI or manager using the service role client.
+    // NOT maybeSingle(): user_roles is UNIQUE(user_id, role), so one person can hold both
+    // 'pi' and 'manager'. maybeSingle() errors on multiple rows, which would lock exactly
+    // those people out of user management.
+    const { data: roleRows, error: roleError } = await supabaseAdmin
       .from('user_roles')
       .select('role')
       .eq('user_id', authenticatedUserId)
       .in('role', ['pi', 'manager'])
-      .maybeSingle()
 
-    console.log('Role check - User:', authenticatedUserId, 'Role data:', roleData, 'Error:', roleError)
+    console.log('Role check - User:', authenticatedUserId, 'Roles:', roleRows, 'Error:', roleError)
 
-    if (roleError || !roleData) {
-      console.error('Role check failed - Error:', roleError, 'Data:', roleData)
+    if (roleError || !roleRows || roleRows.length === 0) {
+      console.error('Role check failed - Error:', roleError, 'Data:', roleRows)
       return new Response(JSON.stringify({ error: 'Forbidden: PI or Manager access required' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
+    // 'pi' outranks 'manager' wherever the two differ.
+    const callerIsPi = roleRows.some((r: { role: string }) => r.role === 'pi')
+
     const { action, email, fullName, role, spiritAnimal, userId } = await req.json()
 
     if (action === 'delete') {
+      // Same lockout guard as updateRole.
+      if (userId === authenticatedUserId) {
+        return new Response(
+          JSON.stringify({ error: 'You cannot deactivate your own account.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
       // Soft delete: Set user as inactive instead of hard deleting
       const { error: deactivateError } = await supabaseAdmin
         .from('profiles')
@@ -179,6 +193,24 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'updateRole') {
+      // Guard against locking the lab out of its own admin tools: if the only PI demotes
+      // themselves, nobody can manage users or roles ever again.
+      if (userId === authenticatedUserId) {
+        return new Response(
+          JSON.stringify({ error: 'You cannot change your own role. Ask another PI to do it.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Only a PI may hand out the PI role - otherwise a manager could self-escalate by
+      // promoting an account they control.
+      if (role === 'pi' && !callerIsPi) {
+        return new Response(
+          JSON.stringify({ error: 'Only a PI can grant the PI role.' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
       // Update user role
       await supabaseAdmin
         .from('user_roles')

@@ -2,12 +2,13 @@ import { Booking } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Clock, User, Mail, Trash2, Cpu, Server, FlaskConical, Users, Edit, FolderKanban } from "lucide-react";
+import { Clock, User, Mail, Trash2, Cpu, Server, FlaskConical, Users, Edit, FolderKanban, Ban } from "lucide-react";
 import { format, isSameDay } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { settleWrite } from "@/lib/dbWrite";
 import { toast } from "sonner";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,30 +30,63 @@ interface UserProfile {
 
 interface BookingCardProps {
   booking: Booking;
+  /** Called after a successful delete or cancel so the parent can refetch. */
   onDelete?: () => void;
   onEdit?: (booking: Booking) => void;
 }
 
+const STATUS_CONFIG = {
+  scheduled: { label: "Scheduled", className: "bg-primary text-primary-foreground" },
+  "in-progress": { label: "In Progress", className: "bg-warning text-warning-foreground" },
+  completed: { label: "Completed", className: "bg-success text-success-foreground" },
+  cancelled: { label: "Cancelled", className: "bg-destructive text-destructive-foreground" },
+} as const;
+
 export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => {
   const { user, permissions } = useAuth();
   const [collaboratorProfiles, setCollaboratorProfiles] = useState<UserProfile[]>([]);
-  
-  const statusConfig = {
-    scheduled: { label: "Scheduled", className: "bg-primary text-primary-foreground" },
-    "in-progress": { label: "In Progress", className: "bg-warning text-warning-foreground" },
-    completed: { label: "Completed", className: "bg-success text-success-foreground" },
-    cancelled: { label: "Cancelled", className: "bg-destructive text-destructive-foreground" },
+  const [busy, setBusy] = useState(false);
+
+  // Fall back rather than crash if an unexpected status ever reaches us.
+  const status = STATUS_CONFIG[booking.status] ?? {
+    label: booking.status ?? "Unknown",
+    className: "bg-muted text-muted-foreground",
   };
 
-  const status = statusConfig[booking.status];
-  const canEdit = user?.id === booking.userId || permissions.canManageBookings;
-  const canDelete = user?.id === booking.userId || permissions.canManageUsers; // Users can delete their own, PI can delete any
+  const isOwner = !!user?.id && user.id === booking.userId;
+  const isUsageRecord = booking.source === "usage_record";
+
+  // usage_records UPDATE is owner-only; bookings UPDATE also allows pi/postdoc/grad_student/manager.
+  const canEdit = isOwner || (!isUsageRecord && permissions.canManageBookings);
+
+  // usage_records DELETE allows owner or pi. bookings DELETE is pi-only - everyone else cancels.
+  const canDelete = isUsageRecord
+    ? isOwner || permissions.canDeleteBookings
+    : permissions.canDeleteBookings;
+
+  // Cancelling is an UPDATE, so anyone who may update this booking may cancel it.
+  // Only meaningful for real bookings that aren't already cancelled or finished.
+  const canCancel =
+    !isUsageRecord &&
+    booking.status !== "cancelled" &&
+    booking.status !== "completed" &&
+    (isOwner || permissions.canManageBookings);
+
+  // booking.collaborators is a fresh array on every parent fetch, so depend on its
+  // contents rather than its identity to avoid refetching on every parent render.
+  const collaboratorKey = useMemo(
+    () => (booking.collaborators ?? []).join(","),
+    [booking.collaborators]
+  );
 
   useEffect(() => {
-    if (booking.collaborators && booking.collaborators.length > 0) {
+    if (collaboratorKey) {
       fetchCollaborators();
+    } else {
+      setCollaboratorProfiles([]);
     }
-  }, [booking.collaborators]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collaboratorKey]);
 
   const fetchCollaborators = async () => {
     if (!booking.collaborators || booking.collaborators.length === 0) return;
@@ -68,20 +102,55 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
   };
 
   const handleDelete = async () => {
-    const tableName = booking.source === 'usage_record' ? 'usage_records' : 'bookings';
-    
-    const { error } = await supabase
-      .from(tableName)
-      .delete()
-      .eq('id', booking.id);
+    if (busy) return;
+    setBusy(true);
+    try {
+      const tableName = isUsageRecord ? 'usage_records' : 'bookings';
 
-    if (error) {
-      toast.error("Failed to delete record");
-      return;
+      // .select('id') makes the zero-rows-changed case detectable; without it an
+      // RLS-blocked delete returns error:null and looks like success.
+      const result = await settleWrite(
+        supabase.from(tableName).delete().eq('id', booking.id).select('id'),
+        isUsageRecord
+          ? "You can only delete your own usage records."
+          : "Only a PI can delete a booking. Use Cancel to free up the time slot."
+      );
+
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+
+      toast.success(isUsageRecord ? "Usage record deleted" : "Booking deleted");
+      onDelete?.();
+    } finally {
+      setBusy(false);
     }
+  };
 
-    toast.success("Record deleted successfully");
-    onDelete?.();
+  const handleCancel = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const result = await settleWrite(
+        supabase
+          .from('bookings')
+          .update({ status: 'cancelled' })
+          .eq('id', booking.id)
+          .select('id'),
+        "You don't have permission to cancel this booking."
+      );
+
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+
+      toast.success("Booking cancelled - the time slot is now free");
+      onDelete?.();
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -101,28 +170,53 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
         </div>
         <div className="flex items-center gap-2 self-start">
           <Badge className={status.className}>{status.label}</Badge>
-          {canEdit && (booking.status === "scheduled" || permissions.canManageBookings) && onEdit && (
-            <Button 
-              variant="ghost" 
-              size="icon" 
+          {canEdit && booking.status !== "cancelled" && onEdit && (
+            <Button
+              variant="ghost"
+              size="icon"
               className="h-8 w-8"
+              title="Edit"
               onClick={() => onEdit(booking)}
             >
               <Edit className="h-4 w-4" />
             </Button>
           )}
+          {canCancel && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8" title="Cancel booking" disabled={busy}>
+                  <Ban className="h-4 w-4 text-warning" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    The time slot on {booking.equipmentName} will be released immediately so
+                    someone else can book it. The record stays in your history and in the lab's
+                    usage stats, marked as cancelled.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep booking</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleCancel}>Cancel booking</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
           {canDelete && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Button variant="ghost" size="icon" className="h-8 w-8" title="Delete permanently" disabled={busy}>
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Delete {booking.source === 'usage_record' ? 'Usage Record' : 'Booking'}</AlertDialogTitle>
+                  <AlertDialogTitle>Delete {isUsageRecord ? 'Usage Record' : 'Booking'}</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Are you sure you want to delete this {booking.source === 'usage_record' ? 'usage record' : 'booking'}? This action cannot be undone.
+                    Are you sure you want to permanently delete this {isUsageRecord ? 'usage record' : 'booking'}?
+                    It will disappear from history and from usage stats. This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

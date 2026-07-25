@@ -22,6 +22,17 @@ import { ProjectSampleSelector } from "@/components/ProjectSampleSelector";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
+import { settleWrite } from "@/lib/dbWrite";
+
+/**
+ * Hard ceilings enforced by the bookings CHECK constraints:
+ *   cpu_count_valid: cpu_count IS NULL OR (cpu_count BETWEEN 1 AND 32)
+ *   gpu_count_valid: gpu_count IS NULL OR (gpu_count BETWEEN 0 AND 2)
+ * The sliders previously defaulted to 128 / 8, letting users pick values Postgres then
+ * rejected with a raw constraint-violation message.
+ */
+const DB_MAX_CPU = 32;
+const DB_MAX_GPU = 2;
 
 const History = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -111,8 +122,10 @@ const History = () => {
         projectName: project?.name || undefined,
         purpose: booking.purpose || undefined,
         status: booking.status as "scheduled" | "in-progress" | "completed" | "cancelled",
-        cpuCount: booking.cpu_count || undefined,
-        gpuCount: booking.gpu_count || undefined,
+        // ?? not ||: cpu_count/gpu_count of 0 is a real value, and `0 || undefined`
+        // collapsed it to undefined, which made the edit form silently skip the field.
+        cpuCount: booking.cpu_count ?? undefined,
+        gpuCount: booking.gpu_count ?? undefined,
         samplesProcessed: booking.samples_processed || undefined,
         collaborators: booking.collaborators || undefined,
         userId: booking.user_id,
@@ -251,22 +264,32 @@ const History = () => {
       // Add source-specific fields
       if (selectedBooking.source === 'booking') {
         updateData.purpose = purpose || null;
-        if (selectedBooking.cpuCount !== undefined) {
+        // Key off the equipment type, not off whether the stored value was truthy.
+        // The old check skipped the write whenever the booking already had 0 GPUs,
+        // which is the default - so raising GPUs from 0 never saved.
+        if (isHiPerGator) {
           updateData.cpu_count = cpuCount;
-        }
-        if (selectedBooking.gpuCount !== undefined) {
           updateData.gpu_count = gpuCount;
         }
       } else {
         updateData.notes = purpose || null;
       }
 
-      const { error } = await supabase
-        .from(tableName)
-        .update(updateData)
-        .eq('id', selectedBooking.id);
+      const result = await settleWrite(
+        supabase
+          .from(tableName)
+          .update(updateData)
+          .eq('id', selectedBooking.id)
+          .select('id'),
+        selectedBooking.source === 'usage_record'
+          ? "You can only edit your own usage records."
+          : "You don't have permission to edit this booking."
+      );
 
-      if (error) throw error;
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
 
       toast.success(`${selectedBooking.source === 'usage_record' ? 'Usage record' : 'Booking'} updated successfully`);
       setIsEditDialogOpen(false);
@@ -303,20 +326,23 @@ const History = () => {
     setSelectedTime(format(booking.startTime, "HH:mm"));
     setDuration(booking.duration.toString());
     setPurpose(booking.purpose || "");
-    setCpuCount(booking.cpuCount || 1);
-    setGpuCount(booking.gpuCount || 0);
+    setCpuCount(booking.cpuCount ?? 1);
+    setGpuCount(booking.gpuCount ?? 0);
     setSelectedCollaborators(booking.collaborators || []);
     setCollaboratorSearch("");
     
     setIsEditDialogOpen(true);
   };
 
-  const timeSlots = Array.from({ length: 24 }, (_, i) => {
-    const hour = i.toString().padStart(2, '0');
-    return `${hour}:00`;
+  // 30-minute granularity: an existing 09:30 booking used to match no option, so the
+  // Start Time select rendered its placeholder and the user could not see the real value.
+  const timeSlots = Array.from({ length: 48 }, (_, i) => {
+    const hour = Math.floor(i / 2).toString().padStart(2, '0');
+    const minute = i % 2 === 0 ? '00' : '30';
+    return `${hour}:${minute}`;
   });
 
-  const durationOptions = [
+  const BASE_DURATION_OPTIONS = [
     { value: "30", label: "30 minutes" },
     { value: "60", label: "1 hour" },
     { value: "120", label: "2 hours" },
@@ -326,12 +352,35 @@ const History = () => {
     { value: "1440", label: "24 hours" },
   ];
 
+  const formatDuration = (minutes: number) => {
+    if (minutes < 60) return `${minutes} minutes`;
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m === 0 ? `${h} hour${h === 1 ? '' : 's'}` : `${h}h ${m}m`;
+  };
+
+  // Quick Add can produce any duration, so a record's real length often matched none of
+  // the fixed options and the Duration select rendered blank. Splice the current value in
+  // so the user can always see what the booking actually is.
+  const durationOptions = (() => {
+    if (duration && !BASE_DURATION_OPTIONS.some(o => o.value === duration)) {
+      const minutes = parseInt(duration, 10);
+      if (!Number.isNaN(minutes)) {
+        return [...BASE_DURATION_OPTIONS, { value: duration, label: `${formatDuration(minutes)} (current)` }]
+          .sort((a, b) => parseInt(a.value, 10) - parseInt(b.value, 10));
+      }
+    }
+    return BASE_DURATION_OPTIONS;
+  })();
+
   const currentEquipment = selectedBooking ? equipment.find(e => e.id === selectedBooking.equipmentId) : null;
   const isHiPerGator = currentEquipment?.type === "HiPerGator";
 
   const allBookings = bookings;
-  const futureBookings = bookings.filter(b => 
-    b.status === "scheduled" || b.status === "in-progress"
+  // "Future" means it has not finished yet. The old version only looked at status, so a
+  // three-week-old booking that was never marked completed sat in this tab forever.
+  const futureBookings = bookings.filter(b =>
+    b.status !== "cancelled" && b.endTime.getTime() >= Date.now()
   );
   const completedBookings = bookings.filter(b => b.status === "completed");
 
@@ -567,7 +616,7 @@ const History = () => {
                       value={[cpuCount]}
                       onValueChange={([value]) => setCpuCount(value)}
                       min={1}
-                      max={currentEquipment?.max_cpu_count || 128}
+                      max={Math.min(currentEquipment?.max_cpu_count ?? DB_MAX_CPU, DB_MAX_CPU)}
                       step={1}
                     />
                   </div>
@@ -581,7 +630,7 @@ const History = () => {
                       value={[gpuCount]}
                       onValueChange={([value]) => setGpuCount(value)}
                       min={0}
-                      max={currentEquipment?.max_gpu_count || 8}
+                      max={Math.min(currentEquipment?.max_gpu_count ?? DB_MAX_GPU, DB_MAX_GPU)}
                       step={1}
                     />
                   </div>

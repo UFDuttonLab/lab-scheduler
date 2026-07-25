@@ -21,8 +21,34 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ROLE_LABELS, ROLE_DESCRIPTIONS, AppRole } from "@/lib/permissions";
+import { settleWrite, readFunctionError } from "@/lib/dbWrite";
 import { format } from "date-fns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+/**
+ * user_roles is UNIQUE(user_id, role), so one person may hold several rows and the query
+ * has no ORDER BY - user_roles[0] was whatever Postgres happened to return first.
+ * AuthContext resolves a user's real permissions from the highest-priority role, so this
+ * page has to use the same rule or it displays (and writes) the wrong one.
+ */
+const ROLE_PRIORITY: Record<AppRole, number> = {
+  pi: 6,
+  manager: 5,
+  pi_external: 4,
+  postdoc: 4,
+  grad_student: 3,
+  undergrad_student: 2,
+  user: 1,
+};
+
+const effectiveRole = (roles: { role: string }[] | null | undefined): AppRole | undefined => {
+  if (!roles || roles.length === 0) return undefined;
+  return roles
+    .map(r => r.role as AppRole)
+    .reduce((best, current) =>
+      (ROLE_PRIORITY[current] ?? 0) > (ROLE_PRIORITY[best] ?? 0) ? current : best
+    );
+};
 
 interface UserProfile {
   id: string;
@@ -503,21 +529,36 @@ const Settings = () => {
 
     if (!editingUser) return;
 
-    const currentRole = (editingUser as any).user_roles?.[0]?.role;
+    // A manager can only SELECT their OWN user_roles row (the policy is
+    // `user_id = auth.uid() OR has_role(auth.uid(),'pi')`), so for everyone else this
+    // array arrives empty and currentRole came back undefined. The role <Select> then
+    // defaulted to "user", `"user" !== undefined` passed, and merely fixing a typo in
+    // someone's name silently demoted them - including demoting the PI.
+    const knownRoles = (editingUser as any).user_roles ?? [];
+    const currentRole = effectiveRole(knownRoles);
+    const roleIsKnown = knownRoles.length > 0;
 
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ 
-          full_name: fullName,
-          spirit_animal: spiritAnimal || null
-        })
-        .eq("id", editingUser.id);
+      const result = await settleWrite(
+        supabase
+          .from("profiles")
+          .update({
+            full_name: fullName,
+            spirit_animal: spiritAnimal || null
+          })
+          .eq("id", editingUser.id)
+          .select("id"),
+        "You don't have permission to edit this profile."
+      );
 
-      if (error) throw error;
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
 
-      // Update role if changed
-      if (newRole && newRole !== currentRole) {
+      // Only touch roles when we could actually read the current one. Without this guard
+      // an unknown current role looks like a change to whatever the dropdown defaulted to.
+      if (newRole && roleIsKnown && newRole !== currentRole) {
         const { data: session } = await supabase.auth.getSession();
         if (!session.session) {
           toast.error("You must be logged in");
@@ -533,7 +574,10 @@ const Settings = () => {
         });
 
         if (roleError || data?.error) {
-          toast.error(data?.error || "Failed to update role");
+          const message = roleError
+            ? await readFunctionError(roleError, "Failed to update role")
+            : String(data.error);
+          toast.error(message);
           console.error(roleError || data?.error);
           return;
         }
@@ -635,9 +679,9 @@ const Settings = () => {
               {isDeactivated && (
                 <Badge variant="destructive">Inactive</Badge>
               )}
-              {user.user_roles?.[0]?.role && (
-                <Badge variant={user.user_roles[0].role === 'manager' ? 'default' : 'secondary'}>
-                  {user.user_roles[0].role}
+              {effectiveRole(user.user_roles) && (
+                <Badge variant={effectiveRole(user.user_roles) === 'manager' ? 'default' : 'secondary'}>
+                  {effectiveRole(user.user_roles)}
                 </Badge>
               )}
             </div>
@@ -1191,7 +1235,11 @@ const Settings = () => {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>
-                <Select name="role" defaultValue={(editingUser as any)?.user_roles?.[0]?.role || "user"}>
+                <Select
+                  name="role"
+                  defaultValue={effectiveRole((editingUser as any)?.user_roles) || "user"}
+                  disabled={!effectiveRole((editingUser as any)?.user_roles)}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>

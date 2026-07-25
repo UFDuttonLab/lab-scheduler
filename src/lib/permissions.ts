@@ -1,10 +1,37 @@
 export type AppRole = 'pi' | 'pi_external' | 'postdoc' | 'grad_student' | 'undergrad_student' | 'manager' | 'user';
 
+/**
+ * IMPORTANT: every flag here mirrors a specific Postgres RLS policy. Postgres is the
+ * authority; this file only decides what the UI offers. If you change a flag, change the
+ * matching policy in the same commit - otherwise the UI offers an action the database
+ * silently refuses, and (because Supabase returns error:null for a zero-row write) the
+ * user gets a success message for something that never happened.
+ */
 export interface RolePermissions {
+  /** Mirrors: the manage-users edge function, which requires role pi or manager. */
   canManageUsers: boolean;
+  /** Mirrors projects RLS: has_any_role(pi, postdoc, grad_student, manager, pi_external). */
   canManageProjects: boolean;
+  /** Mirrors equipment RLS: the above plus undergrad_student. */
   canManageEquipment: boolean;
+  /**
+   * Can edit OTHER people's bookings. Mirrors bookings UPDATE:
+   *   USING (user_id = auth.uid() OR has_any_role(pi, postdoc, grad_student, manager))
+   * Everyone can always edit their own booking regardless of this flag, so this must NOT
+   * be used as a blanket "can edit any booking" check.
+   */
   canManageBookings: boolean;
+  /**
+   * Can hard-delete a booking. Mirrors bookings DELETE: USING (has_role(auth.uid(), 'pi')).
+   * PI only - `manager` deliberately cannot delete bookings. Everyone else cancels instead.
+   */
+  canDeleteBookings: boolean;
+  /**
+   * Can read every activity_logs row. Mirrors activity_logs SELECT:
+   *   has_any_role(pi, postdoc, grad_student, manager, pi_external)
+   * Deliberately excludes undergrad_student, which canViewAnalytics does not.
+   */
+  canViewAllActivityLogs: boolean;
   canViewAnalytics: boolean;
 }
 
@@ -31,39 +58,69 @@ export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
 export const getRolePermissions = (role: AppRole | null): RolePermissions => {
   switch (role) {
     case 'pi':
+      return {
+        canManageUsers: true,
+        canManageProjects: true,
+        canManageEquipment: true,
+        canManageBookings: true,
+        canDeleteBookings: true,
+        canViewAllActivityLogs: true,
+        canViewAnalytics: true,
+      };
     case 'manager':
       return {
         canManageUsers: true,
         canManageProjects: true,
         canManageEquipment: true,
         canManageBookings: true,
+        // The bookings DELETE policy is has_role(auth.uid(), 'pi') - manager is not included.
+        canDeleteBookings: false,
+        canViewAllActivityLogs: true,
         canViewAnalytics: true,
       };
     case 'pi_external':
+      return {
+        canManageUsers: false,
+        canManageProjects: true,
+        canManageEquipment: true,
+        // pi_external is absent from the bookings UPDATE policy.
+        canManageBookings: false,
+        canDeleteBookings: false,
+        canViewAllActivityLogs: true,
+        canViewAnalytics: true,
+      };
     case 'postdoc':
     case 'grad_student':
-    case 'undergrad_student':
       return {
         canManageUsers: false,
         canManageProjects: true,
         canManageEquipment: true,
         canManageBookings: true,
+        canDeleteBookings: false,
+        canViewAllActivityLogs: true,
+        canViewAnalytics: true,
+      };
+    case 'undergrad_student':
+      return {
+        canManageUsers: false,
+        canManageProjects: true,
+        canManageEquipment: true,
+        // undergrad_student is absent from the bookings UPDATE policy.
+        canManageBookings: false,
+        canDeleteBookings: false,
+        // undergrad_student is absent from the activity_logs "view all" policy.
+        canViewAllActivityLogs: false,
         canViewAnalytics: true,
       };
     case 'user':
-      return {
-        canManageUsers: false,
-        canManageProjects: false,
-        canManageEquipment: false,
-        canManageBookings: true,
-        canViewAnalytics: false,
-      };
     default:
       return {
         canManageUsers: false,
         canManageProjects: false,
         canManageEquipment: false,
-        canManageBookings: true,
+        canManageBookings: false,
+        canDeleteBookings: false,
+        canViewAllActivityLogs: false,
         canViewAnalytics: false,
       };
   }

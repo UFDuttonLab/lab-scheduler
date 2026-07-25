@@ -26,22 +26,35 @@ serve(async (req) => {
     
     console.log("Received password reset webhook");
 
-    // Verify webhook signature if secret is configured
-    if (hookSecret) {
-      const wh = new Webhook(hookSecret);
-      try {
-        wh.verify(payload, headers);
-        console.log("Webhook signature verified");
-      } catch (error) {
-        console.error("Webhook signature verification failed:", error);
-        return new Response(
-          JSON.stringify({ error: "Invalid webhook signature" }),
-          {
-            status: 401,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
-      }
+    // Fail CLOSED, not open.
+    //
+    // This function runs with verify_jwt = false, so it is reachable by anyone on the
+    // internet with no credentials at all. The signature check used to be wrapped in
+    // `if (hookSecret)`, which meant that if SEND_EMAIL_HOOK_SECRET was ever unset or
+    // misspelled the check was skipped entirely - turning this into an open relay that
+    // would send attacker-authored "reset your password" mail, to any address, from this
+    // lab's verified sending domain.
+    if (!hookSecret) {
+      console.error("SEND_EMAIL_HOOK_SECRET is not configured - refusing to send mail");
+      return new Response(
+        JSON.stringify({ error: "Email hook is not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const wh = new Webhook(hookSecret);
+    try {
+      wh.verify(payload, headers);
+      console.log("Webhook signature verified");
+    } catch (error) {
+      console.error("Webhook signature verification failed:", error);
+      return new Response(
+        JSON.stringify({ error: "Invalid webhook signature" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     // Parse the webhook payload

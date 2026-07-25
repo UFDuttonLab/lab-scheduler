@@ -41,11 +41,20 @@ const ActivityLog = () => {
   const [page, setPage] = useState(1);
   const ITEMS_PER_PAGE = 50;
 
-  const canViewAllLogs = permissions.canViewAnalytics; // PI, Post-Doc, Grad Students can view all logs
+  // Mirrors the activity_logs SELECT policy: pi, postdoc, grad_student, manager,
+  // pi_external. canViewAnalytics was wrong here because it also includes
+  // undergrad_student, who then saw "all activity" while RLS returned only their own rows.
+  const canViewAllLogs = permissions.canViewAllActivityLogs;
 
   useEffect(() => {
     fetchLogs();
   }, [page, actionFilter, entityFilter]);
+
+  // Changing a filter while on page 3 used to run .range(100,149) against the new, much
+  // smaller result set and strand the user on a blank page with no way back.
+  useEffect(() => {
+    setPage(1);
+  }, [actionFilter, entityFilter, searchTerm]);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -183,6 +192,10 @@ const ActivityLog = () => {
                     <SelectItem value="create">Create</SelectItem>
                     <SelectItem value="update">Update</SelectItem>
                     <SelectItem value="delete">Delete</SelectItem>
+                    {/* login/logout are the only rows a basic user can ever see, so
+                        without these two every filter value returned an empty page. */}
+                    <SelectItem value="login">Login</SelectItem>
+                    <SelectItem value="logout">Logout</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={entityFilter} onValueChange={setEntityFilter}>
@@ -244,9 +257,19 @@ const ActivityLog = () => {
                         </div>
                         {log.entity_name && (
                           <p className="text-sm text-muted-foreground mt-1">
-                            {log.action_type === 'create' && 'Created'}
-                            {log.action_type === 'update' && 'Updated'}
-                            {log.action_type === 'delete' && 'Deleted'}: {log.entity_name}
+                            {/* login/logout had no branch here, so every auth row rendered
+                                as a bare ": Authentication". */}
+                            {log.action_type === 'login'
+                              ? 'Signed in'
+                              : log.action_type === 'logout'
+                                ? 'Signed out'
+                                : `${
+                                    log.action_type === 'create'
+                                      ? 'Created'
+                                      : log.action_type === 'update'
+                                        ? 'Updated'
+                                        : 'Deleted'
+                                  }: ${log.entity_name}`}
                           </p>
                         )}
                       </div>
@@ -255,7 +278,10 @@ const ActivityLog = () => {
                 </div>
               )}
 
-              {!loading && filteredLogs.length >= ITEMS_PER_PAGE && (
+              {/* Gate on logs.length (what the server returned), not filteredLogs.length.
+                  Searching narrowed the current page to a couple of rows and made the
+                  whole pager - including Previous - disappear. */}
+              {!loading && (logs.length >= ITEMS_PER_PAGE || page > 1) && (
                 <div className="flex justify-center gap-2 mt-6">
                   <Button
                     variant="outline"
@@ -270,7 +296,7 @@ const ActivityLog = () => {
                   <Button
                     variant="outline"
                     onClick={() => setPage(p => p + 1)}
-                    disabled={filteredLogs.length < ITEMS_PER_PAGE}
+                    disabled={logs.length < ITEMS_PER_PAGE}
                   >
                     Next
                   </Button>

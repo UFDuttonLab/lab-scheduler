@@ -36,8 +36,22 @@ const Analytics = () => {
         supabase.from('profiles').select('id, email, full_name, spirit_animal')
       ]);
 
-      if (bookingsRes.error) throw bookingsRes.error;
-      if (usageRecordsRes.error) throw usageRecordsRes.error;
+      // Every query must be checked. Previously only two were, so a failure on
+      // equipment/projects/profiles produced an empty-but-successful-looking page that
+      // read as "nobody used anything" rather than "the query failed".
+      const failed = [
+        ['bookings', bookingsRes.error],
+        ['usage records', usageRecordsRes.error],
+        ['equipment', equipmentRes.error],
+        ['projects', projectsRes.error],
+        ['profiles', profilesRes.error],
+      ].filter(([, err]) => err) as [string, { message: string }][];
+
+      if (failed.length > 0) {
+        throw new Error(
+          `Could not load ${failed.map(([name]) => name).join(', ')}: ${failed[0][1].message}`
+        );
+      }
 
       // Create lookup maps
       const equipmentMap = new Map(equipmentRes.data?.map(e => [e.id, e]) || []);
@@ -83,7 +97,36 @@ const Analytics = () => {
       // Combine bookings and usage records for analytics
       const allRecords = [...enrichedBookings, ...enrichedUsageRecords];
 
-      setBookings(allRecords);
+      const now = Date.now();
+
+      // Analytics should describe work that actually happened.
+      //  - cancelled bookings are released slots, not usage
+      //  - bookings that have not started yet are intent, not usage; counting them made
+      //    next month's reservations show up in this month's totals
+      const realUsage = allRecords.filter(record => {
+        // usage_records has no `status` column, hence the cast - only bookings can be
+        // cancelled, and a usage_record is by definition something that already happened.
+        if ((record as { status?: string }).status === 'cancelled') return false;
+        return new Date(record.start_time).getTime() <= now;
+      });
+
+      // A multi-equipment session writes the FULL sample payload onto EVERY equipment row
+      // (see QuickAdd/Schedule), so a 100-sample run on 3 machines used to report 300
+      // samples. booking_group_id links those rows. Keep every row's time - all three
+      // machines really were occupied - but attribute the samples to only the first row
+      // of each group.
+      const seenSampleGroups = new Set<string>();
+      const deduped = realUsage.map(record => {
+        const groupId = record.booking_group_id;
+        if (!groupId) return record;
+        if (seenSampleGroups.has(groupId)) {
+          return { ...record, samples_processed: 0, projectSamples: undefined };
+        }
+        seenSampleGroups.add(groupId);
+        return record;
+      });
+
+      setBookings(deduped);
       setProjects(projectsRes.data || []);
       setUsers(profilesRes.data || []);
       setEquipment(equipmentRes.data || []);
@@ -109,9 +152,12 @@ const Analytics = () => {
     const totalHours = Math.round(totalMinutes / 60 * 10) / 10;
     
     return {
+      id: project.id,
       name: project.name,
       hours: totalHours,
       bookings: projectBookings.length,
+      // keep exact minutes so "avg duration" isn't derived from an already-rounded value
+      totalMinutes,
       color: getProjectColor(project.id, projects),
     };
   }).filter(p => p.hours > 0);
@@ -133,9 +179,11 @@ const Analytics = () => {
     const totalHours = Math.round(totalMinutes / 60 * 10) / 10;
     
     return {
+      id: user.id,
       name: user.full_name || user.email,
       hours: totalHours,
       bookings: userRecords.length,
+      totalMinutes,
     };
   }).filter(s => s.hours > 0).sort((a, b) => b.hours - a.hours);
 
@@ -160,6 +208,7 @@ const Analytics = () => {
     });
     
     return {
+      id: project.id,
       name: project.name,
       samples: totalSamples,
       sessions: projectRecords.length,
@@ -186,6 +235,7 @@ const Analytics = () => {
     }, 0);
     
     return {
+      id: user.id,
       name: user.full_name || user.email,
       samples: totalSamples,
       sessions: userRecords.length,
@@ -240,8 +290,10 @@ const Analytics = () => {
     const totalHours = Math.round(totalMinutes / 60 * 10) / 10;
     
     // Calculate CPU/GPU stats for HiPerGator
-    const cpuUsage = equipmentRecords.reduce((sum, r) => sum + (r.cpu_count || 0), 0);
-    const gpuUsage = equipmentRecords.reduce((sum, r) => sum + (r.gpu_count || 0), 0);
+    const cpuSessions = equipmentRecords.filter(r => r.cpu_count !== null && r.cpu_count !== undefined);
+    const gpuSessions = equipmentRecords.filter(r => r.gpu_count !== null && r.gpu_count !== undefined);
+    const cpuUsage = cpuSessions.reduce((sum, r) => sum + (r.cpu_count || 0), 0);
+    const gpuUsage = gpuSessions.reduce((sum, r) => sum + (r.gpu_count || 0), 0);
     const samplesProcessed = equipmentRecords.reduce((sum, r) => sum + (r.samples_processed || 0), 0);
     
     // Calculate source breakdown
@@ -260,8 +312,12 @@ const Analytics = () => {
       quickAddCount,
       cpuUsage: cpuUsage,
       gpuUsage: gpuUsage,
-      avgCpuPerSession: equipmentRecords.length > 0 ? Math.round(cpuUsage / equipmentRecords.length * 10) / 10 : 0,
-      avgGpuPerSession: equipmentRecords.length > 0 ? Math.round(gpuUsage / equipmentRecords.length * 10) / 10 : 0,
+      // Average over the sessions that can actually carry a CPU/GPU allocation.
+      // usage_records has no cpu_count/gpu_count column, so those rows added 0 to the
+      // numerator while still inflating the denominator - two real 16-CPU bookings plus
+      // eight Quick Adds reported 3.2 CPUs/session instead of 16.
+      avgCpuPerSession: cpuSessions.length > 0 ? Math.round(cpuUsage / cpuSessions.length * 10) / 10 : 0,
+      avgGpuPerSession: gpuSessions.length > 0 ? Math.round(gpuUsage / gpuSessions.length * 10) / 10 : 0,
       samplesProcessed: samplesProcessed,
     };
   }).filter(e => e.hours > 0).sort((a, b) => b.hours - a.hours);
@@ -274,14 +330,15 @@ const Analytics = () => {
       const end = new Date(record.end_time);
       return sum + (end.getTime() - start.getTime()) / (1000 * 60);
     }, 0);
-    const hours = Math.round(minutes / 60 * 10) / 10;
-    
-    acc[eq.type] = (acc[eq.type] || 0) + hours;
+    // Accumulate raw minutes and round once at the end. Summing values that were already
+    // rounded to 0.1 produced float artifacts like "PCR: 0.30000000000000004h" in labels.
+    acc[eq.type] = (acc[eq.type] || 0) + minutes;
     return acc;
   }, {} as Record<string, number>);
 
   const typeDistributionData = Object.entries(typeDistribution)
-    .map(([type, hours]) => ({ name: type, hours: hours as number }))
+    .map(([type, minutes]) => ({ name: type, hours: Math.round((minutes as number) / 60 * 10) / 10 }))
+    .filter(d => d.hours > 0)
     .sort((a, b) => b.hours - a.hours);
 
   // Location distribution
@@ -292,14 +349,14 @@ const Analytics = () => {
       const end = new Date(record.end_time);
       return sum + (end.getTime() - start.getTime()) / (1000 * 60);
     }, 0);
-    const hours = Math.round(minutes / 60 * 10) / 10;
-    
-    acc[eq.location] = (acc[eq.location] || 0) + hours;
+    // Accumulate raw minutes and round once at the end, same reason as typeDistribution.
+    acc[eq.location] = (acc[eq.location] || 0) + minutes;
     return acc;
   }, {} as Record<string, number>);
 
   const locationDistributionData = Object.entries(locationDistribution)
-    .map(([location, hours]) => ({ name: location, hours: hours as number }))
+    .map(([location, minutes]) => ({ name: location, hours: Math.round((minutes as number) / 60 * 10) / 10 }))
+    .filter(d => d.hours > 0)
     .sort((a, b) => b.hours - a.hours);
 
   const mostUsedEquipment = equipmentTimeData.length > 0 ? equipmentTimeData[0].name : "N/A";
@@ -460,9 +517,9 @@ const Analytics = () => {
                     <tbody>
                       {projectTimeData.length > 0 ? (
                         projectTimeData.map((project) => {
-                          const sampleData = projectSampleData.find(p => p.name === project.name);
+                          const sampleData = projectSampleData.find(p => p.id === project.id);
                           return (
-                            <tr key={project.name} className="border-b hover:bg-muted/50">
+                            <tr key={project.id} className="border-b hover:bg-muted/50">
                               <td className="py-3 px-4">
                                 <div className="flex items-center gap-2">
                                   <div 
@@ -479,7 +536,7 @@ const Analytics = () => {
                               </td>
                               <td className="text-right py-3 px-4">
                                 {project.bookings > 0 
-                                  ? Math.round(project.hours / project.bookings * 60) + 'm'
+                                  ? Math.round(project.totalMinutes / project.bookings) + 'm'
                                   : '-'
                                 }
                               </td>
@@ -526,7 +583,7 @@ const Analytics = () => {
                 {studentTimeData.length > 0 ? (
                   <div className="space-y-3">
                     {studentTimeData.slice(0, 5).map((student, index) => (
-                      <div key={student.name} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                      <div key={student.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
                             {index + 1}
@@ -584,9 +641,9 @@ const Analytics = () => {
                     <tbody>
                       {studentTimeData.length > 0 ? (
                         studentTimeData.map((student) => {
-                          const sampleData = studentSampleData.find(s => s.name === student.name);
+                          const sampleData = studentSampleData.find(s => s.id === student.id);
                           return (
-                            <tr key={student.name} className="border-b hover:bg-muted/50">
+                            <tr key={student.id} className="border-b hover:bg-muted/50">
                               <td className="py-3 px-4">{student.name}</td>
                               <td className="text-right py-3 px-4">{student.hours}h</td>
                               <td className="text-right py-3 px-4">{student.bookings}</td>
@@ -595,7 +652,7 @@ const Analytics = () => {
                               </td>
                               <td className="text-right py-3 px-4">
                                 {student.bookings > 0 
-                                  ? Math.round(student.hours / student.bookings * 60) + 'm'
+                                  ? Math.round(student.totalMinutes / student.bookings) + 'm'
                                   : '-'
                                 }
                               </td>

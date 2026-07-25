@@ -25,6 +25,11 @@ export const ProjectSampleSelector = ({
   const availableProjects = projects.filter(p => !usedProjectIds.has(p.id));
 
   const addProjectSample = () => {
+    // updateSamples refuses anything that would exceed maxTotal, but this path appended a
+    // sample with no such check - so at exactly 300 samples "Add Project" produced an
+    // invalid 301 the parent then refused to submit, with no way to tell why.
+    if (totalSamples >= maxTotal) return;
+
     if (availableProjects.length === 0) {
       setError("All projects have been added");
       return;

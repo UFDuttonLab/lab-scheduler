@@ -53,10 +53,12 @@ export default function QuickAdd() {
   }, []);
 
   const fetchEquipment = async () => {
+    // No status filter: Quick Add records usage that already happened, so a machine that
+    // is currently in-use or in maintenance must still be selectable - otherwise last
+    // Thursday's run on a since-broken sequencer can never be logged.
     const { data, error } = await supabase
       .from("equipment")
       .select("*")
-      .eq("status", "available")
       .order("name");
 
     if (error) {
@@ -186,6 +188,18 @@ export default function QuickAdd() {
     }
     
     const endTime = addMinutes(startTime, durationMinutes);
+
+    // The start-time check above is not enough on its own: a start an hour ago with a
+    // 7-day duration lands a week in the future and books 168 phantom hours into Analytics.
+    if (endTime > new Date()) {
+      toast({
+        title: "Error",
+        description: "That start time and duration end in the future. Shorten the duration, or use Schedule to book upcoming time.",
+        variant: "destructive",
+      });
+      setLoading(false);
+      return;
+    }
 
     // Generate a group ID for linking multiple usage records
     const usageGroupId = formData.equipmentIds.length > 1 ? crypto.randomUUID() : null;

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { readFunctionError } from "@/lib/dbWrite";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,19 +67,26 @@ const ResetPasswordVerify = () => {
         },
       });
 
-      if (error) throw error;
-
-      if (data?.error) {
-        // Handle specific error codes
-        if (data.code === "weak_password") {
+      // update-password returns every failure as 400 or 422, so `error` is always set and
+      // `data` is always null on the failure paths - which made the whole block below
+      // unreachable and showed users the raw string "Edge Function returned a non-2xx
+      // status code" instead of "Reset token has expired". Read the real body back off
+      // error.context.
+      if (error) {
+        const message = await readFunctionError(error, "Failed to reset password. The link may have expired.");
+        if (/weak|pwned|compromis/i.test(message)) {
           toast({
             title: "Weak Password",
-            description: "This password has been compromised in a data breach. Please choose a different, stronger password.",
+            description: "This password has been found in a data breach. Please choose a different, stronger password.",
             variant: "destructive",
           });
           setLoading(false);
           return;
         }
+        throw new Error(message);
+      }
+
+      if (data?.error) {
         throw new Error(data.error);
       }
 

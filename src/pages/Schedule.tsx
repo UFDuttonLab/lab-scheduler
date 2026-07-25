@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { useNavigate } from "react-router-dom";
@@ -36,6 +36,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BookingCard } from "@/components/BookingCard";
 import { Input } from "@/components/ui/input";
 import { ProjectSampleSelector } from "@/components/ProjectSampleSelector";
+import { settleWrite } from "@/lib/dbWrite";
 
 interface UserProfile {
   id: string;
@@ -43,6 +44,24 @@ interface UserProfile {
   full_name?: string;
   spirit_animal?: string;
 }
+
+/**
+ * Fallbacks used only when an equipment row has NULL max_cpu_count / max_gpu_count.
+ * These MUST NOT exceed the bookings CHECK constraints:
+ *   cpu_count_valid: cpu_count IS NULL OR (cpu_count BETWEEN 1 AND 32)
+ *   gpu_count_valid: gpu_count IS NULL OR (gpu_count BETWEEN 0 AND 2)
+ * Previously this file used 4 in some places and 2 in others, so the sliders let users
+ * pick 3-4 GPUs and the insert then died on a raw Postgres constraint error.
+ */
+const DEFAULT_MAX_CPU = 32;
+const DEFAULT_MAX_GPU = 2;
+
+/** Hard ceilings enforced by the database. Never offer more than these. */
+const DB_MAX_CPU = 32;
+const DB_MAX_GPU = 2;
+
+const clampCpuMax = (value?: number | null) => Math.min(value ?? DEFAULT_MAX_CPU, DB_MAX_CPU);
+const clampGpuMax = (value?: number | null) => Math.min(value ?? DEFAULT_MAX_GPU, DB_MAX_GPU);
 
 const Schedule = () => {
   const { user } = useAuth();
@@ -459,8 +478,8 @@ const Schedule = () => {
           const totalCpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.cpuCount || 0), 0);
           const totalGpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.gpuCount || 0), 0);
 
-          const maxCpus = selectedEq.maxCpuCount || 32;
-          const maxGpus = selectedEq.maxGpuCount || 4;
+          const maxCpus = clampCpuMax(selectedEq.maxCpuCount);
+          const maxGpus = clampGpuMax(selectedEq.maxGpuCount);
 
           if (totalCpuUsed + cpuCount > maxCpus) {
             toast.error(`${selectedEq.name}: Not enough CPUs available. Currently ${maxCpus - totalCpuUsed} CPUs free during this time.`);
@@ -606,8 +625,8 @@ const Schedule = () => {
         const totalCpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.cpuCount || 0), 0);
         const totalGpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.gpuCount || 0), 0);
 
-      const maxCpus = selectedEq.maxCpuCount || 32;
-        const maxGpus = selectedEq.maxGpuCount || 2;
+        const maxCpus = selectedEq.maxCpuCount ?? DEFAULT_MAX_CPU;
+        const maxGpus = selectedEq.maxGpuCount ?? DEFAULT_MAX_GPU;
 
         if (totalCpuUsed + cpuCount > maxCpus) {
           toast.error(`Not enough CPUs available. Currently ${maxCpus - totalCpuUsed} CPUs free during this time.`);
@@ -648,14 +667,37 @@ const Schedule = () => {
         bookingData.gpu_count = gpuCount;
       }
 
-      const { error } = await supabase
-        .from('bookings')
-        .update(bookingData)
-        .eq('id', selectedBooking.id);
+      // selectedBooking may be a usage_record: fetchBookings() merges both tables into one
+      // list. Writing a usage_record id into `bookings` matched zero rows and reported
+      // success, so the edit silently vanished. Route to the table the row actually lives in.
+      const isUsageRecord = selectedBooking.source === 'usage_record';
 
-      if (error) throw error;
+      if (isUsageRecord) {
+        // usage_records has no purpose/status/cpu_count/gpu_count columns; notes is its
+        // equivalent of purpose.
+        delete bookingData.purpose;
+        delete bookingData.cpu_count;
+        delete bookingData.gpu_count;
+        bookingData.notes = purpose || null;
+      }
 
-      toast.success("Booking updated successfully!");
+      const result = await settleWrite(
+        supabase
+          .from(isUsageRecord ? 'usage_records' : 'bookings')
+          .update(bookingData)
+          .eq('id', selectedBooking.id)
+          .select('id'),
+        isUsageRecord
+          ? "You can only edit your own usage records."
+          : "You don't have permission to edit this booking."
+      );
+
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+
+      toast.success(isUsageRecord ? "Usage record updated successfully!" : "Booking updated successfully!");
       setIsEditDialogOpen(false);
       setSelectedBooking(null);
       setProjectSamples([]);
@@ -705,8 +747,8 @@ const Schedule = () => {
   const getAvailableResources = (excludeBookingId?: string) => {
     if (!isHiPerGator || !bookingDate || !selectedTime) {
       const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
-      const maxCpus = hiPerGatorEq?.maxCpuCount || 32;
-      const maxGpus = hiPerGatorEq?.maxGpuCount || 2;
+      const maxCpus = clampCpuMax(hiPerGatorEq?.maxCpuCount);
+      const maxGpus = clampGpuMax(hiPerGatorEq?.maxGpuCount);
       return { availableCpu: maxCpus, availableGpu: maxGpus };
     }
 
@@ -722,7 +764,7 @@ const Schedule = () => {
     });
 
     if (!hiPerGatorId) {
-      return { availableCpu: 32, availableGpu: 2 };
+      return { availableCpu: DEFAULT_MAX_CPU, availableGpu: DEFAULT_MAX_GPU };
     }
 
     const overlappingBookings = bookings.filter(b => 
@@ -740,8 +782,8 @@ const Schedule = () => {
     const usedGpus = overlappingBookings.reduce((sum, b) => sum + (b.gpuCount || 0), 0);
 
     const selectedEq = equipment.find(e => e.id === hiPerGatorId);
-    const maxCpus = selectedEq?.maxCpuCount || 32;
-    const maxGpus = selectedEq?.maxGpuCount || 2;
+    const maxCpus = clampCpuMax(selectedEq?.maxCpuCount);
+    const maxGpus = clampGpuMax(selectedEq?.maxGpuCount);
 
     return {
       availableCpu: maxCpus - usedCpus,
@@ -753,24 +795,26 @@ const Schedule = () => {
     isEditDialogOpen ? selectedBooking?.id : undefined
   );
 
-  const getDaysWithBookings = () => {
+  // Memoised: this walks every booking day by day, and it used to be called inline from
+  // JSX, so it re-ran on every render - including every keystroke in the booking dialogs.
+  const daysWithBookings = useMemo(() => {
     const daysSet = new Set<string>();
     bookings.forEach(booking => {
-      const startDate = new Date(booking.startTime);
+      if (booking.status === 'cancelled') return; // a freed slot shouldn't mark the calendar
+
       const endDate = new Date(booking.endTime);
-      
-      // Add all days between start and end (inclusive)
-      let currentDate = new Date(startDate);
+      const currentDate = new Date(booking.startTime);
       currentDate.setHours(0, 0, 0, 0);
-      
-      while (currentDate <= endDate) {
-        daysSet.add(currentDate.toDateString());
-        currentDate = addDays(currentDate, 1);
+
+      let cursor = currentDate;
+      while (cursor <= endDate) {
+        daysSet.add(cursor.toDateString());
+        cursor = addDays(cursor, 1);
       }
     });
-    
+
     return Array.from(daysSet).map(dateStr => new Date(dateStr));
-  };
+  }, [bookings]);
 
   const isARGameUnlocked = sessionStorage.getItem('arMicrobeUnlocked') === 'true';
 
@@ -884,7 +928,7 @@ const Schedule = () => {
               onSelect={setSelectedDate}
               className="rounded-md border"
               modifiers={{
-                hasBookings: getDaysWithBookings()
+                hasBookings: daysWithBookings
               }}
               modifiersClassNames={{
                 hasBookings: "bg-primary/10 font-semibold text-primary"
@@ -1364,8 +1408,8 @@ const Schedule = () => {
                     </div>
                     {(() => {
                       const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
-                      const maxCpus = hiPerGatorEq?.maxCpuCount || 32;
-                      const maxGpus = hiPerGatorEq?.maxGpuCount || 4;
+                      const maxCpus = clampCpuMax(hiPerGatorEq?.maxCpuCount);
+                      const maxGpus = clampGpuMax(hiPerGatorEq?.maxGpuCount);
                       const cpuPercent = ((availableCpu / maxCpus) * 100);
                       const gpuPercent = ((availableGpu / maxGpus) * 100);
                       const status = cpuPercent > 50 && gpuPercent > 50 ? 'high' : cpuPercent > 20 && gpuPercent > 20 ? 'medium' : 'low';
@@ -1389,7 +1433,7 @@ const Schedule = () => {
                         value={[cpuCount]}
                         onValueChange={(value) => setCpuCount(value[0])}
                         min={1}
-                        max={Math.max(1, Math.min(equipment.find(e => e.type === "HiPerGator")?.maxCpuCount || 32, availableCpu))}
+                        max={Math.max(1, Math.min(clampCpuMax(equipment.find(e => e.type === "HiPerGator")?.maxCpuCount), availableCpu))}
                         step={1}
                         className="w-full"
                       />
@@ -1406,7 +1450,7 @@ const Schedule = () => {
                         value={[gpuCount]}
                         onValueChange={(value) => setGpuCount(value[0])}
                         min={0}
-                        max={Math.max(0, Math.min(equipment.find(e => e.type === "HiPerGator")?.maxGpuCount || 4, availableGpu))}
+                        max={Math.max(0, Math.min(clampGpuMax(equipment.find(e => e.type === "HiPerGator")?.maxGpuCount), availableGpu))}
                         step={1}
                         className="w-full"
                       />
@@ -1414,8 +1458,8 @@ const Schedule = () => {
 
                     {(() => {
                       const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
-                      const maxCpus = hiPerGatorEq?.maxCpuCount || 32;
-                      const maxGpus = hiPerGatorEq?.maxGpuCount || 4;
+                      const maxCpus = clampCpuMax(hiPerGatorEq?.maxCpuCount);
+                      const maxGpus = clampGpuMax(hiPerGatorEq?.maxGpuCount);
                       return (availableCpu < maxCpus * 0.2 || availableGpu < maxGpus * 0.2) && (
                         <div className="flex items-start gap-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-700 dark:text-amber-400">
                           <Server className="w-4 h-4 shrink-0 mt-0.5" />
@@ -1664,8 +1708,8 @@ const Schedule = () => {
                     </div>
                     {(() => {
                       const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
-                      const maxCpus = hiPerGatorEq?.maxCpuCount || 32;
-                      const maxGpus = hiPerGatorEq?.maxGpuCount || 4;
+                      const maxCpus = clampCpuMax(hiPerGatorEq?.maxCpuCount);
+                      const maxGpus = clampGpuMax(hiPerGatorEq?.maxGpuCount);
                       const cpuPercent = ((availableCpu / maxCpus) * 100);
                       const gpuPercent = ((availableGpu / maxGpus) * 100);
                       const status = cpuPercent > 50 && gpuPercent > 50 ? 'high' : cpuPercent > 20 && gpuPercent > 20 ? 'medium' : 'low';
@@ -1688,7 +1732,7 @@ const Schedule = () => {
                         value={[cpuCount]}
                         onValueChange={(value) => setCpuCount(value[0])}
                         min={1}
-                        max={Math.max(1, Math.min(equipment.find(e => e.type === "HiPerGator")?.maxCpuCount || 32, availableCpu))}
+                        max={Math.max(1, Math.min(clampCpuMax(equipment.find(e => e.type === "HiPerGator")?.maxCpuCount), availableCpu))}
                         step={1}
                       />
                     </div>
@@ -1703,14 +1747,14 @@ const Schedule = () => {
                         value={[gpuCount]}
                         onValueChange={(value) => setGpuCount(value[0])}
                         min={0}
-                        max={Math.max(0, Math.min(equipment.find(e => e.type === "HiPerGator")?.maxGpuCount || 4, availableGpu))}
+                        max={Math.max(0, Math.min(clampGpuMax(equipment.find(e => e.type === "HiPerGator")?.maxGpuCount), availableGpu))}
                         step={1}
                       />
                     </div>
                     {(() => {
                       const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
-                      const maxCpus = hiPerGatorEq?.maxCpuCount || 32;
-                      const maxGpus = hiPerGatorEq?.maxGpuCount || 4;
+                      const maxCpus = clampCpuMax(hiPerGatorEq?.maxCpuCount);
+                      const maxGpus = clampGpuMax(hiPerGatorEq?.maxGpuCount);
                       return (availableCpu < maxCpus * 0.2 || availableGpu < maxGpus * 0.2) && (
                         <div className="flex items-start gap-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-700 dark:text-amber-400">
                           <Server className="w-4 h-4 shrink-0 mt-0.5" />
