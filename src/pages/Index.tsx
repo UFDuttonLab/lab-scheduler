@@ -283,6 +283,7 @@ const Index = () => {
             value={`${availableEquipment}/${totalEquipment}`}
             icon={Settings}
             trend={`${totalEquipment - availableEquipment} unavailable`}
+            trendUp={totalEquipment - availableEquipment === 0}
           />
           <StatsCard
             title="Today's Bookings"

@@ -127,6 +127,16 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'create') {
+      // Only a PI may hand out the PI role. Without this a manager could simply CREATE a
+      // brand-new PI account - and receive its password in the response below - which is
+      // the same privilege escalation the updateRole guard blocks, just through another door.
+      if (role === 'pi' && !callerIsPi) {
+        return new Response(
+          JSON.stringify({ error: 'Only a PI can create an account with the PI role.' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
       // Generate a random password
       const generatedPassword = crypto.randomUUID()
       

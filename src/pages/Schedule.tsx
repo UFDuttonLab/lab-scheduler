@@ -601,8 +601,13 @@ const Schedule = () => {
       
       const endTime = addMinutes(startTime, parseInt(duration));
 
+      // usage_records are retroactive logs of work that already happened; overlapping
+      // entries on a shared instrument are legitimate and the DB has no constraint against
+      // them. Only real bookings are checked for conflicts.
+      const editingUsageRecord = selectedBooking.source === 'usage_record';
+
       // Check for overlapping bookings (excluding current booking)
-      const overlappingBookings = bookings.filter(b => 
+      const overlappingBookings = editingUsageRecord ? [] : bookings.filter(b =>
         b.id !== selectedBooking.id &&
         b.equipmentId === equipmentId &&
         b.status !== 'cancelled' &&

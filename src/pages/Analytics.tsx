@@ -115,8 +115,16 @@ const Analytics = () => {
       // samples. booking_group_id links those rows. Keep every row's time - all three
       // machines really were occupied - but attribute the samples to only the first row
       // of each group.
+      // Sort first so "the first row of each group" is stable. Without this the query has
+      // no ORDER BY, so which machine got credited with a multi-equipment session's samples
+      // changed between page loads.
+      const ordered = [...realUsage].sort((a, b) => {
+        const t = new Date(a.start_time).getTime() - new Date(b.start_time).getTime();
+        return t !== 0 ? t : String(a.id).localeCompare(String(b.id));
+      });
+
       const seenSampleGroups = new Set<string>();
-      const deduped = realUsage.map(record => {
+      const deduped = ordered.map(record => {
         const groupId = record.booking_group_id;
         if (!groupId) return record;
         if (seenSampleGroups.has(groupId)) {

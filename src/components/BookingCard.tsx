@@ -2,7 +2,7 @@ import { Booking } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Clock, User, Mail, Trash2, Cpu, Server, FlaskConical, Users, Edit, FolderKanban, Ban } from "lucide-react";
+import { Clock, User, Mail, Trash2, Cpu, Server, FlaskConical, Users, Edit, FolderKanban, Ban, RotateCcw } from "lucide-react";
 import { format, isSameDay } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -72,10 +72,21 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
     booking.status !== "completed" &&
     (isOwner || permissions.canManageBookings);
 
+  // Cancelling is the only way most people can free a slot, and it used to be a one-way
+  // door: Edit is hidden once cancelled and only a PI can delete, so a mis-click stranded
+  // the booking. Restoring re-runs the DB conflict trigger, so it correctly fails if
+  // someone has taken the slot in the meantime.
+  const canRestore =
+    !isUsageRecord &&
+    booking.status === "cancelled" &&
+    (isOwner || permissions.canManageBookings);
+
   // booking.collaborators is a fresh array on every parent fetch, so depend on its
   // contents rather than its identity to avoid refetching on every parent render.
+  // collaborators comes straight off a JSONB column, so it is not guaranteed to be an
+  // array. Calling .join on a non-array would throw during render and blank the whole list.
   const collaboratorKey = useMemo(
-    () => (booking.collaborators ?? []).join(","),
+    () => (Array.isArray(booking.collaborators) ? booking.collaborators.join(",") : ""),
     [booking.collaborators]
   );
 
@@ -153,6 +164,32 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
     }
   };
 
+  const handleRestore = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const result = await settleWrite(
+        supabase
+          .from('bookings')
+          .update({ status: 'scheduled' })
+          .eq('id', booking.id)
+          .select('id'),
+        "You don't have permission to restore this booking."
+      );
+
+      if (!result.ok) {
+        // The conflict trigger raises a readable message when the slot was taken.
+        toast.error(result.message);
+        return;
+      }
+
+      toast.success("Booking restored");
+      onDelete?.();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Card className="p-4 sm:p-5 hover:shadow-md transition-all animate-fade-in max-w-full overflow-hidden">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
@@ -203,6 +240,18 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+          )}
+          {canRestore && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              title="Restore booking"
+              disabled={busy}
+              onClick={handleRestore}
+            >
+              <RotateCcw className="h-4 w-4" />
+            </Button>
           )}
           {canDelete && (
             <AlertDialog>

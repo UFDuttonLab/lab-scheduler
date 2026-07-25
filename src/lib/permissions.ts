@@ -103,7 +103,9 @@ export const getRolePermissions = (role: AppRole | null): RolePermissions => {
     case 'undergrad_student':
       return {
         canManageUsers: false,
-        canManageProjects: true,
+        // undergrad_student is in the equipment policy but NOT the projects policy
+        // (migration 20260202204759 added it to equipment/equipment_projects only).
+        canManageProjects: false,
         canManageEquipment: true,
         // undergrad_student is absent from the bookings UPDATE policy.
         canManageBookings: false,

@@ -503,7 +503,12 @@ const Settings = () => {
     });
 
     if (error || data?.error) {
-      toast.error(data?.error || "Failed to create user");
+      // A non-2xx from an edge function gives data:null and error:FunctionsHttpError,
+      // so `data?.error` is always undefined here - read the real body instead.
+      const message = error
+        ? await readFunctionError(error, "Failed to create user")
+        : String(data.error);
+      toast.error(message);
       console.error(error || data?.error);
       return;
     }
@@ -534,6 +539,10 @@ const Settings = () => {
     // array arrives empty and currentRole came back undefined. The role <Select> then
     // defaulted to "user", `"user" !== undefined` passed, and merely fixing a typo in
     // someone's name silently demoted them - including demoting the PI.
+    // Managers can now read every user_roles row (policy "Users can view own roles; PI
+    // and managers can view all"), so currentRole is reliable for both PI and manager.
+    // knownRoles is still checked so that a genuinely roleless row can't be read as a
+    // change to whatever the dropdown happened to default to.
     const knownRoles = (editingUser as any).user_roles ?? [];
     const currentRole = effectiveRole(knownRoles);
     const roleIsKnown = knownRoles.length > 0;
@@ -615,7 +624,12 @@ const Settings = () => {
       });
 
       if (error || data?.error) {
-        toast.error(data?.error || "Failed to deactivate user");
+        // A non-2xx from an edge function gives data:null and error:FunctionsHttpError,
+        // so `data?.error` is always undefined here - read the real body instead.
+        const message = error
+          ? await readFunctionError(error, "Failed to deactivate user")
+          : String(data.error);
+        toast.error(message);
         console.error(error || data?.error);
         return;
       }
@@ -646,7 +660,12 @@ const Settings = () => {
       });
 
       if (error || data?.error) {
-        toast.error(data?.error || "Failed to reactivate user");
+        // A non-2xx from an edge function gives data:null and error:FunctionsHttpError,
+        // so `data?.error` is always undefined here - read the real body instead.
+        const message = error
+          ? await readFunctionError(error, "Failed to reactivate user")
+          : String(data.error);
+        toast.error(message);
         console.error(error || data?.error);
         return;
       }

@@ -379,10 +379,16 @@ const History = () => {
   const allBookings = bookings;
   // "Future" means it has not finished yet. The old version only looked at status, so a
   // three-week-old booking that was never marked completed sat in this tab forever.
+  // Upcoming = not cancelled and not finished yet.
   const futureBookings = bookings.filter(b =>
     b.status !== "cancelled" && b.endTime.getTime() >= Date.now()
   );
-  const completedBookings = bookings.filter(b => b.status === "completed");
+  // Anything already finished belongs in Completed, whether or not its stored status was
+  // ever updated. Keying only off status === 'completed' meant a three-week-old booking
+  // still marked 'scheduled' appeared in NO tab except All.
+  const completedBookings = bookings.filter(b =>
+    b.status !== "cancelled" && b.endTime.getTime() < Date.now()
+  );
 
   const filteredBookings = (bookingsList: Booking[]) => {
     if (!searchQuery) return bookingsList;
