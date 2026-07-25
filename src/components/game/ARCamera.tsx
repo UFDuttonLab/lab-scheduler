@@ -11,8 +11,16 @@ export const ARCamera = ({ onStreamReady, children }: ARCameraProps) => {
   const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const onStreamReadyRef = useRef(onStreamReady);
+  useEffect(() => { onStreamReadyRef.current = onStreamReady; }, [onStreamReady]);
 
   useEffect(() => {
+    // Tracks whether this effect instance is still current. Without it, unmounting while
+    // getUserMedia is still awaiting its permission prompt runs cleanup against a null
+    // streamRef, and the stream that arrives afterwards is never stopped - the camera
+    // light stays on until the tab is closed.
+    let cancelled = false;
+
     const initCamera = async () => {
       try {
         // Request rear-facing camera
@@ -25,6 +33,11 @@ export const ARCamera = ({ onStreamReady, children }: ARCameraProps) => {
           audio: false,
         });
 
+        if (cancelled) {
+          mediaStream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
         streamRef.current = mediaStream;
 
         if (videoRef.current) {
@@ -34,10 +47,9 @@ export const ARCamera = ({ onStreamReady, children }: ARCameraProps) => {
 
         setIsReady(true);
 
-        if (onStreamReady) {
-          onStreamReady(mediaStream);
-        }
+        onStreamReadyRef.current?.(mediaStream);
       } catch (err: any) {
+        if (cancelled) return;
         console.error("Camera access error:", err);
         const errorMessage = err.name === "NotAllowedError"
           ? "Camera access denied. Please allow camera permissions."
@@ -50,13 +62,14 @@ export const ARCamera = ({ onStreamReady, children }: ARCameraProps) => {
     initCamera();
 
     return () => {
-      // FIXED: Clean up camera stream using ref
+      cancelled = true;
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
       }
     };
-  }, [onStreamReady]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (error) {
     return (

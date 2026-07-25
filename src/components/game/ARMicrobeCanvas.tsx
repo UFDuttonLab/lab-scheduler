@@ -46,6 +46,8 @@ interface ARMicrobeCanvasProps {
   onLifeLost: () => void;
   onMicrobeEliminated: () => void;
   onComboChange: (combo: number) => void;
+  /** Fired on every shot, hit or miss. Needed for a real accuracy figure. */
+  onTap?: () => void;
   lives: number;
   isPaused: boolean;
 }
@@ -97,6 +99,7 @@ export const ARMicrobeCanvas = ({
   onLifeLost,
   onMicrobeEliminated,
   onComboChange,
+  onTap,
   lives,
   isPaused,
 }: ARMicrobeCanvasProps) => {
@@ -119,6 +122,7 @@ export const ARMicrobeCanvas = ({
   const lastPowerUpSpawnRef = useRef<number>(Date.now());
   const animationFrameRef = useRef<number>();
   const comboRef = useRef(0);
+  const scoreRef = useRef(0);
   const activePowerUpRef = useRef<{ type: string; endTime: number } | null>(null);
   
   const [currentWave, setCurrentWave] = useState(1);
@@ -131,6 +135,25 @@ export const ARMicrobeCanvas = ({
 
   useEffect(() => {
     console.log("🦠 AR Microbe Shooter V2 - LARGE microbes, close spawn, fast movement");
+  }, []);
+
+  // Bootstrap wave 1.
+  // waveActive starts false and the only caller of startNewWave() is the wave-complete
+  // checker, which returns early while waveActive is false - so no wave ever began and
+  // not a single microbe ever spawned. This kicks off the first wave on mount.
+  // It does not call startNewWave() because that increments the counter, which would
+  // start the game on wave 2.
+  const bootstrappedRef = useRef(false);
+  useEffect(() => {
+    if (bootstrappedRef.current) return;
+    bootstrappedRef.current = true;
+    setWaveActive(true);
+    waveActiveRef.current = true;
+    setWaveMicrobesSpawned(0);
+    waveMicrobesSpawnedRef.current = 0;
+    toast.success("Wave 1 Starting!", {
+      description: `${5 + currentWaveRef.current * 3} microbes incoming!`,
+    });
   }, []);
 
   const getMicrobeColor = (type: string): string => {
@@ -183,7 +206,23 @@ export const ARMicrobeCanvas = ({
 
     // FIXED: Spawn MUCH closer - 8-15 units instead of 20-30
     const spawnDistance = 8 + Math.random() * 7;
-    const angleOffset = (Math.random() - 0.5) * (Math.PI / 3);
+
+    // Keep the spawn arc inside what the player can actually reach.
+    //
+    // projectToScreen derives `scale` from canvas HEIGHT and applies it to X as well, so
+    // the horizontal field of view is atan((width/2)/scale) - on a portrait phone that is
+    // only about +/-15 degrees. Spawning across a fixed +/-30 degrees therefore put half
+    // the microbes outside the frustum. With working sensors that is fine (you turn to
+    // face them), but in touch mode the camera never turns and they are unkillable.
+    let arc = Math.PI / 3;
+    if (!sensorMode && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const scale = canvas.height / (2 * Math.tan((60 * Math.PI / 180) / 2));
+      const halfHorizontalFov = Math.atan((canvas.width / 2) / scale);
+      // 1.6x the half-FOV gives a full arc slightly inside the visible cone.
+      arc = halfHorizontalFov * 1.6;
+    }
+    const angleOffset = (Math.random() - 0.5) * arc;
     const heightOffset = (Math.random() - 0.5) * 3;
     
     const spawnYaw = cameraYaw + angleOffset;
@@ -219,7 +258,7 @@ export const ARMicrobeCanvas = ({
       waveMicrobesSpawnedRef.current = newCount;
       return newCount;
     });
-  }, []);
+  }, [sensorMode]);
 
   const spawnPowerUp = useCallback((cameraYaw: number) => {
     const types: PowerUpItem["type"][] = ["freeze", "rapid", "double", "shield"];
@@ -297,6 +336,7 @@ export const ARMicrobeCanvas = ({
   useEffect(() => { currentWaveRef.current = currentWave; }, [currentWave]);
   useEffect(() => { waveActiveRef.current = waveActive; }, [waveActive]);
   useEffect(() => { comboRef.current = combo; }, [combo]);
+  useEffect(() => { scoreRef.current = score; }, [score]);
   useEffect(() => { activePowerUpRef.current = activePowerUp; }, [activePowerUp]);
   useEffect(() => { waveMicrobesSpawnedRef.current = waveMicrobesSpawned; }, [waveMicrobesSpawned]);
 
@@ -325,7 +365,7 @@ export const ARMicrobeCanvas = ({
   }, [isPaused, startNewWave]);
 
   useEffect(() => {
-    if (isPaused || !sensorMode || !waveActive) return;
+    if (isPaused || !waveActive) return;
     const targetMicrobes = 5 + (currentWave * 3);
     const waveDuration = Math.max(10, 22 - (currentWave * 2));
     const spawnInterval = Math.floor((waveDuration * 1000) / targetMicrobes);
@@ -337,7 +377,7 @@ export const ARMicrobeCanvas = ({
     }, spawnInterval);
     
     return () => clearInterval(interval);
-  }, [isPaused, sensorMode, waveActive, currentWave, spawnMicrobe]);
+  }, [isPaused, waveActive, currentWave, spawnMicrobe]);
 
   useEffect(() => {
     if (isPaused) return;
@@ -376,13 +416,24 @@ export const ARMicrobeCanvas = ({
     if (isPaused) return;
     const interval = setInterval(() => {
       const now = Date.now();
+      // Count escapes first, then notify the parent AFTER the updater returns.
+      // Calling onLifeLost() inside the updater runs a parent setState during React's
+      // render phase (warning: "Cannot update a component while rendering a different
+      // component"), and a re-invoked updater would deduct the same life twice.
+      let escaped = 0;
+
       setMicrobes((prev) => prev.map((microbe) => {
         const age = (now - microbe.spawnTime) / 1000;
         const newWobble = microbe.wobble + 0.05;
         const distance = Math.sqrt(microbe.x ** 2 + microbe.y ** 2 + microbe.z ** 2);
         
-        if (distance < 0.5 || age > 10) {
-          onLifeLost();
+        // A microbe counts as escaped once it passes the camera plane (z >= 0).
+        // Previously only `distance < 0.5` or a 10s timeout removed it, so microbes flew
+        // straight past the player and kept travelling to z = +20 while still alive -
+        // invisible, unhittable, and not yet costing a life. The player had no way to
+        // react and the escape only registered seconds later via the age timeout.
+        if (microbe.z >= 0 || distance < 0.5 || age > 10) {
+          escaped += 1;
           return null;
         }
 
@@ -396,6 +447,10 @@ export const ARMicrobeCanvas = ({
           opacity: (microbe.type === "tank" || microbe.type === "boss") && Math.floor(age) % 5 === 0 && age % 1 < 0.5 ? 0.5 : 1.0,
         };
       }).filter(Boolean) as Microbe[]);
+
+      // escaped is computed synchronously by the updater above, which React runs before
+      // this line, so the count is accurate by the time we read it.
+      for (let i = 0; i < escaped; i++) onLifeLost();
     }, 16);
     return () => clearInterval(interval);
   }, [isPaused, onLifeLost]);
@@ -685,12 +740,35 @@ export const ARMicrobeCanvas = ({
   }, [isPaused]);
 
   const handleTap = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
+    // React attaches onTouchStart passively, so preventDefault() here is a no-op that
+    // logs "Unable to preventDefault inside passive event listener invocation" on every
+    // shot. touch-action: none on the canvas suppresses the gesture instead.
     if (isPaused || !canvasRef.current) return;
 
     const canvas = canvasRef.current;
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
+
+    // Where the shot lands.
+    //
+    // With working motion sensors this is a crosshair shooter: you aim by pointing the
+    // phone, so every tap fires at the centre of the screen. But in touch mode (sensors
+    // unavailable or denied) the camera never turns, so microbes that spawn behind or
+    // beside you are permanently unreachable and the game is unwinnable. When there is
+    // no sensor, aim at the point actually touched instead.
+    let centerX = canvas.width / 2;
+    let centerY = canvas.height / 2;
+
+    if (!sensorMode) {
+      const touch = e.touches?.[0] ?? e.changedTouches?.[0];
+      if (touch) {
+        const rect = canvas.getBoundingClientRect();
+        // Canvas backing store may differ from its CSS size, so scale into canvas space.
+        centerX = (touch.clientX - rect.left) * (canvas.width / rect.width);
+        centerY = (touch.clientY - rect.top) * (canvas.height / rect.height);
+      }
+    }
+
+    // Report the shot before we know whether it hit, so accuracy means something.
+    onTap?.();
 
     if ('vibrate' in navigator) navigator.vibrate(50);
     laserFiringRef.current = Date.now();
@@ -698,105 +776,103 @@ export const ARMicrobeCanvas = ({
     const cameraYaw = sensorDataRef.current.yaw;
     const cameraPitch = sensorDataRef.current.pitch;
 
-    let powerUpCollected = false;
-    setPowerUps((currentPowerUps) => {
-      let closestPowerUp: { powerUp: PowerUpItem; distance: number } | null = null;
+    // Decide against the current ref synchronously. Reading a flag set inside a
+    // setState updater never worked: the updater runs on the next render, long after
+    // this check below had already evaluated to false.
+    let collectedPowerUp: PowerUpItem | null = null;
+    {
       let minDistance = Infinity;
-
-      currentPowerUps.forEach((powerUp) => {
+      powerUpsRef.current.forEach((powerUp) => {
         const projection = projectToScreen(powerUp.x, powerUp.y, powerUp.z, cameraYaw, cameraPitch, canvas.width, canvas.height);
         if (!projection.isVisible) return;
-        
         const screenDistance = Math.hypot(projection.screenX - centerX, projection.screenY - centerY);
-        
         if (screenDistance < 100 && projection.distance < minDistance) {
           minDistance = projection.distance;
-          closestPowerUp = { powerUp, distance: projection.distance };
+          collectedPowerUp = powerUp;
         }
       });
+    }
 
-      if (closestPowerUp) {
-        powerUpCollected = true;
-        activatePowerUp(closestPowerUp.powerUp.type);
-        if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
-        return currentPowerUps.filter(p => p.id !== closestPowerUp!.powerUp.id);
-      }
-      
-      return currentPowerUps;
-    });
+    if (collectedPowerUp) {
+      const picked = collectedPowerUp as PowerUpItem;
+      setPowerUps((current) => current.filter(p => p.id !== picked.id));
+      activatePowerUp(picked.type);
+      if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
+      return;
+    }
 
-    if (powerUpCollected) return;
 
-    setMicrobes((currentMicrobes) => {
-      let closestMicrobe: { microbe: Microbe; distance: number; projection: any } | null = null;
+    // Resolve the hit synchronously against the ref, then apply state changes and parent
+    // callbacks OUTSIDE any updater.
+    //
+    // Previously setScore/setCombo/onScoreChange/onComboChange/onMicrobeEliminated all
+    // ran inside the setMicrobes updater. React executes updaters during the render
+    // phase, which produced "Cannot update a component while rendering a different
+    // component" and - worse - meant a re-invoked updater double-counted the kill,
+    // awarding points and combo twice for one tap.
+    let hit: { microbe: Microbe; screenX: number; screenY: number } | null = null;
+    {
       let minDistance = Infinity;
-
-      currentMicrobes.forEach((microbe) => {
+      microbesRef.current.forEach((microbe) => {
         const projection = projectToScreen(microbe.x, microbe.y, microbe.z, cameraYaw, cameraPitch, canvas.width, canvas.height);
         if (!projection.isVisible) return;
-        
         const screenDistance = Math.hypot(projection.screenX - centerX, projection.screenY - centerY);
-        
         if (screenDistance < 150 && projection.distance < minDistance) {
           minDistance = projection.distance;
-          closestMicrobe = { microbe, distance: projection.distance, projection: { screenX: projection.screenX, screenY: projection.screenY } };
+          hit = { microbe, screenX: projection.screenX, screenY: projection.screenY };
         }
       });
+    }
 
-      if (closestMicrobe) {
-        const { microbe, projection } = closestMicrobe;
-        if ('vibrate' in navigator) navigator.vibrate([50, 30, 50]);
-        
-        const newHealth = microbe.health - 1;
-        const particlesToAdd: Particle[] = Array.from({ length: 8 }, () => ({
-          x: projection.screenX, y: projection.screenY,
-          vx: (Math.random() - 0.5) * 5, vy: (Math.random() - 0.5) * 5,
-          life: 1, color: getMicrobeColor(microbe.type),
-        }));
-        
-        if (newHealth <= 0) {
-          particlesToAdd.push(...Array.from({ length: 25 }, () => ({
-            x: projection.screenX, y: projection.screenY,
-            vx: (Math.random() - 0.5) * 12, vy: (Math.random() - 0.5) * 12,
-            life: 1.5, color: getMicrobeColor(microbe.type),
-          })));
-          if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
-        }
-        
-        particlesRef.current.push(...particlesToAdd);
-        
-        return currentMicrobes.map((m) => {
-          if (m.id !== microbe.id) return m;
-          if (newHealth <= 0) {
-            const newCombo = comboRef.current + 1;
-            const comboMultiplier = 1 + Math.floor(newCombo / 5) * 0.5;
-            const pointsEarned = Math.floor(m.points * comboMultiplier * (activePowerUpRef.current?.type === "double" ? 2 : 1));
-            
-            console.log(`💥 Killed ${m.type}, earned ${pointsEarned} points, combo: ${newCombo}`);
-            
-            setScore((prev) => {
-              const newScore = prev + pointsEarned;
-              onScoreChange(newScore);
-              return newScore;
-            });
-            setCombo(newCombo);
-            onComboChange(newCombo);
-            lastComboTimeRef.current = Date.now();
-            onMicrobeEliminated();
-            return null;
-          }
-          return { ...m, health: newHealth };
-        }).filter(Boolean) as Microbe[];
-      }
-      return currentMicrobes;
-    });
-  }, [isPaused, onScoreChange, onComboChange, onMicrobeEliminated, activatePowerUp]);
+    if (!hit) return;
+
+    const { microbe: target, screenX, screenY } = hit as { microbe: Microbe; screenX: number; screenY: number };
+    const newHealth = target.health - 1;
+    const killed = newHealth <= 0;
+
+    if ('vibrate' in navigator) navigator.vibrate(killed ? [100, 50, 100] : [50, 30, 50]);
+
+    particlesRef.current.push(
+      ...Array.from({ length: killed ? 33 : 8 }, () => ({
+        x: screenX,
+        y: screenY,
+        vx: (Math.random() - 0.5) * (killed ? 12 : 5),
+        vy: (Math.random() - 0.5) * (killed ? 12 : 5),
+        life: killed ? 1.5 : 1,
+        color: getMicrobeColor(target.type),
+      }))
+    );
+
+    if (killed) {
+      const newCombo = comboRef.current + 1;
+      const comboMultiplier = 1 + Math.floor(newCombo / 5) * 0.5;
+      const pointsEarned = Math.floor(
+        target.points * comboMultiplier * (activePowerUpRef.current?.type === "double" ? 2 : 1)
+      );
+
+      setMicrobes((current) => current.filter((m) => m.id !== target.id));
+
+      comboRef.current = newCombo;
+      lastComboTimeRef.current = Date.now();
+      setCombo(newCombo);
+      scoreRef.current += pointsEarned;
+      setScore(scoreRef.current);
+      onScoreChange(scoreRef.current);
+      onComboChange(newCombo);
+      onMicrobeEliminated();
+    } else {
+      setMicrobes((current) =>
+        current.map((m) => (m.id === target.id ? { ...m, health: newHealth } : m))
+      );
+    }
+  }, [isPaused, sensorMode, onScoreChange, onComboChange, onMicrobeEliminated, activatePowerUp, onTap]);
 
   return (
     <>
       <canvas
         ref={canvasRef}
         onTouchStart={handleTap}
+        onContextMenu={(e) => e.preventDefault()}
         className="absolute inset-0 w-full h-full z-10 touch-action-none"
         style={{ width: "100%", height: "100%", touchAction: "none" }}
       />

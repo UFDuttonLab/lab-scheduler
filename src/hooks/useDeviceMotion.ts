@@ -57,7 +57,10 @@ export const useDeviceMotion = (threshold: number = 15) => {
     const handleMotion = (event: DeviceMotionEvent) => {
       const { x, y, z } = event.accelerationIncludingGravity || {};
 
-      if (x === null || y === null || z === null) return;
+      // == null catches undefined too. Destructuring the `|| {}` fallback yields undefined,
+    // which slipped past a === null check and made every later value NaN - so the shake
+    // threshold never tripped and shake-to-unlock silently never worked.
+    if (x == null || y == null || z == null) return;
 
       const deltaX = Math.abs(x - lastX);
       const deltaY = Math.abs(y - lastY);

@@ -29,14 +29,52 @@ const ARMicrobeShooter = () => {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<string>("");
+  const [awaitingSensors, setAwaitingSensors] = useState(false);
+  const [maxCombo, setMaxCombo] = useState(0);
   const gameStartTimeRef = useRef<number>(0);
+  // Guards against endGame() running twice and writing two leaderboard rows.
+  const endedRef = useRef(false);
   const { requestPermission: requestMotionPermission } = useDeviceMotion();
   const orientation = useDeviceOrientation();
   const gyro = useGyroscope();
 
+  // Live sensor readings. Derived during render, so it always reflects the newest values.
+  const sensorsLive =
+    (orientation.alpha !== null && orientation.beta !== null) ||
+    (gyro.alpha !== null && gyro.beta !== null);
+
+  // Watch for sensor data instead of busy-waiting on it.
+  //
+  // The old loop read `orientation` from the closure captured when the click handler was
+  // created. Sensor events set React state, which produces a NEW object on the next
+  // render - the running loop kept re-reading the frozen one, so on a perfectly working
+  // phone it polled null for 3s and then declared the sensors dead. Because
+  // permissionsGranted stayed false, the Start Game button never appeared and the game
+  // was completely unreachable.
+  useEffect(() => {
+    if (!awaitingSensors || !sensorsLive) return;
+    setAwaitingSensors(false);
+    setPermissionsGranted(true);
+    setPermissionStatus("✅ Sensors active! Ready to play.");
+    toast.success("Sensors ready! You can now start the game.");
+  }, [awaitingSensors, sensorsLive]);
+
+  // If the sensors never report in, offer touch mode rather than dead-ending. Aiming is
+  // fixed forward, but tapping still shoots, so the game remains playable.
+  useEffect(() => {
+    if (!awaitingSensors) return;
+    const timer = setTimeout(() => {
+      setAwaitingSensors(false);
+      setPermissionsGranted(true);
+      setPermissionStatus("⚠️ No motion sensors detected - starting in touch mode. Tap microbes to shoot.");
+      toast.info("Sensors unavailable - playing in touch mode");
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [awaitingSensors]);
+
   const handleRequestPermissions = async () => {
     setPermissionStatus("Requesting permissions...");
-    
+
     const motionGranted = await requestMotionPermission();
     const orientationGranted = await orientation.requestPermission();
     const gyroGranted = await gyro.requestPermission();
@@ -45,32 +83,12 @@ const ARMicrobeShooter = () => {
 
     if (motionGranted || orientationGranted || gyroGranted) {
       setPermissionStatus("Waiting for sensor data...");
-      
-      // Wait for actual sensor data to confirm sensors are working
-      const startTime = Date.now();
-      const timeout = 3000; // 3 second timeout
-      
-      while (Date.now() - startTime < timeout) {
-        const hasOrientation = orientation.alpha !== null && orientation.beta !== null;
-        const hasGyro = gyro.alpha !== null && gyro.beta !== null;
-        
-        if (hasOrientation || hasGyro) {
-          setPermissionsGranted(true);
-          setPermissionStatus("✅ Sensors active! Ready to play.");
-          toast.success("Sensors ready! You can now start the game.");
-          return;
-        }
-        
-        // Wait a bit before checking again
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      
-      // Timeout - sensors not responding
-      setPermissionStatus("⚠️ Sensors not responding. Try reloading the page.");
-      toast.error("Sensors not responding - please reload and try again");
+      setAwaitingSensors(true);
     } else {
-      setPermissionStatus("⚠️ Sensor permissions denied. Game cannot work without sensors.");
-      toast.error("Motion sensor permission required for AR game");
+      // Permission refused is not fatal either - touch mode still works.
+      setPermissionsGranted(true);
+      setPermissionStatus("⚠️ Sensor permission denied - starting in touch mode. Tap microbes to shoot.");
+      toast.info("Playing in touch mode without motion sensors");
     }
   };
 
@@ -133,10 +151,12 @@ const ARMicrobeShooter = () => {
 
   const startGame = async () => {
     // Initialize game state
+    endedRef.current = false;
     setGameState("playing");
     setScore(0);
     setLives(3);
     setCombo(0);
+    setMaxCombo(0);
     setMicrobesEliminated(0);
     setTotalTaps(0);
     gameStartTimeRef.current = Date.now();
@@ -151,6 +171,11 @@ const ARMicrobeShooter = () => {
   };
 
   const endGame = useCallback(async () => {
+    // Two microbes expiring in the same frame both drove lives to <= 0 and each called
+    // endGame(), inserting two leaderboard rows for one game.
+    if (endedRef.current) return;
+    endedRef.current = true;
+
     setGameState("gameover");
 
     if (!user) return;
@@ -178,7 +203,7 @@ const ARMicrobeShooter = () => {
         score: finalScore,
         microbes_eliminated: microbesEliminated,
         accuracy_percentage: accuracy,
-        combo_max: combo,
+        combo_max: maxCombo,
         game_duration_seconds: gameDuration,
       });
 
@@ -188,11 +213,11 @@ const ARMicrobeShooter = () => {
       console.error("Failed to save score:", error);
       toast.error("Failed to save score");
     }
-  }, [user, score, microbesEliminated, totalTaps, combo]);
+  }, [user, score, microbesEliminated, totalTaps, maxCombo]);
 
   const handleLifeLost = useCallback(() => {
     setLives((prev) => {
-      const newLives = prev - 1;
+      const newLives = Math.max(0, prev - 1);
       if (newLives <= 0) {
         endGame();
       }
@@ -202,12 +227,20 @@ const ARMicrobeShooter = () => {
 
   const handleMicrobeEliminated = useCallback(() => {
     setMicrobesEliminated((prev) => prev + 1);
+  }, []);
+
+  // Every shot, hit or miss. Previously this was never wired to the canvas, so totalTaps
+  // only ever incremented alongside a kill and accuracy was hardcoded at 100%.
+  const handleTap = useCallback(() => {
     setTotalTaps((prev) => prev + 1);
   }, []);
 
-  const handleTap = () => {
-    setTotalTaps((prev) => prev + 1);
-  };
+  // The canvas resets combo to 0 on every miss, so the live value at death is usually 0.
+  // Track the peak separately - that is what combo_max is supposed to mean.
+  const handleComboChange = useCallback((value: number) => {
+    setCombo(value);
+    setMaxCombo((prev) => (value > prev ? value : prev));
+  }, []);
 
   // Block access on desktop
   if (!isMobile) {
@@ -292,29 +325,6 @@ const ARMicrobeShooter = () => {
     );
   }
 
-  if (gameState === "paused") {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-black/80 p-6">
-        <Card className="max-w-md p-8 text-center space-y-4">
-          <h2 className="text-3xl font-bold">⏸️ Paused</h2>
-          <div className="space-y-2">
-            <p className="text-xl">Score: {score}</p>
-            <p className="text-lg">Microbes Eliminated: {microbesEliminated}</p>
-          </div>
-          <div className="space-y-3 pt-4">
-            <Button onClick={resumeGame} size="lg" className="w-full">
-              <Play className="mr-2 h-5 w-5" />
-              Resume
-            </Button>
-            <Button onClick={endGame} variant="outline" className="w-full">
-              End Game
-            </Button>
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
   if (gameState === "gameover") {
     const gameDuration = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
     const accuracy = totalTaps > 0 ? ((microbesEliminated / totalTaps) * 100).toFixed(1) : "0";
@@ -329,7 +339,7 @@ const ARMicrobeShooter = () => {
             <div className="space-y-1 text-muted-foreground">
               <p>🦠 Microbes Eliminated: {microbesEliminated}</p>
               <p>🎯 Accuracy: {accuracy}%</p>
-              <p>🔥 Max Combo: {combo}</p>
+              <p>🔥 Max Combo: {maxCombo}</p>
               <p>⏱️ Duration: {Math.floor(gameDuration / 60)}:{(gameDuration % 60).toString().padStart(2, "0")}</p>
             </div>
           </div>
@@ -359,17 +369,45 @@ const ARMicrobeShooter = () => {
     );
   }
 
-  // Playing state - AR view
+  // Playing / paused - AR view.
+  // Paused deliberately keeps this mounted. Rendering a separate pause screen unmounted
+  // ARCamera and ARMicrobeCanvas, so all in-canvas state was destroyed: resuming reset
+  // the score to 0, restored 3 lives internally, and tore down and re-requested the
+  // camera. isPaused now actually drives the canvas, which is what it was always for.
+  const isPausedNow = gameState === "paused";
+
   return (
     <ARCamera>
       <ARMicrobeCanvas
         onScoreChange={setScore}
         onLifeLost={handleLifeLost}
         onMicrobeEliminated={handleMicrobeEliminated}
-        onComboChange={setCombo}
+        onComboChange={handleComboChange}
+        onTap={handleTap}
         lives={lives}
-        isPaused={false}
+        isPaused={isPausedNow}
       />
+
+      {isPausedNow && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-6 pointer-events-auto">
+          <Card className="max-w-md w-full p-8 text-center space-y-4">
+            <h2 className="text-3xl font-bold">⏸️ Paused</h2>
+            <div className="space-y-2">
+              <p className="text-xl">Score: {score}</p>
+              <p className="text-lg">Microbes Eliminated: {microbesEliminated}</p>
+            </div>
+            <div className="space-y-3 pt-4">
+              <Button onClick={resumeGame} size="lg" className="w-full">
+                <Play className="mr-2 h-5 w-5" />
+                Resume
+              </Button>
+              <Button onClick={endGame} variant="outline" className="w-full">
+                End Game
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* HUD */}
       <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start text-white pointer-events-none">

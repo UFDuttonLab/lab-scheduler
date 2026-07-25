@@ -94,18 +94,22 @@ export const useDeviceOrientation = () => {
 
     window.addEventListener("deviceorientation", handleOrientation);
 
-    // Verify that orientation events actually fire within 1 second
+    // Warn if no events arrive, but do NOT flip permissionGranted back to false.
+    //
+    // permissionGranted is this effect's own dependency, so setting it false tore down
+    // the listener (and the guard on line 59 stopped it ever being re-added). On a device
+    // whose sensors take ~1.2s to warm up, the listener was removed immediately before
+    // the first event would have arrived, and only a full page reload could recover.
     const verificationTimeout = setTimeout(() => {
       if (!eventReceived) {
-        console.warn("❌ Device orientation permission granted but no events received after 1s");
+        console.warn("⚠️ Device orientation permission granted but no events after 2s");
         console.log("📱 Device info:", {
           userAgent: navigator.userAgent,
           isSecureContext: window.isSecureContext,
           protocol: window.location.protocol
         });
-        setPermissionGranted(false);
       }
-    }, 1000);
+    }, 2000);
 
     // Periodic check for stale data
     const staleCheckInterval = setInterval(() => {
