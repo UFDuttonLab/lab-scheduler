@@ -37,6 +37,7 @@ import { BookingCard } from "@/components/BookingCard";
 import { Input } from "@/components/ui/input";
 import { ProjectSampleSelector } from "@/components/ProjectSampleSelector";
 import { settleWrite } from "@/lib/dbWrite";
+import { describeGroupDrift } from "@/lib/bookingGroups";
 
 interface UserProfile {
   id: string;
@@ -129,6 +130,10 @@ const Schedule = () => {
   const [collaboratorSearch, setCollaboratorSearch] = useState<string>("");
   const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
   const [availableUsers, setAvailableUsers] = useState<UserProfile[]>([]);
+  // fetchUsers() is async, so availableUsers is [] on the first renders. Without this flag the
+  // collaborator chips would label every real collaborator a former lab member for a moment
+  // (and permanently, if the profiles fetch failed) - a false claim about a colleague.
+  const [usersLoaded, setUsersLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   
   const [projects, setProjects] = useState<Project[]>([]);
@@ -245,6 +250,7 @@ const Schedule = () => {
     }
     
     setAvailableUsers(data || []);
+    setUsersLoaded(true);
   };
 
   const fetchEquipment = async () => {
@@ -278,7 +284,15 @@ const Schedule = () => {
     setEquipment(transformedEquipment);
   };
 
+  // Monotonic request id. fetchBookings() is fired without await from several places
+  // (mount, after create, after edit, after delete), so two calls can be in flight at once and
+  // the SLOWER, EARLIER one used to land last and overwrite fresher data. That state is what the
+  // client-side conflict check and the HiPerGator availability badge read, so staleness there is
+  // not merely cosmetic. Only the newest request is allowed to publish its result.
+  const bookingsRequestRef = useRef(0);
+
   const fetchBookings = async () => {
+    const requestId = ++bookingsRequestRef.current;
     try {
       // Fetch all data separately to avoid nested join issues
       const [bookingsRes, usageRecordsRes, equipmentRes, projectsRes, profilesRes] = await Promise.all([
@@ -346,7 +360,8 @@ const Schedule = () => {
           collaborators: (booking.collaborators as string[]) || [],
           userId: booking.user_id,
           source: 'booking',
-          projectSamples: enrichedProjectSamples
+          projectSamples: enrichedProjectSamples,
+          bookingGroupId: booking.booking_group_id || undefined
         };
       });
 
@@ -403,10 +418,11 @@ const Schedule = () => {
       const allBookings = [...transformedBookings, ...transformedUsageRecords]
         .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
 
+      if (requestId !== bookingsRequestRef.current) return; // a newer fetch already won
       setBookings(allBookings);
     } catch (error: any) {
       console.error("Error fetching bookings:", error);
-      toast.error("Failed to load bookings");
+      if (requestId === bookingsRequestRef.current) toast.error("Failed to load bookings");
     }
   };
 
@@ -729,6 +745,23 @@ const Schedule = () => {
       // them. Only real bookings are checked for conflicts.
       const editingUsageRecord = selectedBooking.source === 'usage_record';
 
+      // A usage record logs work that ALREADY happened, so it must not be pushed into the
+      // future: the conflict trigger only guards `bookings`, so a future-dated usage record
+      // appears on the schedule as a reservation that reserves nothing. QuickAdd enforces this
+      // on create; the edit path did not.
+      //
+      // There is deliberately NO matching "must not end in the past" guard for bookings here,
+      // even though the CREATE path has one. Creating a booking in the past is meaningless, but
+      // EDITING one in the past is the normal case: every one of this lab's 160 bookings has
+      // already finished, and correcting a sample count or a project on last week's session is
+      // exactly what the Edit dialog is for. An earlier version of this guard rejected any
+      // booking ending before now, which made all 160 of them unsavable.
+      if (editingUsageRecord && endTime.getTime() > Date.now()) {
+        toast.error("A usage record logs work that already happened, so it cannot end in the future. Use Schedule to book upcoming time.");
+        setLoading(false);
+        return;
+      }
+
       // Check for overlapping bookings (excluding current booking)
       const overlappingBookings = editingUsageRecord ? [] : bookings.filter(b =>
         b.source !== 'usage_record' &&
@@ -810,12 +843,64 @@ const Schedule = () => {
         bookingData.notes = purpose || null;
       }
 
+      // A multi-equipment session is stored as N rows sharing a booking_group_id, and they
+      // describe ONE logical booking. Editing just the clicked row let them drift apart, and
+      // Analytics credits a group's samples to whichever row sorts first by (start_time, id) -
+      // so editing a sibling's sample count made the change invisible in Analytics, and
+      // changing its start time could move "first" onto a different row and make the reported
+      // figure jump to a stale value. Move the whole session together.
+      //
+      // equipment_id is deliberately NOT written for a group: each row is a different machine,
+      // and applying one machine's id across the group would collapse the whole session onto it.
+      const groupId = !isUsageRecord ? selectedBooking.bookingGroupId : undefined;
+
+      // Fields that belong to ONE machine must never be written group-wide.
+      //   equipment_id - obvious: it would collapse the whole session onto one machine.
+      //   cpu_count / gpu_count - these describe a HiPerGator allocation. Editing the
+      //     HiPerGator row of a mixed session (HiPerGator + a bench instrument) would otherwise
+      //     stamp "16 CPUs" onto the Qubit row too: the CHECK constraint accepts it, so it
+      //     succeeds silently and BookingCard then renders a CPU/GPU line on a bench booking.
+      // They are applied to the clicked row alone, after the shared update.
+      let perRowResources: { cpu_count: number; gpu_count: number } | null = null;
+      if (groupId) {
+        delete bookingData.equipment_id;
+        if (bookingData.cpu_count !== undefined) {
+          perRowResources = { cpu_count: bookingData.cpu_count, gpu_count: bookingData.gpu_count };
+          delete bookingData.cpu_count;
+          delete bookingData.gpu_count;
+        }
+      }
+      // Applying an edit to the whole group is invisible and correct when the rows already
+      // agree. When they have DRIFTED it is destructive - unifying them overwrites a sibling's
+      // divergent times and sample count - and two groups on the live database have already
+      // drifted this way. So say what will be overwritten and let the user decide.
+      if (groupId) {
+        const drift = describeGroupDrift(selectedBooking, bookings);
+        if (drift) {
+          const ok = window.confirm(
+            `This session covers ${drift.machines.length + 1} machines and their ` +
+            `${drift.differingFields.join(' and ')} currently differ.\n\n` +
+            `Saving applies the values in this form to all of them, overwriting what is ` +
+            `recorded for ${drift.machines.join(', ')}.\n\n` +
+            `Press OK to update the whole session, or Cancel to leave it alone.`
+          );
+          if (!ok) {
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
+
+      const query = supabase
+        .from(isUsageRecord ? 'usage_records' : 'bookings')
+        .update(bookingData);
+
       const result = await settleWrite(
-        supabase
-          .from(isUsageRecord ? 'usage_records' : 'bookings')
-          .update(bookingData)
-          .eq('id', selectedBooking.id)
-          .select('id'),
+        (groupId
+          ? query.eq('booking_group_id', groupId)
+          : query.eq('id', selectedBooking.id)
+        ).select('id'),
         isUsageRecord
           ? "You can only edit your own usage records."
           : "You don't have permission to edit this booking."
@@ -826,7 +911,31 @@ const Schedule = () => {
         return;
       }
 
-      toast.success(isUsageRecord ? "Usage record updated successfully!" : "Booking updated successfully!");
+      // Machine-specific resources, scoped to the row the user actually opened.
+      if (groupId && perRowResources) {
+        const resourceResult = await settleWrite(
+          supabase
+            .from('bookings')
+            .update(perRowResources)
+            .eq('id', selectedBooking.id)
+            .select('id'),
+          "The session was updated, but the CPU/GPU allocation could not be saved."
+        );
+        if (!resourceResult.ok) {
+          toast.error(resourceResult.message);
+          fetchBookings();
+          return;
+        }
+      }
+
+      const machinesUpdated = result.rowCount ?? 0;
+      toast.success(
+        isUsageRecord
+          ? "Usage record updated successfully!"
+          : groupId
+            ? `Session updated on ${machinesUpdated} machine${machinesUpdated === 1 ? '' : 's'}`
+            : "Booking updated successfully!"
+      );
       setIsEditDialogOpen(false);
       resetBookingForm();
 
@@ -856,11 +965,30 @@ const Schedule = () => {
     []
   );
 
+  /**
+   * The HiPerGator row actually being booked.
+   *
+   * The resource panel used to read `equipment.find(e => e.type === "HiPerGator")` - the FIRST
+   * HiPerGator-type row in the list - while the availability figure was computed from the one
+   * the user had selected. With more than one such row those are different machines, so the
+   * slider ceiling and the "N CPUs available" badge could describe different hardware, and the
+   * slider could physically block a booking both the validator and the DB trigger accept.
+   * Falls back to the first one only when nothing is selected, purely for the idle display.
+   */
+  const selectedHiPerGator =
+    equipment.find(e => selectedEquipment.includes(e.id) && e.type === "HiPerGator") ??
+    equipment.find(e => e.type === "HiPerGator");
+
   const hasHiPerGator = selectedEquipment.some(eqId => {
     const eq = equipment.find(e => e.id === eqId);
     return eq?.type === "HiPerGator";
   });
-  const isHiPerGator = hasHiPerGator;
+
+  // The resource panel is meaningless for a usage_record: that table has no cpu_count /
+  // gpu_count columns, so handleEditBooking deletes both before writing. Offering editable
+  // sliders whose values are then silently dropped is the same offer-then-discard bug this
+  // audit has been clearing out everywhere else.
+  const isHiPerGator = hasHiPerGator && selectedBooking?.source !== 'usage_record';
 
 
   /**
@@ -889,9 +1017,9 @@ const Schedule = () => {
   // Calculate available HiPerGator resources if applicable
   const getAvailableResources = (excludeBookingId?: string) => {
     if (!isHiPerGator || !bookingDate || !selectedTime) {
-      const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
-      const maxCpus = poolCpuMax(hiPerGatorEq?.maxCpuCount);
-      const maxGpus = poolGpuMax(hiPerGatorEq?.maxGpuCount);
+      // Same machine the sliders read - see selectedHiPerGator.
+      const maxCpus = poolCpuMax(selectedHiPerGator?.maxCpuCount);
+      const maxGpus = poolGpuMax(selectedHiPerGator?.maxGpuCount);
       return { availableCpu: maxCpus, availableGpu: maxGpus };
     }
 
@@ -942,6 +1070,20 @@ const Schedule = () => {
   const { availableCpu, availableGpu } = getAvailableResources(
     isEditDialogOpen ? selectedBooking?.id : undefined
   );
+
+  // Pull the requested counts back down when the window's availability shrinks.
+  //
+  // availableCpu/availableGpu are derived values, recomputed from bookingDate + selectedTime +
+  // duration on every render, while cpuCount/gpuCount are independent state that nothing
+  // re-synchronised. So picking 32 CPUs in a quiet window and then moving the booking to a busy
+  // one left the label reading "CPUs: 32 of 8" with the slider pinned past its own maximum, and
+  // submitting produced a rejection the user had no way to make sense of. Safe from feedback
+  // loops: availability does not depend on these counts.
+  useEffect(() => {
+    if (!isHiPerGator) return;
+    setCpuCount(c => Math.min(c, Math.max(1, availableCpu)));
+    setGpuCount(g => Math.min(g, Math.max(0, availableGpu)));
+  }, [isHiPerGator, availableCpu, availableGpu]);
 
   // Memoised: this walks every booking day by day, and it used to be called inline from
   // JSX, so it re-ran on every render - including every keystroke in the booking dialogs.
@@ -1182,7 +1324,18 @@ const Schedule = () => {
                       // Assign tracks to bookings to avoid visual overlap
                       const bookingsWithTracks = activeDayBookings.map(booking => {
                         // For timeline view, we need to handle multiday bookings
-                        const isMultiday = !isSameDay(booking.startTime, booking.endTime);
+                        // Half-open end, matching dayBookings and the DB trigger. isSameDay
+                        // compares the closed end instant, so a 16:00-00:00 evening session was
+                        // labelled a two-day range ("Jul 27 - Jul 28") and its actual times were
+                        // hidden - the one thing the card most needs to show.
+                        const endInstantIsMidnight =
+                          booking.endTime.getHours() === 0 &&
+                          booking.endTime.getMinutes() === 0 &&
+                          booking.endTime.getSeconds() === 0;
+                        const effectiveEnd = endInstantIsMidnight
+                          ? new Date(booking.endTime.getTime() - 1)
+                          : booking.endTime;
+                        const isMultiday = !isSameDay(booking.startTime, effectiveEnd);
                         const selectedDayStart = new Date(selectedDate!);
                         selectedDayStart.setHours(0, 0, 0, 0);
                         const selectedDayEnd = new Date(selectedDate!);
@@ -1249,7 +1402,14 @@ const Schedule = () => {
                                   key={hour} 
                                   className="h-16 flex items-start text-sm font-medium text-muted-foreground border-b border-border"
                                 >
-                                  {format(new Date().setHours(hour, 0), "h:mm a")}
+                                  {/* Labelled from the hour INDEX, not from any Date.
+                                      These are row headings for a fixed 24-row grid, so they
+                                      must be 24 distinct labels. Formatting a real timestamp
+                                      breaks that on a DST boundary: on the US spring-forward
+                                      date setHours(2) normalises to 03:00, so hours 2 and 3 both
+                                      render "3:00 AM" (verified under TZ=America/New_York).
+                                      Deriving from `hour` is immune and always distinct. */}
+                                  {`${((hour + 11) % 12) + 1}:00 ${hour < 12 ? 'AM' : 'PM'}`}
                                 </div>
                               ))}
                             </div>
@@ -1581,10 +1741,22 @@ const Schedule = () => {
                     <div className="flex flex-wrap gap-2">
                       {selectedCollaborators.map(collab => {
                         const user = availableUsers.find(u => u.id === collab);
-                        return user ? (
-                          <Badge key={collab} variant="secondary" className="gap-1">
-                            {user.spirit_animal && <span>{user.spirit_animal}</span>}
-                            <span>{user.full_name || user.email}</span>
+                        // `return user ? ... : null` meant a collaborator missing from
+                        // availableUsers rendered NOTHING - and availableUsers only holds
+                        // profiles where active = true. So once someone left the lab and was
+                        // deactivated, their id stayed in the array, invisible, with no chip and
+                        // therefore no X to remove it. Saving rewrote it back every time and no
+                        // screen in the app could drop them. Render a chip regardless: an id we
+                        // cannot resolve is still something the user must be able to remove.
+                        return (
+                          <Badge
+                            key={collab}
+                            variant="secondary"
+                            className={cn("gap-1", !user && "opacity-70 italic")}
+                            title={user || !usersLoaded ? undefined : "This account is deactivated. Remove it with the X."}
+                          >
+                            {user?.spirit_animal && <span>{user.spirit_animal}</span>}
+                            <span>{user ? (user.full_name || user.email) : (usersLoaded ? "Former lab member" : "Loading...")}</span>
                             <button
                               type="button"
                               onClick={() => setSelectedCollaborators(selectedCollaborators.filter(c => c !== collab))}
@@ -1593,7 +1765,7 @@ const Schedule = () => {
                               <X className="w-3 h-3" />
                             </button>
                           </Badge>
-                        ) : null;
+                        );
                       })}
                     </div>
                   )}
@@ -1609,7 +1781,7 @@ const Schedule = () => {
                       <span>HiPerGator Resource Allocation</span>
                     </div>
                     {(() => {
-                      const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
+                      const hiPerGatorEq = selectedHiPerGator;
                       const maxCpus = poolCpuMax(hiPerGatorEq?.maxCpuCount);
                       const maxGpus = poolGpuMax(hiPerGatorEq?.maxGpuCount);
                       const cpuPercent = ((availableCpu / maxCpus) * 100);
@@ -1635,7 +1807,7 @@ const Schedule = () => {
                         value={[cpuCount]}
                         onValueChange={(value) => setCpuCount(value[0])}
                         min={1}
-                        max={Math.max(1, Math.min(clampCpuMax(equipment.find(e => e.type === "HiPerGator")?.maxCpuCount), availableCpu))}
+                        max={Math.max(1, Math.min(clampCpuMax(selectedHiPerGator?.maxCpuCount), availableCpu))}
                         step={1}
                         className="w-full"
                       />
@@ -1652,14 +1824,14 @@ const Schedule = () => {
                         value={[gpuCount]}
                         onValueChange={(value) => setGpuCount(value[0])}
                         min={0}
-                        max={Math.max(0, Math.min(clampGpuMax(equipment.find(e => e.type === "HiPerGator")?.maxGpuCount), availableGpu))}
+                        max={Math.max(0, Math.min(clampGpuMax(selectedHiPerGator?.maxGpuCount), availableGpu))}
                         step={1}
                         className="w-full"
                       />
                     </div>
 
                     {(() => {
-                      const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
+                      const hiPerGatorEq = selectedHiPerGator;
                       const maxCpus = poolCpuMax(hiPerGatorEq?.maxCpuCount);
                       const maxGpus = poolGpuMax(hiPerGatorEq?.maxGpuCount);
                       return (availableCpu < maxCpus * 0.2 || availableGpu < maxGpus * 0.2) && (
@@ -1895,10 +2067,22 @@ const Schedule = () => {
                     <div className="flex flex-wrap gap-2">
                       {selectedCollaborators.map(collab => {
                         const collaboratorUser = availableUsers.find(u => u.id === collab);
-                        return collaboratorUser ? (
-                          <Badge key={collab} variant="secondary" className="gap-1">
-                            {collaboratorUser.spirit_animal && <span>{collaboratorUser.spirit_animal}</span>}
-                            <span>{collaboratorUser.full_name || collaboratorUser.email}</span>
+                        // `return user ? ... : null` meant a collaborator missing from
+                        // availableUsers rendered NOTHING - and availableUsers only holds
+                        // profiles where active = true. So once someone left the lab and was
+                        // deactivated, their id stayed in the array, invisible, with no chip and
+                        // therefore no X to remove it. Saving rewrote it back every time and no
+                        // screen in the app could drop them. Render a chip regardless: an id we
+                        // cannot resolve is still something the user must be able to remove.
+                        return (
+                          <Badge
+                            key={collab}
+                            variant="secondary"
+                            className={cn("gap-1", !collaboratorUser && "opacity-70 italic")}
+                            title={collaboratorUser || !usersLoaded ? undefined : "This account is deactivated. Remove it with the X."}
+                          >
+                            {collaboratorUser?.spirit_animal && <span>{collaboratorUser.spirit_animal}</span>}
+                            <span>{collaboratorUser ? (collaboratorUser.full_name || collaboratorUser.email) : (usersLoaded ? "Former lab member" : "Loading...")}</span>
                             <button
                               type="button"
                               onClick={() => setSelectedCollaborators(selectedCollaborators.filter(c => c !== collab))}
@@ -1907,7 +2091,7 @@ const Schedule = () => {
                               <X className="w-3 h-3" />
                             </button>
                           </Badge>
-                        ) : null;
+                        );
                       })}
                     </div>
                   )}
@@ -1922,7 +2106,7 @@ const Schedule = () => {
                       <span>Resource Allocation</span>
                     </div>
                     {(() => {
-                      const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
+                      const hiPerGatorEq = selectedHiPerGator;
                       const maxCpus = poolCpuMax(hiPerGatorEq?.maxCpuCount);
                       const maxGpus = poolGpuMax(hiPerGatorEq?.maxGpuCount);
                       const cpuPercent = ((availableCpu / maxCpus) * 100);
@@ -1947,7 +2131,7 @@ const Schedule = () => {
                         value={[cpuCount]}
                         onValueChange={(value) => setCpuCount(value[0])}
                         min={1}
-                        max={Math.max(1, Math.min(clampCpuMax(equipment.find(e => e.type === "HiPerGator")?.maxCpuCount), availableCpu))}
+                        max={Math.max(1, Math.min(clampCpuMax(selectedHiPerGator?.maxCpuCount), availableCpu))}
                         step={1}
                       />
                     </div>
@@ -1962,12 +2146,12 @@ const Schedule = () => {
                         value={[gpuCount]}
                         onValueChange={(value) => setGpuCount(value[0])}
                         min={0}
-                        max={Math.max(0, Math.min(clampGpuMax(equipment.find(e => e.type === "HiPerGator")?.maxGpuCount), availableGpu))}
+                        max={Math.max(0, Math.min(clampGpuMax(selectedHiPerGator?.maxGpuCount), availableGpu))}
                         step={1}
                       />
                     </div>
                     {(() => {
-                      const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
+                      const hiPerGatorEq = selectedHiPerGator;
                       const maxCpus = poolCpuMax(hiPerGatorEq?.maxCpuCount);
                       const maxGpus = poolGpuMax(hiPerGatorEq?.maxGpuCount);
                       return (availableCpu < maxCpus * 0.2 || availableGpu < maxGpus * 0.2) && (

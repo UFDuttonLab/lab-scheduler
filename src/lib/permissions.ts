@@ -39,6 +39,16 @@ export interface RolePermissions {
    * usage_records figures cover only their own sessions.
    */
   canViewAnalytics: boolean;
+  /**
+   * Can read OTHER people's usage records. Mirrors usage_records SELECT:
+   *   USING (user_id = auth.uid()
+   *          OR has_any_role(pi, postdoc, grad_student, manager, pi_external))
+   * Note undergrad_student is absent from that array while it IS present in the equipment
+   * ALL policy - so an undergrad can delete a machine but cannot see most of the usage
+   * records the delete will cascade away. Anything that counts usage records before a
+   * destructive action must say so rather than imply the figure is complete.
+   */
+  canViewAllUsageRecords: boolean;
 }
 
 export const ROLE_LABELS: Record<AppRole, string> = {
@@ -72,6 +82,7 @@ export const getRolePermissions = (role: AppRole | null): RolePermissions => {
         canDeleteBookings: true,
         canViewAllActivityLogs: true,
         canViewAnalytics: true,
+        canViewAllUsageRecords: true,
       };
     case 'manager':
       return {
@@ -83,6 +94,7 @@ export const getRolePermissions = (role: AppRole | null): RolePermissions => {
         canDeleteBookings: false,
         canViewAllActivityLogs: true,
         canViewAnalytics: true,
+        canViewAllUsageRecords: true,
       };
     case 'pi_external':
       return {
@@ -94,6 +106,7 @@ export const getRolePermissions = (role: AppRole | null): RolePermissions => {
         canDeleteBookings: false,
         canViewAllActivityLogs: true,
         canViewAnalytics: true,
+        canViewAllUsageRecords: true,
       };
     case 'postdoc':
     case 'grad_student':
@@ -105,6 +118,7 @@ export const getRolePermissions = (role: AppRole | null): RolePermissions => {
         canDeleteBookings: false,
         canViewAllActivityLogs: true,
         canViewAnalytics: true,
+        canViewAllUsageRecords: true,
       };
     case 'undergrad_student':
       return {
@@ -119,6 +133,7 @@ export const getRolePermissions = (role: AppRole | null): RolePermissions => {
         // undergrad_student is absent from the activity_logs "view all" policy.
         canViewAllActivityLogs: false,
         canViewAnalytics: true,
+        canViewAllUsageRecords: false,
       };
     case 'user':
     default:
@@ -130,6 +145,7 @@ export const getRolePermissions = (role: AppRole | null): RolePermissions => {
         canDeleteBookings: false,
         canViewAllActivityLogs: false,
         canViewAnalytics: false,
+        canViewAllUsageRecords: false,
       };
   }
 };

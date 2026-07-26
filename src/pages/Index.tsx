@@ -79,7 +79,15 @@ const Index = () => {
         const equipment = equipmentData.find(eq => eq.id === booking.equipment_id);
         const profile = profilesData?.find(p => p.id === booking.user_id);
         const project = projectsData?.find(p => p.id === booking.project_id);
-        
+
+        // Same enrichment Schedule.tsx does: project_samples stores only project_id, so the
+        // display name has to be looked up here or BookingCard renders "Unknown Project".
+        const enrichedProjectSamples = (booking.project_samples as any[] | null)?.map((ps: any) => ({
+          projectId: ps.project_id,
+          projectName: projectsData?.find(pr => pr.id === ps.project_id)?.name || 'Unknown',
+          samples: ps.samples,
+        }));
+
         const startTime = new Date(booking.start_time);
         const endTime = new Date(booking.end_time);
         const now = new Date();
@@ -113,6 +121,14 @@ const Index = () => {
           // Without this, every BookingCard action is hidden on the dashboard, because
           // they all gate on isOwner (user.id === booking.userId).
           userId: booking.user_id,
+          // BookingCard renders all of these conditionally, so omitting them made the same
+          // booking look different on the dashboard than on Schedule: no sample counts, no
+          // CPU/GPU line for HiPerGator, no collaborators.
+          samplesProcessed: booking.samples_processed || undefined,
+          cpuCount: booking.cpu_count ?? undefined,
+          gpuCount: booking.gpu_count ?? undefined,
+          collaborators: (booking.collaborators as string[]) || [],
+          projectSamples: enrichedProjectSamples,
           source: 'booking' as const,
         };
       });
@@ -122,7 +138,15 @@ const Index = () => {
         const equipment = equipmentData.find(eq => eq.id === record.equipment_id);
         const profile = profilesData?.find(p => p.id === record.user_id);
         const project = projectsData?.find(p => p.id === record.project_id);
-        
+
+        // Same enrichment Schedule.tsx does: project_samples stores only project_id, so the
+        // display name has to be looked up here or BookingCard renders "Unknown Project".
+        const enrichedProjectSamples = (record.project_samples as any[] | null)?.map((ps: any) => ({
+          projectId: ps.project_id,
+          projectName: projectsData?.find(pr => pr.id === ps.project_id)?.name || 'Unknown',
+          samples: ps.samples,
+        }));
+
         const startTime = new Date(record.start_time);
         const endTime = new Date(record.end_time);
         const now = new Date();
@@ -152,6 +176,9 @@ const Index = () => {
           purpose: record.notes || undefined,
           status: calculatedStatus,
           userId: record.user_id,
+          samplesProcessed: record.samples_processed || undefined,
+          collaborators: (record.collaborators as string[]) || [],
+          projectSamples: enrichedProjectSamples,
           source: 'usage_record' as const,
         };
       });
@@ -185,11 +212,17 @@ const Index = () => {
   
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayBookings = bookings.filter(b => {
-    const bookingDate = new Date(b.startTime);
-    bookingDate.setHours(0, 0, 0, 0);
-    return bookingDate.getTime() === today.getTime() && b.status !== "cancelled";
-  }).length;
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  // A booking counts for today if it OVERLAPS today, not if it happens to start today.
+  // This compared start-dates for equality, so a multi-day session that began yesterday and
+  // is running right now was absent from "Today's Bookings" - and the app offers durations up
+  // to 7 days, so every booking longer than one day was undercounted on all but its first
+  // day. Half-open window [today, tomorrow), matching Schedule.tsx and the DB trigger.
+  const todayBookings = bookings.filter(b =>
+    b.status !== "cancelled" && b.startTime < tomorrow && b.endTime > today
+  ).length;
   
   const now = new Date();
   const activeBookings = bookings.filter(b => {
@@ -219,13 +252,22 @@ const Index = () => {
   const endOfWeek = new Date(startOfWeek);
   endOfWeek.setDate(startOfWeek.getDate() + 7);
   
-  const weekBookings = bookings.filter(b => 
-    b.startTime >= startOfWeek && 
-    b.startTime < endOfWeek && 
-    b.status !== "cancelled"
+  // Charge each booking only for the part of it that falls INSIDE this week.
+  //
+  // This selected bookings whose START was in the week and then summed their FULL duration,
+  // so a 7-day booking starting on Saturday put all 168 hours into that week and nothing into
+  // the next six days it actually occupied. Intersecting with [startOfWeek, endOfWeek) also
+  // picks up long bookings that started before the week began, which the old filter dropped
+  // entirely.
+  const weekBookings = bookings.filter(b =>
+    b.status !== "cancelled" && b.startTime < endOfWeek && b.endTime > startOfWeek
   );
-  
-  const totalBookedMinutes = weekBookings.reduce((sum, b) => sum + b.duration, 0);
+
+  const totalBookedMinutes = weekBookings.reduce((sum, b) => {
+    const from = Math.max(b.startTime.getTime(), startOfWeek.getTime());
+    const to = Math.min(b.endTime.getTime(), endOfWeek.getTime());
+    return sum + Math.max(0, (to - from) / 60000);
+  }, 0);
   const totalBookedHours = totalBookedMinutes / 60;
 
   const upcomingBookings = bookings

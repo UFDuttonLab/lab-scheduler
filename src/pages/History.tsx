@@ -23,6 +23,7 @@ import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import { settleWrite } from "@/lib/dbWrite";
+import { describeGroupDrift } from "@/lib/bookingGroups";
 
 /**
  * Hard ceilings enforced by the bookings CHECK constraints:
@@ -139,7 +140,8 @@ const History = () => {
         collaborators: booking.collaborators || undefined,
         userId: booking.user_id,
         source: 'booking' as const,
-        projectSamples: enrichedProjectSamples
+        projectSamples: enrichedProjectSamples,
+        bookingGroupId: booking.booking_group_id || undefined
       };
     });
 
@@ -173,7 +175,15 @@ const History = () => {
         // save path writes `notes = purpose || null`, editing anything at all - even just
         // the sample count - silently wiped the note the student had written.
         purpose: usage.notes || undefined,
-        status: 'completed' as const,
+        // Derive from the clock rather than assuming a usage record is always in the past.
+        // Nothing enforces that: QuickAdd's guard can be bypassed by editing, and Schedule and
+        // Index both compute this from the times - History alone hard-coded 'completed', so a
+        // record covering right now was mislabelled and landed in the wrong History tab.
+        status: (new Date(usage.end_time) < new Date()
+          ? 'completed'
+          : new Date(usage.start_time) <= new Date()
+            ? 'in-progress'
+            : 'scheduled') as "scheduled" | "in-progress" | "completed" | "cancelled",
         samplesProcessed: usage.samples_processed || undefined,
         collaborators: usage.collaborators || undefined,
         userId: usage.user_id,
@@ -298,12 +308,56 @@ const History = () => {
         updateData.notes = purpose || null;
       }
 
+      // Same rule as Schedule.tsx: a multi-equipment session is N rows sharing a
+      // booking_group_id and they describe ONE booking. Editing a single row let them drift,
+      // and Analytics credits a group's samples to whichever row sorts first by
+      // (start_time, id) - so a sibling edit could vanish from Analytics or move the credit
+      // onto a stale row. History edits the very same `bookings` table, so it needs the same
+      // handling; fixing only Schedule would have left an identical hole here.
+      //
+      // updateData deliberately carries no equipment_id, so there is nothing to strip: each
+      // row keeps its own machine.
+      const groupId = selectedBooking.source === 'booking' ? selectedBooking.bookingGroupId : undefined;
+
+      // cpu_count / gpu_count describe ONE machine's HiPerGator allocation, so they must not be
+      // written group-wide - doing so stamps a CPU count onto bench instruments in the same
+      // session. (equipment_id is already absent from updateData, so there is nothing to strip
+      // there.) They are applied to the clicked row alone, after the shared update.
+      let perRowResources: { cpu_count: number; gpu_count: number } | null = null;
+      if (groupId && updateData.cpu_count !== undefined) {
+        perRowResources = { cpu_count: updateData.cpu_count, gpu_count: updateData.gpu_count };
+        delete updateData.cpu_count;
+        delete updateData.gpu_count;
+      }
+
+
+      // Applying an edit to the whole group is invisible and correct when the rows already
+      // agree. When they have DRIFTED it is destructive - unifying them overwrites a sibling's
+      // divergent times and sample count - and two groups on the live database have already
+      // drifted this way. So say what will be overwritten and let the user decide.
+      if (groupId) {
+        const drift = describeGroupDrift(selectedBooking, bookings);
+        if (drift) {
+          const ok = window.confirm(
+            `This session covers ${drift.machines.length + 1} machines and their ` +
+            `${drift.differingFields.join(' and ')} currently differ.\n\n` +
+            `Saving applies the values in this form to all of them, overwriting what is ` +
+            `recorded for ${drift.machines.join(', ')}.\n\n` +
+            `Press OK to update the whole session, or Cancel to leave it alone.`
+          );
+          if (!ok) {
+            return;
+          }
+        }
+      }
+
+      const query = supabase.from(tableName).update(updateData);
+
       const result = await settleWrite(
-        supabase
-          .from(tableName)
-          .update(updateData)
-          .eq('id', selectedBooking.id)
-          .select('id'),
+        (groupId
+          ? query.eq('booking_group_id', groupId)
+          : query.eq('id', selectedBooking.id)
+        ).select('id'),
         selectedBooking.source === 'usage_record'
           ? "You can only edit your own usage records."
           : "You don't have permission to edit this booking."
@@ -312,6 +366,21 @@ const History = () => {
       if (!result.ok) {
         toast.error(result.message);
         return;
+      }
+
+      if (groupId && perRowResources) {
+        const resourceResult = await settleWrite(
+          supabase
+            .from('bookings')
+            .update(perRowResources)
+            .eq('id', selectedBooking.id)
+            .select('id'),
+          "The session was updated, but the CPU/GPU allocation could not be saved."
+        );
+        if (!resourceResult.ok) {
+          toast.error(resourceResult.message);
+          return;
+        }
       }
 
       toast.success(`${selectedBooking.source === 'usage_record' ? 'Usage record' : 'Booking'} updated successfully`);

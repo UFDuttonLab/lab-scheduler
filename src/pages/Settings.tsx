@@ -459,22 +459,87 @@ const Settings = () => {
   };
 
   const handleDeleteProject = async (projectId: string) => {
-    if (!confirm("Are you sure you want to delete this project?")) return;
+    // bookings.project_id and usage_records.project_id are ON DELETE SET NULL, so the foreign
+    // key keeps those columns honest. But the per-project sample breakdown lives in the
+    // project_samples JSONB column, which no foreign key protects and which every current read
+    // path PREFERS over project_id (BookingCard, Analytics, the edit prefill). Deleting a
+    // project therefore leaves rows permanently referencing a UUID that no longer resolves:
+    // they render as "Unknown Project" and no screen in the app can repair them.
+    //
+    // So: say how much history is attached before doing it.
+    const project = projects.find(p => p.id === projectId);
+    const projectName = project?.name || "this project";
 
+    let attachedRows = 0;
     try {
-      const { error } = await supabase
-        .from("projects")
-        .delete()
-        .eq("id", projectId);
+      // Count project_samples references as well as project_id.
+      //
+      // project_id is only the denormalised primary project - a row can reference this project
+      // ONLY through its project_samples breakdown, and those are exactly the references that
+      // orphan, because no foreign key touches JSONB. Counting project_id alone reported
+      // "Nothing references it" for projects that a multi-project session still points at.
+      // On live data project_id is currently always set to the first entry of project_samples,
+      // so the samples-only case is zero today. It becomes reachable as soon as ONE project has
+      // been deleted: that delete nulls project_id via the FK while leaving the JSONB intact, so
+      // a later delete of a co-listed project would be invisible to a project_id-only count.
+      const [b, u] = await Promise.all([
+        supabase.from("bookings").select("id", { count: "exact", head: true }).eq("project_id", projectId),
+        supabase.from("usage_records").select("id", { count: "exact", head: true }).eq("project_id", projectId),
+      ]);
+      if (b.error) throw b.error;
+      if (u.error) throw u.error;
+      attachedRows = (b.count ?? 0) + (u.count ?? 0);
 
-      if (error) throw error;
-
-      setProjects(prev => prev.filter(p => p.id !== projectId));
-      toast.success("Project deleted");
+      // Deliberately NON-fatal and counted separately. .contains() maps to the jsonb @>
+      // operator; if that ever fails we still want the delete to be possible, just with the
+      // narrower count - an unreachable count query must not become an unusable button.
+      try {
+        const [bs, us] = await Promise.all([
+          supabase.from("bookings").select("id", { count: "exact", head: true })
+            .is("project_id", null).contains("project_samples", [{ project_id: projectId }]),
+          supabase.from("usage_records").select("id", { count: "exact", head: true })
+            .is("project_id", null).contains("project_samples", [{ project_id: projectId }]),
+        ]);
+        // Both exclude rows already counted above via project_id, so nothing is double counted.
+        if (!bs.error) attachedRows += bs.count ?? 0;
+        if (!us.error) attachedRows += us.count ?? 0;
+      } catch (samplesError) {
+        console.warn("project_samples reference count unavailable:", samplesError);
+      }
     } catch (error) {
-      console.error("Error deleting project:", error);
-      toast.error("Failed to delete project");
+      console.error("Could not count project usage:", error);
+      toast.error("Could not check how much history is attached. Nothing has been changed.");
+      return;
     }
+
+    const message = attachedRows > 0
+      ? `Delete ${projectName}?\n\n` +
+        `${attachedRows} booking${attachedRows === 1 ? '' : 's'} or usage record${attachedRows === 1 ? '' : 's'} ` +
+        `reference it. Those records are KEPT, but their project becomes blank and their sample ` +
+        `breakdown will read "Unknown Project" from then on - and that cannot be repaired from ` +
+        `inside the app.\n\nPress OK to delete the project anyway.`
+      : `Delete ${projectName}? Nothing references it.`;
+
+    if (!confirm(message)) return;
+
+    // .select() so an RLS-filtered delete cannot report success - the row used to disappear
+    // from the list optimistically whether or not the delete actually happened.
+    const result = await settleWrite(
+      supabase.from("projects").delete().eq("id", projectId).select("id"),
+      "You don't have permission to delete projects."
+    );
+
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
+
+    setProjects(prev => prev.filter(p => p.id !== projectId));
+    toast.success(
+      attachedRows > 0
+        ? `${projectName} deleted. ${attachedRows} record${attachedRows === 1 ? '' : 's'} kept, now without a project.`
+        : `${projectName} deleted`
+    );
   };
 
   const handleAddUser = async (e: React.FormEvent<HTMLFormElement>) => {

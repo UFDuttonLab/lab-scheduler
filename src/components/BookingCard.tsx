@@ -71,6 +71,47 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
   // Checking status alone was wrong: bookings are only ever written as 'scheduled' or
   // 'cancelled', never 'completed', so Cancel appeared on sessions that already happened. Analytics filters cancelled rows out, so cancelling one silently
   // deleted real usage from the lab's statistics, the opposite of what the dialog promises.
+  // hasFinished used to be a bare `Date.now()` read during render, so on a page left open the
+  // Cancel and Restore buttons survived the moment the session ended - and the write they
+  // enable has no server-side counterpart, so cancelling a session that already happened
+  // removed real usage from the lab's statistics. One timeout, armed to fire exactly when this
+  // booking ends, re-renders the card at the right instant. No polling: a booking that has
+  // already finished schedules nothing at all.
+  // The timer is ONLY a re-render trigger; hasFinished is computed from Date.now() at render
+  // time below. An earlier version made a `nowTs` state the source of truth, which stranded the
+  // value: `booking` is a fresh object on every parent refetch, so the effect re-ran, saw the
+  // booking had already finished, took the early return - and therefore never updated nowTs.
+  // hasFinished stayed false forever and Cancel remained clickable on a finished session, which
+  // is the very bug this was meant to close.
+  const [, forceRerender] = useState(0);
+  useEffect(() => {
+    // setTimeout stores its delay in a signed 32-bit int, so anything over ~24.85 days
+    // overflows and fires IMMEDIATELY. Bookings can sit months out, so a single
+    // setTimeout(msUntilEnd) would have fired instantly for those, done nothing useful, and -
+    // because the effect deps never change - never re-armed, leaving the card permanently
+    // stale. Re-arm in bounded hops instead.
+    const MAX_DELAY = 2_000_000_000; // comfortably under 2^31-1 ms
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const arm = () => {
+      const remaining = booking.endTime.getTime() - Date.now();
+      if (remaining <= 0) {
+        forceRerender(n => n + 1);
+        return;
+      }
+      // +1s so the wake-up lands just past the boundary rather than exactly on it.
+      timer = setTimeout(arm, Math.min(remaining + 1000, MAX_DELAY));
+    };
+
+    // Only arm while there is still something to wait for. Nothing is stranded by skipping it:
+    // hasFinished reads the clock directly.
+    if (booking.endTime.getTime() > Date.now()) arm();
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [booking.endTime]);
+
   const hasFinished = booking.endTime.getTime() <= Date.now();
   const canCancel =
     !isUsageRecord &&

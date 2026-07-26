@@ -4,6 +4,13 @@ export interface WriteResult {
   ok: boolean;
   /** Present when ok === false. Safe to show to the user. */
   message?: string;
+  /**
+   * How many rows the write actually touched. Only meaningful when ok === true, and only when
+   * the query ended in .select(). Useful when one user action legitimately updates several
+   * rows - e.g. moving every machine of a multi-equipment booking - so the confirmation can
+   * state what really happened instead of guessing.
+   */
+  rowCount?: number;
 }
 
 type WriteQuery = PromiseLike<{ data: unknown[] | null; error: PostgrestError | null }>;
@@ -37,7 +44,7 @@ export const settleWrite = async (
     // row was already deleted by someone else. Say both rather than assert permission.
     return { ok: false, message: `${deniedMessage} (It may also have been changed or removed already - try refreshing.)` };
   }
-  return { ok: true };
+  return { ok: true, rowCount: data.length };
 };
 
 /**

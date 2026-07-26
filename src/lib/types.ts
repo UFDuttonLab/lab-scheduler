@@ -67,6 +67,12 @@ export interface Booking {
   userId?: string; // Owner of the booking
   source?: 'booking' | 'usage_record'; // Source table for proper deletion
   projectSamples?: ProjectSample[];
+  /**
+   * Set when this row is one machine of a MULTI-EQUIPMENT session. All rows sharing a group id
+   * describe one logical booking, and Analytics relies on their shared fields being identical
+   * (it credits a group's samples to exactly one row).
+   */
+  bookingGroupId?: string;
 }
 
 export interface TimeSlot {

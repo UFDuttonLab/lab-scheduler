@@ -14,6 +14,7 @@ import { Equipment as EquipmentType } from "@/lib/types";
 import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { settleWrite } from "@/lib/dbWrite";
 import { useForm } from "react-hook-form";
 import { EquipmentIconPicker } from "@/components/EquipmentIconPicker";
@@ -38,6 +39,7 @@ interface EquipmentFormData {
 }
 
 const Equipment = () => {
+  const { permissions } = useAuth();
   const [equipment, setEquipment] = useState<EquipmentType[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -232,16 +234,31 @@ const Equipment = () => {
         bookingCount > 0 ? `${bookingCount} booking${bookingCount === 1 ? '' : 's'}` : null,
         usageCount > 0 ? `${usageCount} usage record${usageCount === 1 ? '' : 's'}` : null,
       ].filter(Boolean).join(' and ');
+
+      // The counts above are RLS-filtered, and the two policies do NOT line up: the equipment
+      // ALL policy includes undergrad_student, while the usage_records SELECT policy does not.
+      // So an undergrad sees only their OWN usage records here while the cascade removes
+      // everyone's. Never let an incomplete figure read as a complete one.
+      const countsMayBeIncomplete = !permissions.canViewAllUsageRecords;
       const confirmed = confirm(
         `Delete ${equipment.name} permanently?\n\n` +
-        `This will ALSO delete ${parts} attached to it. That history disappears from ` +
-        `History and from Analytics and cannot be recovered.\n\n` +
+        `This will ALSO delete ${parts} attached to it` +
+        (countsMayBeIncomplete
+          ? `, and probably more - you can only see your own usage records, so the real total ` +
+            `is likely higher.`
+          : `.`) +
+        ` That history disappears from History and from Analytics and cannot be recovered.\n\n` +
         `If the machine is only out of service for now, set its status to "Maintenance" ` +
         `instead - that stops new bookings and keeps the history.\n\n` +
         `Press OK to delete the machine and ${total} record${total === 1 ? '' : 's'}.`
       );
       if (!confirmed) return;
-    } else if (!confirm(`Delete ${equipment.name}? It has no bookings or usage records.`)) {
+    } else if (!confirm(
+      permissions.canViewAllUsageRecords
+        ? `Delete ${equipment.name}? It has no bookings or usage records.`
+        : `Delete ${equipment.name}? It has no bookings, and no usage records that you can see - ` +
+          `but you cannot see other people's, and deleting the machine removes theirs too.`
+    )) {
       return;
     }
 

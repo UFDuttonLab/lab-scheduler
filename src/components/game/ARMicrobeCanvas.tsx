@@ -154,6 +154,10 @@ export const ARMicrobeCanvas = ({
   const [combo, setCombo] = useState(0);
   const [activePowerUp, setActivePowerUp] = useState<{ type: string; endTime: number } | null>(null);
   const laserFiringRef = useRef<number>(0);
+  // Where the last shot was aimed, in CSS px. The tracer is drawn to this point rather than to
+  // the middle of the screen: now that taps land under the finger, a beam that always converged
+  // on the centre told the player their shot went somewhere it did not.
+  const lastAimRef = useRef<{ x: number; y: number } | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [sensorMode, setSensorMode] = useState<'gyroscope' | 'orientation' | null>(null);
   const lastComboTimeRef = useRef<number>(0);
@@ -883,15 +887,22 @@ export const ARMicrobeCanvas = ({
         const laserAlpha = 1 - (now - laserFiringRef.current) / 150;
         ctx.save();
         ctx.globalAlpha = laserAlpha * 0.8;
-        const gradient = ctx.createLinearGradient(centerX, VH, centerX, centerY);
+        // Converge on where the shot was actually aimed. Falls back to the crosshair for the
+        // very first frame, before any tap has been recorded.
+        const aimX = lastAimRef.current?.x ?? centerX;
+        const aimY = lastAimRef.current?.y ?? centerY;
+        // The muzzle stays at the bottom of the screen but tracks horizontally towards the
+        // target, so the beam reads as a shot rather than a leaning stripe.
+        const muzzleX = centerX + (aimX - centerX) * 0.35;
+        const gradient = ctx.createLinearGradient(muzzleX, VH, aimX, aimY);
         gradient.addColorStop(0, `rgba(255, 50, 50, ${laserAlpha})`);
         gradient.addColorStop(1, `rgba(255, 150, 150, ${laserAlpha * 0.3})`);
         ctx.fillStyle = gradient;
         ctx.beginPath();
-        ctx.moveTo(centerX - 15, VH);
-        ctx.lineTo(centerX - 2, centerY);
-        ctx.lineTo(centerX + 2, centerY);
-        ctx.lineTo(centerX + 15, VH);
+        ctx.moveTo(muzzleX - 15, VH);
+        ctx.lineTo(aimX - 2, aimY);
+        ctx.lineTo(aimX + 2, aimY);
+        ctx.lineTo(muzzleX + 15, VH);
         ctx.closePath();
         ctx.fill();
         ctx.restore();
@@ -973,6 +984,7 @@ export const ARMicrobeCanvas = ({
 
     if ('vibrate' in navigator) navigator.vibrate(50);
     laserFiringRef.current = Date.now();
+    lastAimRef.current = { x: centerX, y: centerY };
 
     const cameraYaw = sensorDataRef.current.yaw;
     const cameraPitch = sensorDataRef.current.pitch;
