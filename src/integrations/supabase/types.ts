@@ -465,6 +465,19 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_active_user: { Args: { _user_id: string }; Returns: boolean }
+      set_user_active: {
+        Args: { _active: boolean; _actor: string; _target: string }
+        Returns: undefined
+      }
+      set_user_role: {
+        Args: {
+          _actor: string
+          _role: Database["public"]["Enums"]["app_role"]
+          _target: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       action_type: "create" | "update" | "delete" | "login" | "logout"
