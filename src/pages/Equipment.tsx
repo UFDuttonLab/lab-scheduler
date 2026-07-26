@@ -14,6 +14,7 @@ import { Equipment as EquipmentType } from "@/lib/types";
 import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { settleWrite } from "@/lib/dbWrite";
 import { useForm } from "react-hook-form";
 import { EquipmentIconPicker } from "@/components/EquipmentIconPicker";
 
@@ -149,13 +150,23 @@ const Equipment = () => {
       }
 
       if (editingEquipment) {
-        // Update equipment
-        const { error: equipmentError } = await supabase
-          .from("equipment")
-          .update(equipmentData)
-          .eq("id", editingEquipment.id);
+        // settleWrite + .select(): an UPDATE that RLS filters to zero rows comes back as
+        // error:null, so this used to report "Equipment updated successfully!" for a change
+        // that never happened - including a status change to Maintenance, which is exactly
+        // the kind of thing you need to trust.
+        const result = await settleWrite(
+          supabase
+            .from("equipment")
+            .update(equipmentData)
+            .eq("id", editingEquipment.id)
+            .select("id"),
+          "You don't have permission to change this equipment."
+        );
 
-        if (equipmentError) throw equipmentError;
+        if (!result.ok) {
+          toast.error(result.message);
+          return;
+        }
 
         toast.success("Equipment updated successfully!");
         await fetchEquipment();
@@ -188,22 +199,71 @@ const Equipment = () => {
   };
 
   const handleDeleteEquipment = async (equipment: EquipmentType) => {
-    if (!confirm(`Are you sure you want to delete ${equipment.name}?`)) return;
-
+    // Both bookings.equipment_id and usage_records.equipment_id are ON DELETE CASCADE
+    // (verified against the live database), so removing one machine permanently destroys
+    // every reservation AND every usage record ever logged against it. The old prompt was
+    // "Are you sure you want to delete <name>?", which reads like tidying up an inventory
+    // list. On this lab's real data that button sits on 31 records for Robin and 22 for the
+    // Denovix - and the Denovix is in maintenance, which is exactly the state that invites
+    // someone to decide the machine is finished with and clear it out.
+    //
+    // So: count first, state the real number, and name the safer alternative.
+    let bookingCount = 0;
+    let usageCount = 0;
     try {
-      const { error } = await supabase
-        .from("equipment")
-        .delete()
-        .eq("id", equipment.id);
-
-      if (error) throw error;
-
-      toast.success("Equipment deleted successfully!");
-      setEquipment(prev => prev.filter(eq => eq.id !== equipment.id));
+      const [b, u] = await Promise.all([
+        supabase.from("bookings").select("id", { count: "exact", head: true }).eq("equipment_id", equipment.id),
+        supabase.from("usage_records").select("id", { count: "exact", head: true }).eq("equipment_id", equipment.id),
+      ]);
+      if (b.error) throw b.error;
+      if (u.error) throw u.error;
+      bookingCount = b.count ?? 0;
+      usageCount = u.count ?? 0;
     } catch (error) {
-      console.error("Error deleting equipment:", error);
-      toast.error("Failed to delete equipment");
+      console.error("Could not count attached records:", error);
+      toast.error("Could not check what else would be deleted. Nothing has been changed.");
+      return;
     }
+
+    const total = bookingCount + usageCount;
+
+    if (total > 0) {
+      const parts = [
+        bookingCount > 0 ? `${bookingCount} booking${bookingCount === 1 ? '' : 's'}` : null,
+        usageCount > 0 ? `${usageCount} usage record${usageCount === 1 ? '' : 's'}` : null,
+      ].filter(Boolean).join(' and ');
+      const confirmed = confirm(
+        `Delete ${equipment.name} permanently?\n\n` +
+        `This will ALSO delete ${parts} attached to it. That history disappears from ` +
+        `History and from Analytics and cannot be recovered.\n\n` +
+        `If the machine is only out of service for now, set its status to "Maintenance" ` +
+        `instead - that stops new bookings and keeps the history.\n\n` +
+        `Press OK to delete the machine and ${total} record${total === 1 ? '' : 's'}.`
+      );
+      if (!confirmed) return;
+    } else if (!confirm(`Delete ${equipment.name}? It has no bookings or usage records.`)) {
+      return;
+    }
+
+    // .select() so an RLS-filtered delete is detectable: without it PostgREST returns
+    // error:null for zero rows changed, so this reported success on a delete that never
+    // happened - and then optimistically dropped the row from the list anyway.
+    const result = await settleWrite(
+      supabase.from("equipment").delete().eq("id", equipment.id).select("id"),
+      "You don't have permission to delete equipment."
+    );
+
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
+
+    toast.success(
+      total > 0
+        ? `${equipment.name} deleted, along with ${total} attached record${total === 1 ? '' : 's'}`
+        : `${equipment.name} deleted`
+    );
+    setEquipment(prev => prev.filter(eq => eq.id !== equipment.id));
   };
 
   const handleEquipmentClick = (equipmentName: string) => {
