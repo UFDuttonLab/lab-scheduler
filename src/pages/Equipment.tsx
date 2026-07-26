@@ -369,6 +369,7 @@ const Equipment = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="available">Available</SelectItem>
+                      <SelectItem value="in-use">In Use</SelectItem>
                       <SelectItem value="maintenance">Maintenance</SelectItem>
                     </SelectContent>
                   </Select>

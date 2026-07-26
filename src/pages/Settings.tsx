@@ -567,7 +567,11 @@ const Settings = () => {
 
       // Only touch roles when we could actually read the current one. Without this guard
       // an unknown current role looks like a change to whatever the dropdown defaulted to.
-      if (newRole && roleIsKnown && newRole !== currentRole) {
+      // A user with no user_roles row has currentRole === undefined. Previously the guard
+      // refused to write in that case, so a role-less account (which the old non-atomic
+      // updateRole could create) was permanently unfixable from this page. Assigning a
+      // role when there is none is exactly what we want to allow; only a no-op is skipped.
+      if (newRole && newRole !== currentRole) {
         const { data: session } = await supabase.auth.getSession();
         if (!session.session) {
           toast.error("You must be logged in");
@@ -1254,10 +1258,10 @@ const Settings = () => {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>
+                {/* Never disabled: a role-less user must remain assignable. */}
                 <Select
                   name="role"
                   defaultValue={effectiveRole((editingUser as any)?.user_roles) || "user"}
-                  disabled={!effectiveRole((editingUser as any)?.user_roles)}
                 >
                   <SelectTrigger>
                     <SelectValue />

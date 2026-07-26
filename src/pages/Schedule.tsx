@@ -465,7 +465,11 @@ const Schedule = () => {
         const isHiPerGator = selectedEq?.type === "HiPerGator";
 
         // Check for overlapping bookings for ALL equipment types
-        const overlappingBookings = bookings.filter(b => 
+        // Only real bookings reserve a machine. usage_records are retroactive logs of work
+        // that already happened; overlapping entries there are normal and the database has
+        // no constraint against them, so counting them here rejected legitimate bookings.
+        const overlappingBookings = bookings.filter(b =>
+          b.source !== 'usage_record' &&
           b.equipmentId === equipmentId &&
           b.status !== 'cancelled' &&
           (
@@ -617,6 +621,7 @@ const Schedule = () => {
 
       // Check for overlapping bookings (excluding current booking)
       const overlappingBookings = editingUsageRecord ? [] : bookings.filter(b =>
+        b.source !== 'usage_record' &&
         b.id !== selectedBooking.id &&
         b.equipmentId === equipmentId &&
         b.status !== 'cancelled' &&

@@ -34,6 +34,7 @@ const ARMicrobeShooter = () => {
   const gameStartTimeRef = useRef<number>(0);
   // Guards against endGame() running twice and writing two leaderboard rows.
   const endedRef = useRef(false);
+  const livesRef = useRef(3);
   const { requestPermission: requestMotionPermission } = useDeviceMotion();
   const orientation = useDeviceOrientation();
   const gyro = useGyroscope();
@@ -216,14 +217,24 @@ const ARMicrobeShooter = () => {
   }, [user, score, microbesEliminated, totalTaps, maxCombo]);
 
   const handleLifeLost = useCallback(() => {
+    // Compute the new value, then react to it OUTSIDE the updater.
+    //
+    // endGame does a setState, fires toasts (a setState on a different component) and
+    // performs a Supabase insert. Running that inside a setLives updater is work during
+    // React's render phase, and a re-invoked updater would have run it twice.
     setLives((prev) => {
       const newLives = Math.max(0, prev - 1);
-      if (newLives <= 0) {
-        endGame();
-      }
+      livesRef.current = newLives;
       return newLives;
     });
-  }, [endGame]);
+  }, []);
+
+  // Ends the game once lives actually reach zero.
+  useEffect(() => {
+    if (gameState === "playing" && lives <= 0) {
+      endGame();
+    }
+  }, [gameState, lives, endGame]);
 
   const handleMicrobeEliminated = useCallback(() => {
     setMicrobesEliminated((prev) => prev + 1);
@@ -235,7 +246,8 @@ const ARMicrobeShooter = () => {
     setTotalTaps((prev) => prev + 1);
   }, []);
 
-  // The canvas resets combo to 0 on every miss, so the live value at death is usually 0.
+  // The canvas zeroes the combo on a 4s inactivity timeout (not on every miss, as an
+  // earlier comment here wrongly claimed), so the live value at death is often 0 anyway.
   // Track the peak separately - that is what combo_max is supposed to mean.
   const handleComboChange = useCallback((value: number) => {
     setCombo(value);
@@ -437,13 +449,15 @@ const ARMicrobeShooter = () => {
       </div>
 
       {/* Controls */}
-      <div className="absolute bottom-4 right-4 flex gap-2 pointer-events-auto">
+      {/* z-20: the game canvas is z-10 in this same stacking context, so without an
+          explicit z-index the canvas covered these controls and Pause could not be tapped. */}
+      <div className="absolute bottom-4 right-4 z-20 flex gap-2 pointer-events-auto">
         <Button onClick={pauseGame} size="icon" variant="secondary" className="rounded-full h-12 w-12">
           <Pause className="h-6 w-6" />
         </Button>
       </div>
 
-      <div className="absolute bottom-4 left-4 pointer-events-auto">
+      <div className="absolute bottom-4 left-4 z-20 pointer-events-auto">
         <div className="bg-black/60 backdrop-blur-sm rounded-lg p-2 text-white text-sm">
           <p>🦠 {microbesEliminated}</p>
         </div>

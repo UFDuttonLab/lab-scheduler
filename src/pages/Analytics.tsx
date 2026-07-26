@@ -108,6 +108,14 @@ const Analytics = () => {
         // cancelled, and a usage_record is by definition something that already happened.
         if ((record as { status?: string }).status === 'cancelled') return false;
         return new Date(record.start_time).getTime() <= now;
+      }).map(record => {
+        // Clamp an in-progress session to the time actually elapsed. Admitting a record at
+        // start_time while every aggregation summed the full end - start meant a booking
+        // that had run for five minutes of a seven-day reservation contributed all 168
+        // hours to this week's totals the moment it began.
+        const end = new Date(record.end_time).getTime();
+        if (end <= now) return record;
+        return { ...record, end_time: new Date(now).toISOString() };
       });
 
       // A multi-equipment session writes the FULL sample payload onto EVERY equipment row

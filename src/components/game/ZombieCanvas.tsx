@@ -63,6 +63,10 @@ export const ZombieCanvas = ({
   isReloading,
 }: ZombieCanvasProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Mirrors the `ammo` prop so a shot can decrement the live value rather than one
+  // captured when the click handler was created.
+  const ammoRef = useRef(ammo);
+  useEffect(() => { ammoRef.current = ammo; }, [ammo]);
   const [zombies, setZombies] = useState<Zombie[]>([]);
   const [particles, setParticles] = useState<Particle[]>([]);
   const [powerUps, setPowerUps] = useState<PowerUpType[]>([]);
@@ -242,8 +246,14 @@ export const ZombieCanvas = ({
       }
 
       if (hitZombie) {
-        // Spend ammo
-        onAmmoUpdate(ammo - 1);
+        // Spend ammo against the live value, outside the updater.
+        //
+        // onAmmoUpdate(ammo - 1) used the `ammo` prop captured when this callback was
+        // created and ran inside a setState updater, so two shots in the same tick both
+        // computed the same value and only one round was actually deducted - and it was a
+        // parent setState during React's render phase.
+        ammoRef.current = Math.max(0, ammoRef.current - 1);
+        onAmmoUpdate(ammoRef.current);
         
         const newHealth = hitZombie.health - 1;
         

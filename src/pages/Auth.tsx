@@ -67,7 +67,12 @@ const Auth = () => {
       // is the useless constant "Edge Function returned a non-2xx status code". The real
       // payload lives on error.context, so the `data?.error` branch below was dead code.
       if (error) {
-        throw new Error(await readFunctionError(error, "Failed to send reset email. Please try again."));
+        // Deliberately generic. This page is reachable while logged out, and
+        // request-password-reset returns success even for unknown addresses precisely to
+        // avoid confirming whether an account exists - surfacing the server's own message
+        // here would undo that.
+        console.error("Password reset request failed:", await readFunctionError(error, "unknown"));
+        throw new Error("Could not send the reset email right now. Please try again shortly.");
       }
 
       if (data?.error) {

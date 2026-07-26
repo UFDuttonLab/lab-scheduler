@@ -28,7 +28,10 @@ export const ProjectSampleSelector = ({
     // updateSamples refuses anything that would exceed maxTotal, but this path appended a
     // sample with no such check - so at exactly 300 samples "Add Project" produced an
     // invalid 301 the parent then refused to submit, with no way to tell why.
-    if (totalSamples >= maxTotal) return;
+    if (totalSamples >= maxTotal) {
+      setError(`Total samples cannot exceed ${maxTotal}. Reduce an existing project first.`);
+      return;
+    }
 
     if (availableProjects.length === 0) {
       setError("All projects have been added");
@@ -137,7 +140,7 @@ export const ProjectSampleSelector = ({
         type="button"
         variant="outline"
         onClick={addProjectSample}
-        disabled={availableProjects.length === 0}
+        disabled={availableProjects.length === 0 || totalSamples >= maxTotal}
         className="w-full"
       >
         <Plus className="w-4 h-4 mr-2" />

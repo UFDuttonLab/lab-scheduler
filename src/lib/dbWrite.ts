@@ -33,7 +33,9 @@ export const settleWrite = async (
     return { ok: false, message: error.message };
   }
   if (!data || data.length === 0) {
-    return { ok: false, message: deniedMessage };
+    // Zero rows changed usually means RLS filtered the write, but it can also mean the
+    // row was already deleted by someone else. Say both rather than assert permission.
+    return { ok: false, message: `${deniedMessage} (It may also have been changed or removed already - try refreshing.)` };
   }
   return { ok: true };
 };

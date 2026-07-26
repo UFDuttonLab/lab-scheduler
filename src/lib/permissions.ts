@@ -32,6 +32,12 @@ export interface RolePermissions {
    * Deliberately excludes undergrad_student, which canViewAnalytics does not.
    */
   canViewAllActivityLogs: boolean;
+  /**
+   * Purely a UI affordance - Analytics reads bookings (SELECT is open to every
+   * authenticated user) and usage_records (own rows, or all rows for elevated roles).
+   * There is no single policy this mirrors, so an undergrad_student sees the page but its
+   * usage_records figures cover only their own sessions.
+   */
   canViewAnalytics: boolean;
 }
 

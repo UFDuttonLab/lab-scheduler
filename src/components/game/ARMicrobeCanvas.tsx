@@ -133,7 +133,7 @@ export const ARMicrobeCanvas = ({
   const laserFiringRef = useRef<number>(0);
   const [showDebug, setShowDebug] = useState(false);
   const [sensorMode, setSensorMode] = useState<'gyroscope' | 'orientation' | null>(null);
-  const lastComboTimeRef = useRef<number>(Date.now());
+  const lastComboTimeRef = useRef<number>(0);
   const lastPowerUpSpawnRef = useRef<number>(Date.now());
   const animationFrameRef = useRef<number>();
   const comboRef = useRef(0);
@@ -155,6 +155,9 @@ export const ARMicrobeCanvas = ({
   const damageFlashRef = useRef(0);
   // Escapes counted inside the setMicrobes updater, drained on the next tick.
   const pendingEscapesRef = useRef(0);
+  const waveBreakTimerRef = useRef<number | null>(null);
+  // Ids already resolved by a tap this frame, so a second tap cannot double-score them.
+  const claimedRef = useRef<Set<string>>(new Set());
   // Accumulated ACTIVE play time in ms, and the timestamp of the last movement tick.
   //
   // Everything used to key off wall-clock Date.now(): microbe expiry (age > 10) kept
@@ -168,7 +171,20 @@ export const ARMicrobeCanvas = ({
   const lastTickRef = useRef<number | null>(null);
 
   useEffect(() => {
-    console.log("🦠 AR Microbe Shooter V2 - LARGE microbes, close spawn, fast movement");
+    console.log("🦠 AR Microbe Shooter V2");
+  }, []);
+
+  // Activate this component's OWN sensor hooks.
+  //
+  // useDeviceOrientation/useGyroscope gate their event listeners on a per-instance
+  // permissionGranted flag. ARMicrobeShooter requests permission on ITS instances, but the
+  // canvas creates fresh ones and never did - so their listeners were never attached,
+  // orientation.alpha stayed null, sensorMode never became non-null, and the AR camera
+  // could not turn. Every sensor-mode branch in this file was unreachable.
+  useEffect(() => {
+    orientation.requestPermission().catch(() => {});
+    gyro.requestPermission().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Bootstrap wave 1.
@@ -312,8 +328,11 @@ export const ARMicrobeCanvas = ({
 
   const activatePowerUp = useCallback((type: PowerUpItem["type"]) => {
     const duration = 10000;
-    setActivePowerUp({ type, endTime: Date.now() + duration });
-    activePowerUpRef.current = { type, endTime: Date.now() + duration };
+    // Expiry on the active-play clock, not the wall clock. Pausing for 30s used to
+    // silently burn a 10s power-up and reset the combo.
+    const endTime = activeTimeRef.current + duration;
+    setActivePowerUp({ type, endTime });
+    activePowerUpRef.current = { type, endTime };
     
     toast.success(`Power-up activated!`, {
       description: {
@@ -368,7 +387,14 @@ export const ARMicrobeCanvas = ({
     }
   }, [orientation.alpha, orientation.beta, gyro.alpha, gyro.beta, sensorMode]);
 
-  useEffect(() => { microbesRef.current = microbes; }, [microbes]);
+  useEffect(() => {
+    microbesRef.current = microbes;
+    // Ids that no longer exist cannot be re-claimed; keep the set from growing forever.
+    if (claimedRef.current.size > 0) {
+      const live = new Set(microbes.map((m) => m.id));
+      claimedRef.current.forEach((id) => { if (!live.has(id)) claimedRef.current.delete(id); });
+    }
+  }, [microbes]);
   useEffect(() => { powerUpsRef.current = powerUps; }, [powerUps]);
   useEffect(() => { currentWaveRef.current = currentWave; }, [currentWave]);
   useEffect(() => { waveActiveRef.current = waveActive; }, [waveActive]);
@@ -392,13 +418,22 @@ export const ARMicrobeCanvas = ({
         waveActiveRef.current = false;
         toast.success(`Wave ${currentWaveRef.current} Complete!`);
         
-        setTimeout(() => {
+        // Tracked so unmounting during the break cannot fire a "Wave N Starting!" toast
+        // (and a setState) on a dead component.
+        waveBreakTimerRef.current = window.setTimeout(() => {
+          waveBreakTimerRef.current = null;
           startNewWave();
         }, 3000);
       }
     }, 500);
     
-    return () => clearInterval(checkInterval);
+    return () => {
+      clearInterval(checkInterval);
+      if (waveBreakTimerRef.current !== null) {
+        clearTimeout(waveBreakTimerRef.current);
+        waveBreakTimerRef.current = null;
+      }
+    };
   }, [isPaused, startNewWave]);
 
   useEffect(() => {
@@ -449,7 +484,7 @@ export const ARMicrobeCanvas = ({
       // 4s, not 2s. Wave 1 spawns one microbe every ~2.4s, so a 2s combo window was
       // shorter than the gap between targets - combos were mathematically impossible
       // early on and trivial later, exactly backwards.
-      if (Date.now() - lastComboTimeRef.current > 4000 && comboRef.current > 0) {
+      if (activeTimeRef.current - lastComboTimeRef.current > 4000 && comboRef.current > 0) {
         setCombo(0);
         onComboChange(0);
       }
@@ -481,8 +516,14 @@ export const ARMicrobeCanvas = ({
       // still zero on the line after. Recording into a ref and draining it on the next
       // tick sidesteps both.
       if (pendingEscapesRef.current > 0) {
-        const n = pendingEscapesRef.current;
+        let n = pendingEscapesRef.current;
         pendingEscapesRef.current = 0;
+        // shield absorbs escapes while active, which is what its toast claims.
+        if (activePowerUpRef.current?.type === "shield" && n > 0) {
+          n -= 1;
+          toast.info("Shield absorbed a hit!");
+        }
+        if (n === 0) return;
         damageFlashRef.current = Date.now();
         if ('vibrate' in navigator) navigator.vibrate([120, 60, 120]);
         for (let i = 0; i < n; i++) onLifeLost();
@@ -502,10 +543,24 @@ export const ARMicrobeCanvas = ({
         }
 
         // speed is authored per 16ms tick, so scale by real elapsed time.
-        const newZ = microbe.z + microbe.speed * (deltaMs / 16);
+        // freeze halts approach entirely; without this the toast promised an effect the
+        // game never applied. Only "double" was ever consulted for gameplay.
+        const frozen = activePowerUpRef.current?.type === "freeze";
+        const step = frozen ? 0 : microbe.speed * (deltaMs / 16);
+        const newZ = microbe.z + step;
+
+        // Converge on the camera instead of translating along a fixed world x.
+        // Projected screenX is x*scale/|z|, so holding x constant while |z| shrinks made
+        // microbes slide off the edge of the screen well before they reached the player -
+        // unkillable, and then charged as an escape.
+        const shrink = Math.abs(newZ) > 0.001 ? Math.abs(newZ) / Math.abs(microbe.z || newZ) : 1;
+        const newX = microbe.x * shrink;
+        const newY = microbe.y * shrink;
 
         return {
           ...microbe,
+          x: newX,
+          y: newY,
           z: newZ,
           wobble: newWobble,
           opacity: (microbe.type === "tank" || microbe.type === "boss") && Math.floor(age) % 5 === 0 && age % 1 < 0.5 ? 0.5 : 1.0,
@@ -518,7 +573,7 @@ export const ARMicrobeCanvas = ({
   useEffect(() => {
     if (isPaused) return;
     const interval = setInterval(() => {
-      if (activePowerUpRef.current && Date.now() > activePowerUpRef.current.endTime) {
+      if (activePowerUpRef.current && activeTimeRef.current > activePowerUpRef.current.endTime) {
         setActivePowerUp(null);
         activePowerUpRef.current = null;
       }
@@ -922,7 +977,9 @@ export const ARMicrobeCanvas = ({
         const projection = projectToScreen(microbe.x, microbe.y, microbe.z, cameraYaw, cameraPitch, VW, VH);
         if (!projection.isVisible) return;
         const screenDistance = Math.hypot(projection.screenX - centerX, projection.screenY - centerY);
-        if (screenDistance < 150 && projection.distance < minDistance) {
+        // rapid widens the effective hit radius, giving the power-up a real effect.
+        const hitRadius = activePowerUpRef.current?.type === "rapid" ? 240 : 150;
+        if (screenDistance < hitRadius && projection.distance < minDistance) {
           minDistance = projection.distance;
           hit = { microbe, screenX: projection.screenX, screenY: projection.screenY };
         }
@@ -932,6 +989,11 @@ export const ARMicrobeCanvas = ({
     if (!hit) return;
 
     const { microbe: target, screenX, screenY } = hit as { microbe: Microbe; screenX: number; screenY: number };
+
+    // microbesRef is synced by a passive effect that React defers, so two touchstart
+    // events in the same frame could both resolve the SAME microbe and score it twice.
+    // Claim it synchronously; a second tap on an already-claimed id is ignored.
+    if (claimedRef.current.has(target.id)) return;
     const newHealth = target.health - 1;
     const killed = newHealth <= 0;
 
@@ -949,6 +1011,7 @@ export const ARMicrobeCanvas = ({
     );
 
     if (killed) {
+      claimedRef.current.add(target.id);
       const newCombo = comboRef.current + 1;
       // Every 3 kills rather than 5, so the mechanic pays off within a single wave.
       const comboMultiplier = 1 + Math.floor(newCombo / 3) * 0.5;
@@ -959,7 +1022,7 @@ export const ARMicrobeCanvas = ({
       setMicrobes((current) => current.filter((m) => m.id !== target.id));
 
       comboRef.current = newCombo;
-      lastComboTimeRef.current = Date.now();
+      lastComboTimeRef.current = activeTimeRef.current;
       setCombo(newCombo);
       scoreRef.current += pointsEarned;
       setScore(scoreRef.current);

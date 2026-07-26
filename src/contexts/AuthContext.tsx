@@ -59,6 +59,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // usable, so sign out rather than leaving a half-working session open.
       if (!profile || !profile.active) {
         toast.error("Your account has been deactivated. Contact the lab PI if this is unexpected.");
+        // Log against the id we were handed. checkUserRole is captured by the mount-only
+        // effect from the first render, so the signOut it closes over always sees
+        // user === null and its own pre-signout logging silently does nothing.
+        await logAuthActivity('logout', userId);
         await signOut();
         return;
       }

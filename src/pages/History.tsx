@@ -121,7 +121,16 @@ const History = () => {
         projectId: booking.project_id || undefined,
         projectName: project?.name || undefined,
         purpose: booking.purpose || undefined,
-        status: booking.status as "scheduled" | "in-progress" | "completed" | "cancelled",
+        // Derive from time rather than trusting the stored value. Bookings are only ever
+        // written as 'scheduled' or 'cancelled', so the Completed tab was labelling every
+        // finished session "Scheduled".
+        status: (booking.status === 'cancelled'
+          ? 'cancelled'
+          : new Date(booking.end_time) < new Date()
+            ? 'completed'
+            : new Date(booking.start_time) <= new Date()
+              ? 'in-progress'
+              : 'scheduled') as "scheduled" | "in-progress" | "completed" | "cancelled",
         // ?? not ||: cpu_count/gpu_count of 0 is a real value, and `0 || undefined`
         // collapsed it to undefined, which made the edit form silently skip the field.
         cpuCount: booking.cpu_count ?? undefined,
@@ -258,6 +267,10 @@ const History = () => {
         start_time: startTime.toISOString(),
         end_time: endTime.toISOString(),
         project_samples: project_samples,
+        // Keep the denormalised total in step with project_samples. Writing only the
+        // latter left samples_processed stale, so BookingCard's "Samples" line and every
+        // legacy-format Analytics fallback kept reporting the pre-edit number.
+        samples_processed: project_samples.reduce((sum, ps) => sum + ps.samples, 0),
         collaborators: selectedCollaborators,
       };
 
