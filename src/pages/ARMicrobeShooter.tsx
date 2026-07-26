@@ -34,7 +34,6 @@ const ARMicrobeShooter = () => {
   const gameStartTimeRef = useRef<number>(0);
   // Guards against endGame() running twice and writing two leaderboard rows.
   const endedRef = useRef(false);
-  const livesRef = useRef(3);
   const { requestPermission: requestMotionPermission } = useDeviceMotion();
   const orientation = useDeviceOrientation();
   const gyro = useGyroscope();
@@ -224,7 +223,6 @@ const ARMicrobeShooter = () => {
     // React's render phase, and a re-invoked updater would have run it twice.
     setLives((prev) => {
       const newLives = Math.max(0, prev - 1);
-      livesRef.current = newLives;
       return newLives;
     });
   }, []);

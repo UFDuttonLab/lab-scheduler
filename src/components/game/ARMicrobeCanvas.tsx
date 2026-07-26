@@ -155,7 +155,8 @@ export const ARMicrobeCanvas = ({
   const damageFlashRef = useRef(0);
   // Escapes counted inside the setMicrobes updater, drained on the next tick.
   const pendingEscapesRef = useRef(0);
-  const waveBreakTimerRef = useRef<number | null>(null);
+  // Active-clock deadline for the between-wave break (null when a wave is running).
+  const waveBreakUntilRef = useRef<number | null>(null);
   // Ids already resolved by a tap this frame, so a second tap cannot double-score them.
   const claimedRef = useRef<Set<string>>(new Set());
   // Accumulated ACTIVE play time in ms, and the timestamp of the last movement tick.
@@ -407,33 +408,35 @@ export const ARMicrobeCanvas = ({
     if (isPaused) return;
     
     const checkInterval = setInterval(() => {
-      if (!waveActiveRef.current) return;
-      
-      const allSpawned = waveMicrobesSpawnedRef.current > 0 && 
+      // Between waves: start the next one once the break has elapsed on the ACTIVE clock.
+      //
+      // This was a setTimeout, which a previous fix then cleared in the effect cleanup to
+      // avoid firing after unmount. But this effect is keyed on isPaused, so pausing also
+      // cleared it - and because waveActive is already false during a break, the checker
+      // below returned early forever and the game hung permanently on "Wave N - Break".
+      // A deadline needs no cleanup, cannot fire after unmount, and correctly excludes
+      // paused time.
+      if (!waveActiveRef.current) {
+        if (waveBreakUntilRef.current !== null && activeTimeRef.current >= waveBreakUntilRef.current) {
+          waveBreakUntilRef.current = null;
+          startNewWave();
+        }
+        return;
+      }
+
+      const allSpawned = waveMicrobesSpawnedRef.current > 0 &&
                         waveMicrobesSpawnedRef.current >= WAVE_SIZE(currentWaveRef.current);
       const noneRemaining = microbesRef.current.length === 0;
-      
+
       if (allSpawned && noneRemaining) {
         setWaveActive(false);
         waveActiveRef.current = false;
+        waveBreakUntilRef.current = activeTimeRef.current + 3000;
         toast.success(`Wave ${currentWaveRef.current} Complete!`);
-        
-        // Tracked so unmounting during the break cannot fire a "Wave N Starting!" toast
-        // (and a setState) on a dead component.
-        waveBreakTimerRef.current = window.setTimeout(() => {
-          waveBreakTimerRef.current = null;
-          startNewWave();
-        }, 3000);
       }
     }, 500);
-    
-    return () => {
-      clearInterval(checkInterval);
-      if (waveBreakTimerRef.current !== null) {
-        clearTimeout(waveBreakTimerRef.current);
-        waveBreakTimerRef.current = null;
-      }
-    };
+
+    return () => clearInterval(checkInterval);
   }, [isPaused, startNewWave]);
 
   useEffect(() => {
@@ -523,9 +526,12 @@ export const ARMicrobeCanvas = ({
           n -= 1;
           toast.info("Shield absorbed a hit!");
         }
-        if (n === 0) return;
-        damageFlashRef.current = Date.now();
-        if ('vibrate' in navigator) navigator.vibrate([120, 60, 120]);
+        // No early return here: the movement/expiry updater below must still run this tick.
+        // Flash and buzz only when a life is actually lost, not when the shield ate it.
+        if (n > 0) {
+          damageFlashRef.current = Date.now();
+          if ('vibrate' in navigator) navigator.vibrate([120, 60, 120]);
+        }
         for (let i = 0; i < n; i++) onLifeLost();
       }
 
@@ -797,7 +803,9 @@ export const ARMicrobeCanvas = ({
 
       microbesRef.current.forEach((microbe) => {
         const distance = Math.sqrt(microbe.x ** 2 + microbe.z ** 2);
-        if (distance > 15) return;
+        // 24, not 15: spawns moved out to 14-22 units, so newly spawned microbes were
+        // invisible on the radar for their first couple of seconds.
+        if (distance > 24) return;
         const radarScale = (radarSize / 2) / 15;
         const dotX = radarX + radarSize / 2 + microbe.x * radarScale;
         const dotY = radarY + radarSize / 2 + microbe.z * radarScale;
@@ -1068,7 +1076,15 @@ export const ARMicrobeCanvas = ({
         </button>
       )}
       
-      {activePowerUp && <PowerUp type={activePowerUp.type} endTime={activePowerUp.endTime} />}
+      {activePowerUp && (
+        /* PowerUp computes its countdown from Date.now(), but activePowerUp.endTime is on
+           the active-play clock. Convert back to wall time for display only - GameCanvas
+           still passes a genuine wall-clock endTime, so PowerUp itself must not change. */
+        <PowerUp
+          type={activePowerUp.type}
+          endTime={Date.now() + Math.max(0, activePowerUp.endTime - activeTimeRef.current)}
+        />
+      )}
     </>
   );
 };

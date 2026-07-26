@@ -8,9 +8,74 @@
 -- transaction's uncommitted INSERT, so two students clicking Book in the same second
 -- both passed the check and both committed. An advisory lock keyed on equipment_id makes
 -- check-then-insert atomic per machine without blocking bookings on other equipment.
--- (Full function body re-applied live; see check_booking_conflicts in the database.)
---   Verified: exclusive overlap rejected, exact duplicate rejected,
---             HiPerGator overlap allowed within capacity, over-capacity rejected.
+--   Verified live: exclusive overlap rejected, exact duplicate rejected,
+--                  HiPerGator overlap allowed within capacity, over-capacity rejected.
+CREATE OR REPLACE FUNCTION public.check_booking_conflicts()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_type     text;
+  v_max_cpu  int;
+  v_max_gpu  int;
+  v_used_cpu int;
+  v_used_gpu int;
+  v_conflict record;
+BEGIN
+  IF NEW.status = 'cancelled' THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.end_time <= NEW.start_time THEN
+    RAISE EXCEPTION 'Booking end time must be after its start time';
+  END IF;
+
+  -- Held to end of transaction; other bookings for this equipment queue behind it.
+  PERFORM pg_advisory_xact_lock(hashtext('booking:' || NEW.equipment_id::text));
+
+  SELECT type, COALESCE(max_cpu_count, 32), COALESCE(max_gpu_count, 2)
+    INTO v_type, v_max_cpu, v_max_gpu
+  FROM public.equipment WHERE id = NEW.equipment_id;
+
+  IF v_type = 'HiPerGator' THEN
+    SELECT COALESCE(SUM(COALESCE(cpu_count, 0)), 0),
+           COALESCE(SUM(COALESCE(gpu_count, 0)), 0)
+      INTO v_used_cpu, v_used_gpu
+    FROM public.bookings
+    WHERE equipment_id = NEW.equipment_id
+      AND id IS DISTINCT FROM NEW.id
+      AND status <> 'cancelled'
+      AND tstzrange(start_time, end_time) && tstzrange(NEW.start_time, NEW.end_time);
+
+    IF v_used_cpu + COALESCE(NEW.cpu_count, 0) > v_max_cpu THEN
+      RAISE EXCEPTION 'Not enough CPUs free in that window: % of % already allocated', v_used_cpu, v_max_cpu;
+    END IF;
+    IF v_used_gpu + COALESCE(NEW.gpu_count, 0) > v_max_gpu THEN
+      RAISE EXCEPTION 'Not enough GPUs free in that window: % of % already allocated', v_used_gpu, v_max_gpu;
+    END IF;
+  ELSE
+    SELECT b.start_time, b.end_time INTO v_conflict
+    FROM public.bookings b
+    WHERE b.equipment_id = NEW.equipment_id
+      AND b.id IS DISTINCT FROM NEW.id
+      AND b.status <> 'cancelled'
+      AND tstzrange(b.start_time, b.end_time) && tstzrange(NEW.start_time, NEW.end_time)
+    LIMIT 1;
+
+    IF FOUND THEN
+      RAISE EXCEPTION 'That equipment is already booked from % to %',
+        to_char(v_conflict.start_time, 'Mon DD HH24:MI'),
+        to_char(v_conflict.end_time,   'Mon DD HH24:MI');
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS check_booking_conflicts_trigger ON public.bookings;
+CREATE TRIGGER check_booking_conflicts_trigger
+  BEFORE INSERT OR UPDATE OF equipment_id, start_time, end_time, status, cpu_count, gpu_count
+  ON public.bookings
+  FOR EACH ROW EXECUTE FUNCTION public.check_booking_conflicts();
 
 -- 2. profiles.active / email are now service-role only -------------------------
 -- The previous version let pi/manager through, which meant the edge function's

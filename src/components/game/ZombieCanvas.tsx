@@ -63,10 +63,6 @@ export const ZombieCanvas = ({
   isReloading,
 }: ZombieCanvasProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Mirrors the `ammo` prop so a shot can decrement the live value rather than one
-  // captured when the click handler was created.
-  const ammoRef = useRef(ammo);
-  useEffect(() => { ammoRef.current = ammo; }, [ammo]);
   const [zombies, setZombies] = useState<Zombie[]>([]);
   const [particles, setParticles] = useState<Particle[]>([]);
   const [powerUps, setPowerUps] = useState<PowerUpType[]>([]);
@@ -246,14 +242,15 @@ export const ZombieCanvas = ({
       }
 
       if (hitZombie) {
-        // Spend ammo against the live value, outside the updater.
+        // Deliberately idempotent.
         //
-        // onAmmoUpdate(ammo - 1) used the `ammo` prop captured when this callback was
-        // created and ran inside a setState updater, so two shots in the same tick both
-        // computed the same value and only one round was actually deducted - and it was a
-        // parent setState during React's render phase.
-        ammoRef.current = Math.max(0, ammoRef.current - 1);
-        onAmmoUpdate(ammoRef.current);
+        // This runs inside the setZombies updater, which React replays many times per
+        // click (the surrounding setCombo/setScore calls are render-phase updates). An
+        // expression - onAmmoUpdate(ammo - 1) - yields the same result however often it
+        // is replayed. A mutation does not: an earlier attempt at "fixing" this with a
+        // ref decremented once per replay and drained up to 5 rounds from a single shot,
+        // measured. Leave this as an expression until the updater itself is restructured.
+        onAmmoUpdate(ammo - 1);
         
         const newHealth = hitZombie.health - 1;
         

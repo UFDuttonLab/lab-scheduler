@@ -68,9 +68,8 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
   // Only meaningful for real bookings that aren't already cancelled or finished.
   // Only a session that has not finished yet can be cancelled.
   //
-  // Checking status alone was wrong: History passes the RAW database status, which is only
-  // ever 'scheduled' or 'cancelled' - never 'completed' - so Cancel appeared on sessions
-  // that already happened. Analytics filters cancelled rows out, so cancelling one silently
+  // Checking status alone was wrong: bookings are only ever written as 'scheduled' or
+  // 'cancelled', never 'completed', so Cancel appeared on sessions that already happened. Analytics filters cancelled rows out, so cancelling one silently
   // deleted real usage from the lab's statistics, the opposite of what the dialog promises.
   const hasFinished = booking.endTime.getTime() <= Date.now();
   const canCancel =
