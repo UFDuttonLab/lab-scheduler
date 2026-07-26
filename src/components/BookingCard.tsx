@@ -66,10 +66,17 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
 
   // Cancelling is an UPDATE, so anyone who may update this booking may cancel it.
   // Only meaningful for real bookings that aren't already cancelled or finished.
+  // Only a session that has not finished yet can be cancelled.
+  //
+  // Checking status alone was wrong: History passes the RAW database status, which is only
+  // ever 'scheduled' or 'cancelled' - never 'completed' - so Cancel appeared on sessions
+  // that already happened. Analytics filters cancelled rows out, so cancelling one silently
+  // deleted real usage from the lab's statistics, the opposite of what the dialog promises.
+  const hasFinished = booking.endTime.getTime() <= Date.now();
   const canCancel =
     !isUsageRecord &&
     booking.status !== "cancelled" &&
-    booking.status !== "completed" &&
+    !hasFinished &&
     (isOwner || permissions.canManageBookings);
 
   // Cancelling is the only way most people can free a slot, and it used to be a one-way
@@ -79,6 +86,7 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
   const canRestore =
     !isUsageRecord &&
     booking.status === "cancelled" &&
+    !hasFinished &&
     (isOwner || permissions.canManageBookings);
 
   // booking.collaborators is a fresh array on every parent fetch, so depend on its

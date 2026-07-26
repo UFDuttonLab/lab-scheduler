@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
@@ -46,6 +46,11 @@ const ActivityLog = () => {
   // undergrad_student, who then saw "all activity" while RLS returned only their own rows.
   const canViewAllLogs = permissions.canViewAllActivityLogs;
 
+  // Guards against an out-of-order response winning. Changing a filter while on page 3
+  // used to fire a request for the old offset and then a second for page 1; on a slow
+  // connection the stale (empty) response could resolve last and blank the page.
+  const requestIdRef = useRef(0);
+
   useEffect(() => {
     fetchLogs();
   }, [page, actionFilter, entityFilter]);
@@ -57,6 +62,7 @@ const ActivityLog = () => {
   }, [actionFilter, entityFilter, searchTerm]);
 
   const fetchLogs = async () => {
+    const reqId = ++requestIdRef.current;
     setLoading(true);
     try {
       let query = supabase
@@ -83,6 +89,7 @@ const ActivityLog = () => {
       const { data, error } = await query;
 
       if (error) throw error;
+      if (reqId !== requestIdRef.current) return;
       setLogs(data || []);
     } catch (error) {
       console.error('Error fetching activity logs:', error);

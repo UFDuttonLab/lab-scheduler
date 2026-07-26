@@ -110,6 +110,9 @@ const Index = () => {
           projectName: project?.name || undefined,
           purpose: booking.purpose || undefined,
           status: calculatedStatus,
+          // Without this, every BookingCard action is hidden on the dashboard, because
+          // they all gate on isOwner (user.id === booking.userId).
+          userId: booking.user_id,
           source: 'booking' as const,
         };
       });
@@ -148,6 +151,7 @@ const Index = () => {
           projectName: project?.name || undefined,
           purpose: record.notes || undefined,
           status: calculatedStatus,
+          userId: record.user_id,
           source: 'usage_record' as const,
         };
       });

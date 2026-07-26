@@ -86,11 +86,14 @@ Deno.serve(async (req) => {
         )
       }
 
-      // Soft delete: Set user as inactive instead of hard deleting
-      const { error: deactivateError } = await supabaseAdmin
-        .from('profiles')
-        .update({ active: false })
-        .eq('id', userId)
+      // Route through set_user_active: it is transactional, blocks self-deactivation and
+      // refuses to deactivate the last active PI. Those guards used to live only here,
+      // which meant they could be bypassed with a plain PostgREST update.
+      const { error: deactivateError } = await supabaseAdmin.rpc('set_user_active', {
+        _target: userId,
+        _active: false,
+        _actor: authenticatedUserId,
+      })
 
       if (deactivateError) {
         console.error('User deactivation error:', deactivateError)
@@ -174,16 +177,25 @@ Deno.serve(async (req) => {
           .eq('id', newUser.user.id)
       }
 
-      // Assign role
+      // Assign role. The result was previously discarded, so a bad role value produced a
+      // user with no role at all and a cheerful success response.
       if (role) {
-        await supabaseAdmin
-          .from('user_roles')
-          .delete()
-          .eq('user_id', newUser.user.id)
-
-        await supabaseAdmin
-          .from('user_roles')
-          .insert({ user_id: newUser.user.id, role })
+        const { error: assignError } = await supabaseAdmin.rpc('set_user_role', {
+          _target: newUser.user.id,
+          _role: role,
+          _actor: authenticatedUserId,
+        })
+        if (assignError) {
+          console.error('Role assignment error:', assignError)
+          return new Response(
+            JSON.stringify({
+              error: `User created but role assignment failed: ${assignError.message}`,
+              user: newUser.user,
+              password: generatedPassword,
+            }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
       }
 
       // Log activity
@@ -203,17 +215,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'updateRole') {
-      // Guard against locking the lab out of its own admin tools: if the only PI demotes
-      // themselves, nobody can manage users or roles ever again.
-      if (userId === authenticatedUserId) {
-        return new Response(
-          JSON.stringify({ error: 'You cannot change your own role. Ask another PI to do it.' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
-      // Only a PI may hand out the PI role - otherwise a manager could self-escalate by
-      // promoting an account they control.
+      // Only a PI may hand out the PI role.
       if (role === 'pi' && !callerIsPi) {
         return new Response(
           JSON.stringify({ error: 'Only a PI can grant the PI role.' }),
@@ -221,19 +223,20 @@ Deno.serve(async (req) => {
         )
       }
 
-      // Update user role
-      await supabaseAdmin
-        .from('user_roles')
-        .delete()
-        .eq('user_id', userId)
+      // One transactional call instead of DELETE-then-INSERT across two requests.
+      // The old version could wipe a user's roles and leave them with none if the role
+      // string was invalid, and only a PI can repair user_roles - so the account was
+      // stuck. set_user_role validates via the app_role parameter type, is atomic, and
+      // refuses to remove the last active PI.
+      const { error: roleUpdateError } = await supabaseAdmin.rpc('set_user_role', {
+        _target: userId,
+        _role: role,
+        _actor: authenticatedUserId,
+      })
 
-      const { error: roleInsertError } = await supabaseAdmin
-        .from('user_roles')
-        .insert({ user_id: userId, role })
-
-      if (roleInsertError) {
-        console.error('Role update error:', roleInsertError)
-        return new Response(JSON.stringify({ error: roleInsertError.message }), {
+      if (roleUpdateError) {
+        console.error('Role update error:', roleUpdateError)
+        return new Response(JSON.stringify({ error: roleUpdateError.message }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
@@ -256,11 +259,11 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'reactivate') {
-      // Reactivate user: Set active to true
-      const { error: reactivateError } = await supabaseAdmin
-        .from('profiles')
-        .update({ active: true })
-        .eq('id', userId)
+      const { error: reactivateError } = await supabaseAdmin.rpc('set_user_active', {
+        _target: userId,
+        _active: true,
+        _actor: authenticatedUserId,
+      })
 
       if (reactivateError) {
         console.error('User reactivation error:', reactivateError)

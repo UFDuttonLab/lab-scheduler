@@ -60,6 +60,15 @@ const DEFAULT_MAX_GPU = 2;
 const DB_MAX_CPU = 32;
 const DB_MAX_GPU = 2;
 
+/**
+ * Total capacity of the shared resource. This is whatever the equipment row declares -
+ * it must NOT be clamped to the per-booking CHECK ceiling, or a HiPerGator with 8 GPUs
+ * would only ever offer 2 to the whole lab.
+ */
+const poolCpuMax = (value?: number | null) => value ?? DEFAULT_MAX_CPU;
+const poolGpuMax = (value?: number | null) => value ?? DEFAULT_MAX_GPU;
+
+/** Ceiling for a SINGLE booking, which is what the CHECK constraints actually bound. */
 const clampCpuMax = (value?: number | null) => Math.min(value ?? DEFAULT_MAX_CPU, DB_MAX_CPU);
 const clampGpuMax = (value?: number | null) => Math.min(value ?? DEFAULT_MAX_GPU, DB_MAX_GPU);
 
@@ -478,8 +487,8 @@ const Schedule = () => {
           const totalCpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.cpuCount || 0), 0);
           const totalGpuUsed = overlappingBookings.reduce((sum, b) => sum + (b.gpuCount || 0), 0);
 
-          const maxCpus = clampCpuMax(selectedEq.maxCpuCount);
-          const maxGpus = clampGpuMax(selectedEq.maxGpuCount);
+          const maxCpus = poolCpuMax(selectedEq.maxCpuCount);
+          const maxGpus = poolGpuMax(selectedEq.maxGpuCount);
 
           if (totalCpuUsed + cpuCount > maxCpus) {
             toast.error(`${selectedEq.name}: Not enough CPUs available. Currently ${maxCpus - totalCpuUsed} CPUs free during this time.`);
@@ -752,8 +761,8 @@ const Schedule = () => {
   const getAvailableResources = (excludeBookingId?: string) => {
     if (!isHiPerGator || !bookingDate || !selectedTime) {
       const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
-      const maxCpus = clampCpuMax(hiPerGatorEq?.maxCpuCount);
-      const maxGpus = clampGpuMax(hiPerGatorEq?.maxGpuCount);
+      const maxCpus = poolCpuMax(hiPerGatorEq?.maxCpuCount);
+      const maxGpus = poolGpuMax(hiPerGatorEq?.maxGpuCount);
       return { availableCpu: maxCpus, availableGpu: maxGpus };
     }
 
@@ -787,8 +796,8 @@ const Schedule = () => {
     const usedGpus = overlappingBookings.reduce((sum, b) => sum + (b.gpuCount || 0), 0);
 
     const selectedEq = equipment.find(e => e.id === hiPerGatorId);
-    const maxCpus = clampCpuMax(selectedEq?.maxCpuCount);
-    const maxGpus = clampGpuMax(selectedEq?.maxGpuCount);
+    const maxCpus = poolCpuMax(selectedEq?.maxCpuCount);
+    const maxGpus = poolGpuMax(selectedEq?.maxGpuCount);
 
     return {
       availableCpu: maxCpus - usedCpus,
@@ -1413,8 +1422,8 @@ const Schedule = () => {
                     </div>
                     {(() => {
                       const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
-                      const maxCpus = clampCpuMax(hiPerGatorEq?.maxCpuCount);
-                      const maxGpus = clampGpuMax(hiPerGatorEq?.maxGpuCount);
+                      const maxCpus = poolCpuMax(hiPerGatorEq?.maxCpuCount);
+                      const maxGpus = poolGpuMax(hiPerGatorEq?.maxGpuCount);
                       const cpuPercent = ((availableCpu / maxCpus) * 100);
                       const gpuPercent = ((availableGpu / maxGpus) * 100);
                       const status = cpuPercent > 50 && gpuPercent > 50 ? 'high' : cpuPercent > 20 && gpuPercent > 20 ? 'medium' : 'low';
@@ -1463,8 +1472,8 @@ const Schedule = () => {
 
                     {(() => {
                       const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
-                      const maxCpus = clampCpuMax(hiPerGatorEq?.maxCpuCount);
-                      const maxGpus = clampGpuMax(hiPerGatorEq?.maxGpuCount);
+                      const maxCpus = poolCpuMax(hiPerGatorEq?.maxCpuCount);
+                      const maxGpus = poolGpuMax(hiPerGatorEq?.maxGpuCount);
                       return (availableCpu < maxCpus * 0.2 || availableGpu < maxGpus * 0.2) && (
                         <div className="flex items-start gap-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-700 dark:text-amber-400">
                           <Server className="w-4 h-4 shrink-0 mt-0.5" />
@@ -1713,8 +1722,8 @@ const Schedule = () => {
                     </div>
                     {(() => {
                       const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
-                      const maxCpus = clampCpuMax(hiPerGatorEq?.maxCpuCount);
-                      const maxGpus = clampGpuMax(hiPerGatorEq?.maxGpuCount);
+                      const maxCpus = poolCpuMax(hiPerGatorEq?.maxCpuCount);
+                      const maxGpus = poolGpuMax(hiPerGatorEq?.maxGpuCount);
                       const cpuPercent = ((availableCpu / maxCpus) * 100);
                       const gpuPercent = ((availableGpu / maxGpus) * 100);
                       const status = cpuPercent > 50 && gpuPercent > 50 ? 'high' : cpuPercent > 20 && gpuPercent > 20 ? 'medium' : 'low';
@@ -1758,8 +1767,8 @@ const Schedule = () => {
                     </div>
                     {(() => {
                       const hiPerGatorEq = equipment.find(e => e.type === "HiPerGator");
-                      const maxCpus = clampCpuMax(hiPerGatorEq?.maxCpuCount);
-                      const maxGpus = clampGpuMax(hiPerGatorEq?.maxGpuCount);
+                      const maxCpus = poolCpuMax(hiPerGatorEq?.maxCpuCount);
+                      const maxGpus = poolGpuMax(hiPerGatorEq?.maxGpuCount);
                       return (availableCpu < maxCpus * 0.2 || availableGpu < maxGpus * 0.2) && (
                         <div className="flex items-start gap-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-700 dark:text-amber-400">
                           <Server className="w-4 h-4 shrink-0 mt-0.5" />

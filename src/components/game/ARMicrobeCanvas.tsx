@@ -17,6 +17,8 @@ interface Microbe {
   speed: number;
   points: number;
   spawnTime: number;
+  /** Spawn time on the accumulated ACTIVE-play clock, used for expiry. */
+  spawnActiveTime: number;
   opacity: number;
   wobble: number;
   shapePoints: number[];
@@ -52,6 +54,12 @@ interface ARMicrobeCanvasProps {
   isPaused: boolean;
 }
 
+/** Microbes in a wave. Grows steadily rather than exploding. */
+const WAVE_SIZE = (wave: number) => 4 + wave * 2;
+
+/** Gap between spawns, tightening with the wave but never below ~0.9s. */
+const WAVE_SPAWN_INTERVAL_MS = (wave: number) => Math.max(900, 2400 - (wave - 1) * 140);
+
 const projectToScreen = (
   worldX: number,
   worldY: number,
@@ -79,8 +87,15 @@ const projectToScreen = (
     return { screenX: 0, screenY: 0, isVisible: false, distance, angle };
   }
   
-  const fov = 60 * Math.PI / 180;
-  const scale = canvasHeight / (2 * Math.tan(fov / 2));
+  // Horizontal FOV, derived from canvas WIDTH.
+  //
+  // This used to divide canvasHeight by tan(30deg) and apply that scale to X as well. On
+  // a portrait phone (390x844) that produced a horizontal field of view of only about
+  // +/-15 degrees, while microbes spawn across +/-30 - so half of every wave began
+  // outside the frustum as an off-screen arrow you had no time to turn towards.
+  // Deriving from width gives a camera-like ~65 degrees across, and keeps square pixels.
+  const fov = 65 * Math.PI / 180;
+  const scale = canvasWidth / (2 * Math.tan(fov / 2));
   
   const screenX = (canvasWidth / 2) + (rotatedX / -finalZ) * scale;
   const screenY = (canvasHeight / 2) - (rotatedY / -finalZ) * scale;
@@ -132,6 +147,25 @@ export const ARMicrobeCanvas = ({
   const currentWaveRef = useRef(1);
   const waveMicrobesSpawnedRef = useRef(0);
   const sensorDataRef = useRef({ yaw: 0, pitch: 0 });
+  // Logical (CSS px) drawing size. The canvas backing store is this multiplied by the
+  // device pixel ratio, so all game maths stays in CSS pixels while the render is sharp.
+  const viewRef = useRef({ w: 0, h: 0 });
+  const dprRef = useRef(1);
+  // Timestamp of the last life lost, used for the damage flash.
+  const damageFlashRef = useRef(0);
+  // Escapes counted inside the setMicrobes updater, drained on the next tick.
+  const pendingEscapesRef = useRef(0);
+  // Accumulated ACTIVE play time in ms, and the timestamp of the last movement tick.
+  //
+  // Everything used to key off wall-clock Date.now(): microbe expiry (age > 10) kept
+  // advancing while the game was paused, so pausing for more than 10 seconds killed every
+  // microbe alive the instant you resumed and drained all three lives. Separately, motion
+  // advanced a fixed amount per setInterval tick with no elapsed-time integration, so on a
+  // slower phone the ticks fell behind the wall clock and microbes hit the timeout while
+  // still far away. Both are fixed by driving movement AND expiry from the same
+  // accumulated active-time clock.
+  const activeTimeRef = useRef(0);
+  const lastTickRef = useRef<number | null>(null);
 
   useEffect(() => {
     console.log("🦠 AR Microbe Shooter V2 - LARGE microbes, close spawn, fast movement");
@@ -152,7 +186,7 @@ export const ARMicrobeCanvas = ({
     setWaveMicrobesSpawned(0);
     waveMicrobesSpawnedRef.current = 0;
     toast.success("Wave 1 Starting!", {
-      description: `${5 + currentWaveRef.current * 3} microbes incoming!`,
+      description: `${WAVE_SIZE(currentWaveRef.current)} microbes incoming!`,
     });
   }, []);
 
@@ -173,8 +207,14 @@ export const ARMicrobeCanvas = ({
     let type: Microbe["type"] = "basic";
     let health = 1;
     let points = 10;
-    // FIXED: Faster speed - 0.08 base instead of 0.042
-    let speed = 0.08 + (wave * 0.008);
+    // Approach speed, in world units per 16ms tick (~62.5 ticks/sec).
+    //
+    // Previously 0.088/tick at wave 1 = 5.5 units/sec, and microbes spawned 8-15 units
+    // out - a 1.5 to 2.7 second window from spawn to escape on the EASIEST wave, before
+    // you have even located them. Spotting, turning and tapping on a phone eats most of a
+    // second by itself. 0.055 + wave*0.005 gives ~3.4 u/s at wave 1, which against the
+    // new 14-22 unit spawn range is a 4-6 second window, tightening as waves progress.
+    let speed = 0.055 + (wave * 0.005);
     // FIXED: Larger base size - 50 instead of 30
     let size = 50;
 
@@ -182,30 +222,31 @@ export const ARMicrobeCanvas = ({
       type = "boss";
       health = 8 + wave;
       points = 250;
-      speed = 0.07 + (wave * 0.007);
+      speed = 0.048 + (wave * 0.004);
       size = 80;
     } else if (rand < 5) {
       type = "golden";
       health = 1;
       points = 100;
-      speed = 0.12 + (wave * 0.01);
+      speed = 0.078 + (wave * 0.006);
       size = 45;
     } else if (wave > 3 && rand < 20) {
       type = "tank";
       health = 2 + Math.floor(wave / 2);
       points = 50;
-      speed = 0.06 + (wave * 0.006);
+      speed = 0.042 + (wave * 0.0035);
       size = 65;
     } else if (wave > 2 && rand < 35) {
       type = "fast";
       health = 1;
       points = 25;
-      speed = 0.11 + (wave * 0.01);
+      speed = 0.072 + (wave * 0.006);
       size = 40;
     }
 
-    // FIXED: Spawn MUCH closer - 8-15 units instead of 20-30
-    const spawnDistance = 8 + Math.random() * 7;
+    // Spawn far enough away to be seen and reacted to. Paired with the slower approach
+    // speeds above this is the single biggest fairness change in the game.
+    const spawnDistance = 14 + Math.random() * 8;
 
     // Keep the spawn arc inside what the player can actually reach.
     //
@@ -214,14 +255,10 @@ export const ARMicrobeCanvas = ({
     // only about +/-15 degrees. Spawning across a fixed +/-30 degrees therefore put half
     // the microbes outside the frustum. With working sensors that is fine (you turn to
     // face them), but in touch mode the camera never turns and they are unkillable.
-    let arc = Math.PI / 3;
-    if (!sensorMode && canvasRef.current) {
-      const canvas = canvasRef.current;
-      const scale = canvas.height / (2 * Math.tan((60 * Math.PI / 180) / 2));
-      const halfHorizontalFov = Math.atan((canvas.width / 2) / scale);
-      // 1.6x the half-FOV gives a full arc slightly inside the visible cone.
-      arc = halfHorizontalFov * 1.6;
-    }
+    // Spawn arc. With the corrected ~65 degree horizontal FOV a +/-30 degree arc now sits
+    // just inside the visible cone, so in sensor mode a small turn brings anything into
+    // view. In touch mode the camera cannot turn at all, so keep every spawn on-screen.
+    const arc = sensorMode ? (Math.PI / 3) : (55 * Math.PI / 180);
     const angleOffset = (Math.random() - 0.5) * arc;
     const heightOffset = (Math.random() - 0.5) * 3;
     
@@ -248,7 +285,7 @@ export const ARMicrobeCanvas = ({
     setMicrobes((prev) => [...prev, {
       id: `microbe-${Date.now()}-${Math.random()}`,
       x, y, z, type, health, maxHealth: health,
-      size, speed, points, spawnTime: Date.now(),
+      size, speed, points, spawnTime: Date.now(), spawnActiveTime: activeTimeRef.current,
       opacity: 1, wobble: 0,
       shapePoints,
       tentacleAngles,
@@ -297,7 +334,7 @@ export const ARMicrobeCanvas = ({
     setWaveMicrobesSpawned(0);
     waveMicrobesSpawnedRef.current = 0;
     toast.success(`Wave ${nextWave} Starting!`, {
-      description: `${5 + nextWave * 3} microbes incoming!`
+      description: `${WAVE_SIZE(nextWave)} microbes incoming!`
     });
   }, []);
 
@@ -347,7 +384,7 @@ export const ARMicrobeCanvas = ({
       if (!waveActiveRef.current) return;
       
       const allSpawned = waveMicrobesSpawnedRef.current > 0 && 
-                        waveMicrobesSpawnedRef.current >= (5 + currentWaveRef.current * 3);
+                        waveMicrobesSpawnedRef.current >= WAVE_SIZE(currentWaveRef.current);
       const noneRemaining = microbesRef.current.length === 0;
       
       if (allSpawned && noneRemaining) {
@@ -366,9 +403,15 @@ export const ARMicrobeCanvas = ({
 
   useEffect(() => {
     if (isPaused || !waveActive) return;
-    const targetMicrobes = 5 + (currentWave * 3);
-    const waveDuration = Math.max(10, 22 - (currentWave * 2));
-    const spawnInterval = Math.floor((waveDuration * 1000) / targetMicrobes);
+    // Wave pacing.
+    //
+    // The old curve was a cliff: wave 1 was 8 microbes over 20s (one every 2500ms) but
+    // wave 5 was 20 over 12s (one every 600ms) - a 4x density jump - and waveDuration
+    // bottomed out at 10s by wave 6 while the count kept climbing, so wave 8 was 29
+    // microbes in 10 seconds. Now the count grows more slowly and the interval tightens
+    // gradually with a floor, so difficulty ramps instead of falling off a shelf.
+    const targetMicrobes = WAVE_SIZE(currentWave);
+    const spawnInterval = WAVE_SPAWN_INTERVAL_MS(currentWave);
     
     const interval = setInterval(() => {
       if (waveMicrobesSpawnedRef.current < targetMicrobes) {
@@ -403,7 +446,10 @@ export const ARMicrobeCanvas = ({
     if (isPaused) return;
     
     const interval = setInterval(() => {
-      if (Date.now() - lastComboTimeRef.current > 2000 && comboRef.current > 0) {
+      // 4s, not 2s. Wave 1 spawns one microbe every ~2.4s, so a 2s combo window was
+      // shorter than the gap between targets - combos were mathematically impossible
+      // early on and trivial later, exactly backwards.
+      if (Date.now() - lastComboTimeRef.current > 4000 && comboRef.current > 0) {
         setCombo(0);
         onComboChange(0);
       }
@@ -413,33 +459,51 @@ export const ARMicrobeCanvas = ({
   }, [isPaused, onComboChange]);
 
   useEffect(() => {
-    if (isPaused) return;
+    if (isPaused) {
+      // Drop the anchor so the paused span is not counted as elapsed play time.
+      lastTickRef.current = null;
+      return;
+    }
     const interval = setInterval(() => {
-      const now = Date.now();
-      // Count escapes first, then notify the parent AFTER the updater returns.
-      // Calling onLifeLost() inside the updater runs a parent setState during React's
-      // render phase (warning: "Cannot update a component while rendering a different
-      // component"), and a re-invoked updater would deduct the same life twice.
-      let escaped = 0;
+      const wall = Date.now();
+      // Elapsed ACTIVE milliseconds since the previous tick. Clamped so a backgrounded
+      // tab or a long stall cannot teleport every microbe into the player at once.
+      const deltaMs = lastTickRef.current === null ? 16 : Math.min(wall - lastTickRef.current, 100);
+      lastTickRef.current = wall;
+      activeTimeRef.current += deltaMs;
+      const nowActive = activeTimeRef.current;
+
+      // Drain escapes recorded by a previous tick's updater.
+      //
+      // These cannot be reported from inside the updater (that is a parent setState
+      // during React's render phase) and they cannot be read immediately after calling
+      // setMicrobes either - React defers updaters to the next render, so the count is
+      // still zero on the line after. Recording into a ref and draining it on the next
+      // tick sidesteps both.
+      if (pendingEscapesRef.current > 0) {
+        const n = pendingEscapesRef.current;
+        pendingEscapesRef.current = 0;
+        damageFlashRef.current = Date.now();
+        if ('vibrate' in navigator) navigator.vibrate([120, 60, 120]);
+        for (let i = 0; i < n; i++) onLifeLost();
+      }
 
       setMicrobes((prev) => prev.map((microbe) => {
-        const age = (now - microbe.spawnTime) / 1000;
-        const newWobble = microbe.wobble + 0.05;
+        // Age in ACTIVE seconds, not wall-clock seconds.
+        const age = (nowActive - microbe.spawnActiveTime) / 1000;
+        const newWobble = microbe.wobble + 0.05 * (deltaMs / 16);
         const distance = Math.sqrt(microbe.x ** 2 + microbe.y ** 2 + microbe.z ** 2);
-        
-        // A microbe counts as escaped once it passes the camera plane (z >= 0).
-        // Previously only `distance < 0.5` or a 10s timeout removed it, so microbes flew
-        // straight past the player and kept travelling to z = +20 while still alive -
-        // invisible, unhittable, and not yet costing a life. The player had no way to
-        // react and the escape only registered seconds later via the age timeout.
-        if (microbe.z >= 0 || distance < 0.5 || age > 10) {
-          escaped += 1;
+
+        // Escaped once it passes the camera plane. The generous age cap is a safety net
+        // for anything that somehow never converges, not the normal removal path.
+        if (microbe.z >= 0 || distance < 0.5 || age > 30) {
+          pendingEscapesRef.current += 1;
           return null;
         }
 
-        const moveSpeed = microbe.speed;
-        const newZ = microbe.z + moveSpeed;
-        
+        // speed is authored per 16ms tick, so scale by real elapsed time.
+        const newZ = microbe.z + microbe.speed * (deltaMs / 16);
+
         return {
           ...microbe,
           z: newZ,
@@ -447,10 +511,6 @@ export const ARMicrobeCanvas = ({
           opacity: (microbe.type === "tank" || microbe.type === "boss") && Math.floor(age) % 5 === 0 && age % 1 < 0.5 ? 0.5 : 1.0,
         };
       }).filter(Boolean) as Microbe[]);
-
-      // escaped is computed synchronously by the updater above, which React runs before
-      // this line, so the count is accurate by the time we read it.
-      for (let i = 0; i < escaped; i++) onLifeLost();
     }, 16);
     return () => clearInterval(interval);
   }, [isPaused, onLifeLost]);
@@ -470,8 +530,19 @@ export const ARMicrobeCanvas = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const updateSize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      // Cap at 3x: beyond that the fill-rate cost outweighs any visible gain.
+      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      dprRef.current = dpr;
+      viewRef.current = { w, h };
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+      // Previously the backing store was set to CSS pixels, so on a 3x phone everything
+      // was drawn at a third of the screen's real resolution and upscaled - the whole
+      // scene looked soft, which is especially costly for an AR overlay.
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
     };
     updateSize();
     window.addEventListener('resize', updateSize);
@@ -490,15 +561,20 @@ export const ARMicrobeCanvas = ({
         return;
       }
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Re-apply every frame: assigning canvas.width resets context state, so doing this
+      // in the resize handler alone would be order-dependent.
+      const VW = viewRef.current.w || canvas.width;
+      const VH = viewRef.current.h || canvas.height;
+      ctx.setTransform(dprRef.current, 0, 0, dprRef.current, 0, 0);
+      ctx.clearRect(0, 0, VW, VH);
       const now = Date.now();
-      const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
+      const centerX = VW / 2;
+      const centerY = VH / 2;
       const cameraYaw = sensorDataRef.current.yaw;
       const cameraPitch = sensorDataRef.current.pitch;
 
       microbesRef.current.forEach((microbe) => {
-        const projection = projectToScreen(microbe.x, microbe.y, microbe.z, cameraYaw, cameraPitch, canvas.width, canvas.height);
+        const projection = projectToScreen(microbe.x, microbe.y, microbe.z, cameraYaw, cameraPitch, VW, VH);
         if (!projection.isVisible) return;
         
         const screenX = projection.screenX;
@@ -615,32 +691,45 @@ export const ARMicrobeCanvas = ({
 
       // Off-screen indicators
       microbesRef.current.forEach((microbe) => {
-        const projection = projectToScreen(microbe.x, microbe.y, microbe.z, cameraYaw, cameraPitch, canvas.width, canvas.height);
-        if (projection.isVisible || projection.distance > 15) return;
-        
-        const indicatorDistance = Math.min(canvas.width, canvas.height) / 2 - 60;
+        const projection = projectToScreen(microbe.x, microbe.y, microbe.z, cameraYaw, cameraPitch, VW, VH);
+        if (projection.isVisible || projection.distance > 24) return;
+
+        const indicatorDistance = Math.min(VW, VH) / 2 - 60;
         const indicatorX = centerX + Math.sin(projection.angle) * indicatorDistance;
         const indicatorY = centerY - Math.cos(projection.angle) * indicatorDistance;
-        
+
+        // Urgency: an arrow for something 3 units away should not look like one for
+        // something 20 units away. Closer microbes get a bigger, brighter, pulsing arrow
+        // so "turn NOW" reads at a glance instead of every arrow looking identical.
+        const closeness = Math.max(0, Math.min(1, 1 - (projection.distance - 3) / 17));
+        const pulse = 1 + Math.sin(now / 120) * 0.18 * closeness;
+        const arrowScale = (0.85 + closeness * 1.15) * pulse;
+
         ctx.save();
         ctx.translate(indicatorX, indicatorY);
         ctx.rotate(projection.angle);
+        ctx.scale(arrowScale, arrowScale);
         ctx.fillStyle = getMicrobeColor(microbe.type);
-        ctx.globalAlpha = 0.7;
+        ctx.globalAlpha = 0.55 + closeness * 0.45;
+        if (closeness > 0.55) {
+          ctx.shadowColor = getMicrobeColor(microbe.type);
+          ctx.shadowBlur = 14 * closeness;
+        }
         ctx.beginPath();
         ctx.moveTo(0, -15);
         ctx.lineTo(-10, 5);
         ctx.lineTo(10, 5);
         ctx.closePath();
         ctx.fill();
+        ctx.shadowBlur = 0;
         ctx.globalAlpha = 1.0;
         ctx.restore();
       });
 
       // Radar
       const radarSize = 100;
-      const radarX = canvas.width - radarSize - 20;
-      const radarY = canvas.height - radarSize - 20;
+      const radarX = VW - radarSize - 20;
+      const radarY = VH - radarSize - 20;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
       ctx.beginPath();
       ctx.arc(radarX + radarSize / 2, radarY + radarSize / 2, radarSize / 2, 0, Math.PI * 2);
@@ -667,7 +756,7 @@ export const ARMicrobeCanvas = ({
       powerUpsRef.current.forEach((powerUp) => {
         const age = (now - powerUp.spawnTime) / 1000;
         if (age > 15) return;
-        const projection = projectToScreen(powerUp.x, powerUp.y, powerUp.z, cameraYaw, cameraPitch, canvas.width, canvas.height);
+        const projection = projectToScreen(powerUp.x, powerUp.y, powerUp.z, cameraYaw, cameraPitch, VW, VH);
         if (!projection.isVisible) return;
         
         const pulse = 1 + Math.sin(now / 200) * 0.2;
@@ -699,15 +788,15 @@ export const ARMicrobeCanvas = ({
         const laserAlpha = 1 - (now - laserFiringRef.current) / 150;
         ctx.save();
         ctx.globalAlpha = laserAlpha * 0.8;
-        const gradient = ctx.createLinearGradient(centerX, canvas.height, centerX, centerY);
+        const gradient = ctx.createLinearGradient(centerX, VH, centerX, centerY);
         gradient.addColorStop(0, `rgba(255, 50, 50, ${laserAlpha})`);
         gradient.addColorStop(1, `rgba(255, 150, 150, ${laserAlpha * 0.3})`);
         ctx.fillStyle = gradient;
         ctx.beginPath();
-        ctx.moveTo(centerX - 15, canvas.height);
+        ctx.moveTo(centerX - 15, VH);
         ctx.lineTo(centerX - 2, centerY);
         ctx.lineTo(centerX + 2, centerY);
-        ctx.lineTo(centerX + 15, canvas.height);
+        ctx.lineTo(centerX + 15, VH);
         ctx.closePath();
         ctx.fill();
         ctx.restore();
@@ -729,6 +818,20 @@ export const ARMicrobeCanvas = ({
       ctx.moveTo(centerX + 25, centerY);
       ctx.lineTo(centerX + 15, centerY);
       ctx.stroke();
+
+      // Damage flash - drawn last so it sits over the whole scene.
+      const sinceDamage = now - damageFlashRef.current;
+      if (damageFlashRef.current > 0 && sinceDamage < 450) {
+        const t = 1 - sinceDamage / 450;
+        const edge = ctx.createRadialGradient(
+          centerX, centerY, Math.min(VW, VH) * 0.25,
+          centerX, centerY, Math.max(VW, VH) * 0.75
+        );
+        edge.addColorStop(0, "rgba(255, 0, 0, 0)");
+        edge.addColorStop(1, `rgba(255, 0, 0, ${0.55 * t})`);
+        ctx.fillStyle = edge;
+        ctx.fillRect(0, 0, VW, VH);
+      }
 
       animationFrameRef.current = requestAnimationFrame(render);
     };
@@ -754,16 +857,18 @@ export const ARMicrobeCanvas = ({
     // unavailable or denied) the camera never turns, so microbes that spawn behind or
     // beside you are permanently unreachable and the game is unwinnable. When there is
     // no sensor, aim at the point actually touched instead.
-    let centerX = canvas.width / 2;
-    let centerY = canvas.height / 2;
+    const VW = viewRef.current.w || canvas.width;
+    const VH = viewRef.current.h || canvas.height;
+    let centerX = VW / 2;
+    let centerY = VH / 2;
 
     if (!sensorMode) {
       const touch = e.touches?.[0] ?? e.changedTouches?.[0];
       if (touch) {
         const rect = canvas.getBoundingClientRect();
-        // Canvas backing store may differ from its CSS size, so scale into canvas space.
-        centerX = (touch.clientX - rect.left) * (canvas.width / rect.width);
-        centerY = (touch.clientY - rect.top) * (canvas.height / rect.height);
+        // Both the touch and our drawing space are CSS pixels now, so no scaling needed.
+        centerX = touch.clientX - rect.left;
+        centerY = touch.clientY - rect.top;
       }
     }
 
@@ -783,7 +888,7 @@ export const ARMicrobeCanvas = ({
     {
       let minDistance = Infinity;
       powerUpsRef.current.forEach((powerUp) => {
-        const projection = projectToScreen(powerUp.x, powerUp.y, powerUp.z, cameraYaw, cameraPitch, canvas.width, canvas.height);
+        const projection = projectToScreen(powerUp.x, powerUp.y, powerUp.z, cameraYaw, cameraPitch, VW, VH);
         if (!projection.isVisible) return;
         const screenDistance = Math.hypot(projection.screenX - centerX, projection.screenY - centerY);
         if (screenDistance < 100 && projection.distance < minDistance) {
@@ -814,7 +919,7 @@ export const ARMicrobeCanvas = ({
     {
       let minDistance = Infinity;
       microbesRef.current.forEach((microbe) => {
-        const projection = projectToScreen(microbe.x, microbe.y, microbe.z, cameraYaw, cameraPitch, canvas.width, canvas.height);
+        const projection = projectToScreen(microbe.x, microbe.y, microbe.z, cameraYaw, cameraPitch, VW, VH);
         if (!projection.isVisible) return;
         const screenDistance = Math.hypot(projection.screenX - centerX, projection.screenY - centerY);
         if (screenDistance < 150 && projection.distance < minDistance) {
@@ -845,7 +950,8 @@ export const ARMicrobeCanvas = ({
 
     if (killed) {
       const newCombo = comboRef.current + 1;
-      const comboMultiplier = 1 + Math.floor(newCombo / 5) * 0.5;
+      // Every 3 kills rather than 5, so the mechanic pays off within a single wave.
+      const comboMultiplier = 1 + Math.floor(newCombo / 3) * 0.5;
       const pointsEarned = Math.floor(
         target.points * comboMultiplier * (activePowerUpRef.current?.type === "double" ? 2 : 1)
       );
