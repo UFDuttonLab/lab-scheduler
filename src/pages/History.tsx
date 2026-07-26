@@ -168,7 +168,11 @@ const History = () => {
         duration: Math.round((new Date(usage.end_time).getTime() - new Date(usage.start_time).getTime()) / 60000),
         projectId: usage.project_id || undefined,
         projectName: project?.name || undefined,
-        purpose: undefined,
+        // notes IS the usage_record equivalent of purpose (Schedule.tsx maps it the same
+        // way). Hard-coding undefined here left the Edit textarea empty, and because the
+        // save path writes `notes = purpose || null`, editing anything at all - even just
+        // the sample count - silently wiped the note the student had written.
+        purpose: usage.notes || undefined,
         status: 'completed' as const,
         samplesProcessed: usage.samples_processed || undefined,
         collaborators: usage.collaborators || undefined,
@@ -266,6 +270,12 @@ const History = () => {
       const updateData: any = {
         start_time: startTime.toISOString(),
         end_time: endTime.toISOString(),
+        // Keep the denormalised project_id in step with project_samples, exactly as
+        // Schedule's edit path does. Omitting it left the column pointing at the OLD
+        // project after a reassignment, so Analytics (which keys on project_id) and the
+        // sample breakdown (which reads project_samples) attributed the same session to
+        // two different projects.
+        project_id: project_samples.length > 0 ? project_samples[0].project_id : null,
         project_samples: project_samples,
         // Keep the denormalised total in step with project_samples. Writing only the
         // latter left samples_processed stale, so BookingCard's "Samples" line and every

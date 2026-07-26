@@ -72,6 +72,34 @@ const poolGpuMax = (value?: number | null) => value ?? DEFAULT_MAX_GPU;
 const clampCpuMax = (value?: number | null) => Math.min(value ?? DEFAULT_MAX_CPU, DB_MAX_CPU);
 const clampGpuMax = (value?: number | null) => Math.min(value ?? DEFAULT_MAX_GPU, DB_MAX_GPU);
 
+const BASE_DURATION_OPTIONS = [
+  { value: "30", label: "30 minutes" },
+  { value: "60", label: "1 hour" },
+  { value: "120", label: "2 hours" },
+  { value: "240", label: "4 hours" },
+  { value: "480", label: "8 hours" },
+  { value: "1440", label: "1 day" },
+  { value: "2880", label: "2 days" },
+  { value: "4320", label: "3 days" },
+  { value: "5760", label: "4 days" },
+  { value: "7200", label: "5 days" },
+  { value: "8640", label: "6 days" },
+  { value: "10080", label: "7 days" },
+];
+
+const isBookable = (e: Equipment) => e.status === "available" || e.status === "in-use";
+
+const unbookableReason = (e: Equipment) =>
+  e.status === "maintenance" ? "Under maintenance" : null;
+
+const formatMinutes = (total: number) => {
+  if (total < 60) return `${total} minutes`;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  const hLabel = `${h} hour${h === 1 ? '' : 's'}`;
+  return m === 0 ? hLabel : `${hLabel} ${m} min`;
+};
+
 const Schedule = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -154,30 +182,41 @@ const Schedule = () => {
   // Pre-select equipment if passed via URL, but don't auto-open dialog
   useEffect(() => {
     const equipmentId = searchParams.get('equipment');
-    if (equipmentId && equipment.length > 0) {
+    if (equipmentId && equipment.some(e => e.id === equipmentId && isBookable(e))) {
       setSelectedEquipment([equipmentId]);
       // Don't auto-open dialog - let user select date first
     }
   }, [searchParams, equipment]);
 
-  // Reset duration and resource counts when switching equipment types
+  // Reset the HiPerGator resource counts when the selection STARTS including a HiPerGator -
+  // not on every selection change.
+  //
+  // This effect keyed on the identity of `selectedEquipment`, a new array every time a
+  // checkbox is ticked, and it also re-ran whenever fetchEquipment() produced a fresh
+  // `equipment` array. So "pick the Thermocycler, set Duration to 4 hours, then also tick the
+  // Qubit" silently snapped Duration back to 1 hour, and CPU/GPU counts back to 1/0 on
+  // HiPerGator. The user's explicit choice was discarded by an unrelated interaction and the
+  // booking under-reserved the machine with no warning.
+  //
+  // Duration is no longer touched at all: it is the user's to set, and nothing about adding a
+  // second machine makes their chosen length wrong.
+  const hadHiPerGatorRef = useRef(false);
   useEffect(() => {
-    // Don't reset if we're in edit mode
     if (isEditDialogOpen) return;
-    
-    const hasHiPerGator = selectedEquipment.some(eqId => {
+
+    const nowHasHiPerGator = selectedEquipment.some(eqId => {
       const eq = equipment.find(e => e.id === eqId);
       return eq?.type === "HiPerGator";
     });
-    
-    if (hasHiPerGator) {
-      setDuration("60");
-      setCpuCount(1);
-      setGpuCount(0);
-    } else if (selectedEquipment.length > 0) {
-      setDuration("60");
+
+    if (nowHasHiPerGator !== hadHiPerGatorRef.current) {
+      hadHiPerGatorRef.current = nowHasHiPerGator;
+      if (nowHasHiPerGator) {
+        setCpuCount(1);
+        setGpuCount(0);
+      }
     }
-  }, [selectedEquipment, equipment]);
+  }, [selectedEquipment, equipment, isEditDialogOpen]);
 
   const fetchProjects = async () => {
     const { data, error } = await supabase
@@ -228,8 +267,12 @@ const Schedule = () => {
       location: eq.location,
       description: eq.description || undefined,
       icon: eq.icon || undefined,
-      maxCpuCount: eq.max_cpu_count || undefined,
-      maxGpuCount: eq.max_gpu_count || undefined,
+      // ?? not ||: the DB trigger reads these columns verbatim via COALESCE(col, default),
+      // so a legitimate 0 ceiling must survive. `0 || undefined` made the client substitute
+      // 32/2 and offer resources the trigger then refused. Equipment.tsx was already fixed;
+      // this copy was missed.
+      maxCpuCount: eq.max_cpu_count ?? undefined,
+      maxGpuCount: eq.max_gpu_count ?? undefined,
     }));
     
     setEquipment(transformedEquipment);
@@ -367,24 +410,86 @@ const Schedule = () => {
     }
   };
 
-  const availableEquipment = equipment.filter(e => {
-    if (e.status !== "available") return false;
-    // Show all available equipment regardless of project selection
-    return true;
-  });
+  /**
+   * Clears every field shared by the Book and Edit dialogs.
+   *
+   * The two dialogs render from ONE set of state variables, and closing a dialog with
+   * Escape / the X / an overlay click never ran the reset that lives at the end of the submit
+   * handlers. So abandoning an edit and then pressing "New Booking" opened the create form
+   * pre-loaded with that booking's equipment, start time, duration, purpose and CPU/GPU
+   * counts - a student could book the wrong machine, with someone else's purpose text, in two
+   * clicks. `duration` leaked even through the successful-submit resets, which reset
+   * everything except it.
+   */
+  const resetBookingForm = () => {
+    setSelectedBooking(null);
+    setBookingDate(new Date());
+    setProjectSamples([]);
+    // Keep the machine the user arrived with from Equipment -> "Book this equipment"
+    // (?equipment=<id>). That effect only runs on mount, so clearing the selection here
+    // unconditionally would silently drop the pre-selection the link exists to provide.
+    const preselected = searchParams.get('equipment');
+    // Only honour the link if that machine can actually be booked - otherwise the checkbox
+    // for it renders disabled, so the user could neither keep it nor untick it.
+    const preselectable =
+      preselected && equipment.some(e => e.id === preselected && isBookable(e));
+    setSelectedEquipment(preselectable ? [preselected!] : []);
+    setSelectedTime("");
+    setDuration("60");
+    setPurpose("");
+    setCpuCount(1);
+    setGpuCount(0);
+    setSelectedCollaborators([]);
+    setCollaboratorSearch("");
+  };
 
-  const dayBookings = selectedDate 
+  /**
+   * Which machines can actually be reserved.
+   *
+   * 'in-use' is now BOOKABLE. It means "somebody is on it right now", which says nothing at
+   * all about next Tuesday, yet it used to veto every future booking: a PI flipping the Qubit
+   * to "In Use" because a student was mid-run made it unreservable for everyone, forever,
+   * until somebody thought to flip it back. Nothing in the database enforces that veto and
+   * nothing in the app ever sets the status automatically, so it was purely an accident of
+   * this filter. Real overlap is still prevented by the conflict trigger.
+   *
+   * 'maintenance' genuinely means the machine is down, so it stays unbookable - but the row is
+   * still RENDERED, greyed out with the reason. Filtering it out silently was its own bug: the
+   * machine simply vanished from the list, indistinguishable from having been deleted, with no
+   * hint anywhere as to why.
+   */
+  const bookableEquipment = equipment.filter(isBookable);
+
+  const dayBookings = selectedDate
     ? bookings.filter(b => {
-        // Check if booking spans the selected date
+        // Half-open day window: [00:00 today, 00:00 tomorrow).
+        //
+        // This used to be an INCLUSIVE test against 23:59:59.999, which counted a booking
+        // that ends exactly at midnight as belonging to the NEXT day too. That is reachable
+        // straight from the booking form (16:00 + "8 hours", or 20:00 + "4 hours"), and it
+        // produced a phantom entry: the header said "1 booking today" on a day with none,
+        // and the timeline drew a zero-height, invisible card that still consumed a track.
+        // A booking touching midnight belongs to the day it runs in, not the one it ends on -
+        // the same half-open convention the database conflict trigger uses via tstzrange.
         const selectedDayStart = new Date(selectedDate);
         selectedDayStart.setHours(0, 0, 0, 0);
-        const selectedDayEnd = new Date(selectedDate);
-        selectedDayEnd.setHours(23, 59, 59, 999);
-        
-        // Booking spans the selected date if it starts before/on the day end and ends after/on the day start
-        return b.startTime <= selectedDayEnd && b.endTime >= selectedDayStart;
+        const nextDayStart = addDays(selectedDayStart, 1);
+
+        return b.startTime < nextDayStart && b.endTime > selectedDayStart;
       })
     : [];
+
+  /**
+   * dayBookings minus cancelled rows.
+   *
+   * Timeline View is what students read to find a free slot, and it drew cancelled bookings
+   * exactly like live ones - so a released slot still looked taken, defeating the entire point
+   * of Cancel ("the time slot is now free"). The day-count header was inflated the same way.
+   *
+   * The List View deliberately keeps showing cancelled rows: that is where the Restore button
+   * lives, and only a PI can delete, so hiding them would strand a mis-clicked cancellation.
+   */
+  const activeDayBookings = dayBookings.filter(b => b.status !== 'cancelled');
 
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -431,6 +536,19 @@ const Schedule = () => {
     const durationMinutes = parseInt(duration);
     if (durationMinutes > 10080) { // 7 days in minutes
       toast.error("Maximum booking duration is 7 days");
+      return;
+    }
+
+    // Belt and braces: the checkbox for a machine under maintenance is disabled, but
+    // selectedEquipment can also come from a ?equipment= link or from a machine that was put
+    // into maintenance while this dialog sat open. Name the machine rather than failing vaguely.
+    const blocked = selectedEquipment
+      .map(id => equipment.find(e => e.id === id))
+      .filter((e): e is Equipment => !!e && !isBookable(e));
+    if (blocked.length > 0) {
+      toast.error(
+        `${blocked.map(e => e.name).join(', ')} ${blocked.length > 1 ? 'are' : 'is'} under maintenance and cannot be booked.`
+      );
       return;
     }
 
@@ -552,16 +670,8 @@ const Schedule = () => {
       );
       
       setIsBookingDialogOpen(false);
-      setBookingDate(new Date());
-      setProjectSamples([]);
-      setSelectedEquipment([]);
-      setSelectedTime("");
-      setPurpose("");
-      setCpuCount(1);
-      setGpuCount(0);
-      setSelectedCollaborators([]);
-      setCollaboratorSearch("");
-      
+      resetBookingForm();
+
       // Refresh bookings
       fetchBookings();
     } catch (error: any) {
@@ -718,16 +828,8 @@ const Schedule = () => {
 
       toast.success(isUsageRecord ? "Usage record updated successfully!" : "Booking updated successfully!");
       setIsEditDialogOpen(false);
-      setSelectedBooking(null);
-      setProjectSamples([]);
-      setSelectedEquipment([]);
-      setSelectedTime("");
-      setPurpose("");
-      setCpuCount(1);
-      setGpuCount(0);
-      setSelectedCollaborators([]);
-      setCollaboratorSearch("");
-      
+      resetBookingForm();
+
       fetchBookings();
     } catch (error: any) {
       toast.error(error.message || "Failed to update booking");
@@ -736,10 +838,23 @@ const Schedule = () => {
     }
   };
 
-  const timeSlots = Array.from({ length: 16 }, (_, i) => {
-    const hour = i + 6;
-    return `${hour.toString().padStart(2, '0')}:00`;
-  });
+  /**
+   * 06:00 to 21:30 in half-hour steps.
+   *
+   * Duration has always offered "30 minutes", but start times were whole hours only, so two
+   * back-to-back half-hour sessions were impossible to book: the 09:30 one had no slot to
+   * select. Half-hour starts make the two dropdowns agree. Nothing downstream assumes a whole
+   * hour - setHours(h, m) already takes minutes and the timeline reads getMinutes().
+   */
+  const baseTimeSlots = useMemo(
+    () =>
+      Array.from({ length: 32 }, (_, i) => {
+        const hour = 6 + Math.floor(i / 2);
+        const minute = i % 2 === 0 ? "00" : "30";
+        return `${hour.toString().padStart(2, '0')}:${minute}`;
+      }),
+    []
+  );
 
   const hasHiPerGator = selectedEquipment.some(eqId => {
     const eq = equipment.find(e => e.id === eqId);
@@ -747,20 +862,29 @@ const Schedule = () => {
   });
   const isHiPerGator = hasHiPerGator;
 
-  const durationOptions = [
-    { value: "30", label: "30 minutes" },
-    { value: "60", label: "1 hour" },
-    { value: "120", label: "2 hours" },
-    { value: "240", label: "4 hours" },
-    { value: "480", label: "8 hours" },
-    { value: "1440", label: "1 day" },
-    { value: "2880", label: "2 days" },
-    { value: "4320", label: "3 days" },
-    { value: "5760", label: "4 days" },
-    { value: "7200", label: "5 days" },
-    { value: "8640", label: "6 days" },
-    { value: "10080", label: "7 days" },
-  ];
+
+  /**
+   * A Radix Select renders its placeholder when `value` is not among its items, so any
+   * booking whose start or duration is not on the standard grid opened the Edit dialog with
+   * BLANK Start Time and Duration fields - the real values were still in state and were
+   * saved correctly, but the form looked broken and there was no way to see what the current
+   * duration was. QuickAdd offers 15-minute sessions and can log any minute value, so this is
+   * routine for usage records. Injecting the live value keeps every existing booking editable
+   * and honestly displayed without widening what can be picked for a NEW booking.
+   */
+  const timeSlots = useMemo(() => {
+    if (!selectedTime || baseTimeSlots.includes(selectedTime)) return baseTimeSlots;
+    return [...baseTimeSlots, selectedTime].sort();
+  }, [baseTimeSlots, selectedTime]);
+
+
+  const durationOptions = useMemo(() => {
+    if (!duration || BASE_DURATION_OPTIONS.some(o => o.value === duration)) return BASE_DURATION_OPTIONS;
+    const parsed = parseInt(duration, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return BASE_DURATION_OPTIONS;
+    return [...BASE_DURATION_OPTIONS, { value: duration, label: formatMinutes(parsed) }]
+      .sort((a, b) => parseInt(a.value, 10) - parseInt(b.value, 10));
+  }, [duration]);
 
   // Calculate available HiPerGator resources if applicable
   const getAvailableResources = (excludeBookingId?: string) => {
@@ -786,7 +910,12 @@ const Schedule = () => {
       return { availableCpu: DEFAULT_MAX_CPU, availableGpu: DEFAULT_MAX_GPU };
     }
 
-    const overlappingBookings = bookings.filter(b => 
+    const overlappingBookings = bookings.filter(b =>
+      // Must match handleBooking / handleEditBooking exactly. Those two skip usage_records
+      // (retroactive logs never reserve capacity); this display path did not, so the badge
+      // and the slider ceiling could report 0 CPUs free while the validator would happily
+      // have accepted 32 - the slider physically prevented a booking the rules allowed.
+      b.source !== 'usage_record' &&
       b.id !== excludeBookingId &&
       b.equipmentId === hiPerGatorId &&
       b.status !== 'cancelled' &&
@@ -825,8 +954,11 @@ const Schedule = () => {
       const currentDate = new Date(booking.startTime);
       currentDate.setHours(0, 0, 0, 0);
 
+      // Strictly `<`: a booking that ends at exactly 00:00 does not occupy that day, so it
+      // must not put a dot on it. Same half-open rule as dayBookings above - previously
+      // `<=` highlighted an extra day on the calendar for every booking ending at midnight.
       let cursor = currentDate;
-      while (cursor <= endDate) {
+      while (cursor < endDate) {
         daysSet.add(cursor.toDateString());
         cursor = addDays(cursor, 1);
       }
@@ -959,6 +1091,8 @@ const Schedule = () => {
                 className="w-full" 
                 size="lg"
                 onClick={() => {
+                  // Always start from a clean form - see resetBookingForm().
+                  resetBookingForm();
                   setBookingDate(selectedDate || new Date());
                   setIsBookingDialogOpen(true);
                 }}
@@ -977,7 +1111,7 @@ const Schedule = () => {
                     Schedule for {format(selectedDate, "EEEE, MMMM d, yyyy")}
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    {dayBookings.length} booking{dayBookings.length !== 1 ? 's' : ''} today
+                    {activeDayBookings.length} booking{activeDayBookings.length !== 1 ? 's' : ''} today
                   </p>
                 </div>
 
@@ -1002,6 +1136,10 @@ const Schedule = () => {
                             booking={booking}
                             onDelete={fetchBookings}
                             onEdit={(booking) => {
+                              // Reset first, then prefill: the prefill below does not touch
+                              // every shared field, so without this the Edit dialog could open
+                              // carrying leftovers from a previous booking.
+                              resetBookingForm();
                               setSelectedBooking(booking);
                               setIsEditDialogOpen(true);
                               // Pre-fill form - load project samples or fallback
@@ -1013,6 +1151,11 @@ const Schedule = () => {
                                   projectName: booking.projectName,
                                   samples: booking.samplesProcessed
                                 }]);
+                              } else {
+                                // No else branch here meant a booking with no project data
+                                // inherited whatever was last in the form, and saving it
+                                // silently reattributed that booking to another project.
+                                setProjectSamples([]);
                               }
                               setSelectedEquipment([booking.equipmentId]);
                               setBookingDate(booking.startTime);
@@ -1037,7 +1180,7 @@ const Schedule = () => {
                    <TabsContent value="timeline">
                     {(() => {
                       // Assign tracks to bookings to avoid visual overlap
-                      const bookingsWithTracks = dayBookings.map(booking => {
+                      const bookingsWithTracks = activeDayBookings.map(booking => {
                         // For timeline view, we need to handle multiday bookings
                         const isMultiday = !isSameDay(booking.startTime, booking.endTime);
                         const selectedDayStart = new Date(selectedDate!);
@@ -1227,7 +1370,10 @@ const Schedule = () => {
           </div>
         </div>
 
-        <Dialog open={isBookingDialogOpen} onOpenChange={setIsBookingDialogOpen}>
+        <Dialog
+          open={isBookingDialogOpen}
+          onOpenChange={setIsBookingDialogOpen}
+        >
           <DialogContent className="max-w-[95vw] sm:max-w-[600px] lg:max-w-[700px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Book Equipment</DialogTitle>
@@ -1277,31 +1423,57 @@ const Schedule = () => {
               <div className="space-y-2">
                 <Label>Equipment (Select one or more)</Label>
                 <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto">
-                  {availableEquipment.length === 0 ? (
+                  {equipment.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      No equipment available
+                      No equipment has been added yet
+                    </p>
+                  ) : bookableEquipment.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Every machine is currently under maintenance
                     </p>
                   ) : (
-                    availableEquipment.map(eq => (
-                      <label key={eq.id} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-2 rounded">
-                        <input
-                          type="checkbox"
-                          checked={selectedEquipment.includes(eq.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedEquipment([...selectedEquipment, eq.id]);
-                            } else {
-                              setSelectedEquipment(selectedEquipment.filter(id => id !== eq.id));
-                            }
-                          }}
-                          className="w-4 h-4"
-                        />
-                        <span className="text-sm">{eq.name}</span>
-                        {eq.type === "HiPerGator" && (
-                          <Badge variant="secondary" className="text-xs ml-auto">HiPerGator</Badge>
-                        )}
-                      </label>
-                    ))
+                    // Every machine is listed, including the ones that cannot be booked, so a
+                    // missing instrument is never a mystery.
+                    equipment.map(eq => {
+                      const bookable = isBookable(eq);
+                      const reason = unbookableReason(eq);
+                      return (
+                        <label
+                          key={eq.id}
+                          title={reason ?? undefined}
+                          className={cn(
+                            "flex items-center gap-2 p-2 rounded",
+                            bookable ? "cursor-pointer hover:bg-muted/50" : "cursor-not-allowed opacity-60"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            disabled={!bookable}
+                            checked={selectedEquipment.includes(eq.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedEquipment([...selectedEquipment, eq.id]);
+                              } else {
+                                setSelectedEquipment(selectedEquipment.filter(id => id !== eq.id));
+                              }
+                            }}
+                            className="w-4 h-4"
+                          />
+                          <span className="text-sm">{eq.name}</span>
+                          <span className="ml-auto flex items-center gap-1">
+                            {eq.type === "HiPerGator" && (
+                              <Badge variant="secondary" className="text-xs">HiPerGator</Badge>
+                            )}
+                            {reason ? (
+                              <Badge variant="outline" className="text-xs">{reason}</Badge>
+                            ) : eq.status === "in-use" ? (
+                              // Informational only - busy now, still reservable for later.
+                              <Badge variant="secondary" className="text-xs">In use now</Badge>
+                            ) : null}
+                          </span>
+                        </label>
+                      );
+                    })
                   )}
                 </div>
                 {selectedEquipment.length > 0 && (
@@ -1366,6 +1538,11 @@ const Schedule = () => {
                     placeholder="Search by name or email..."
                     value={collaboratorSearch}
                     onChange={(e) => setCollaboratorSearch(e.target.value)}
+                    // A lone text input inside a <form> triggers implicit submission on
+                    // Enter. Typing a labmate's name and pressing Enter - the reflex - used
+                    // to book the equipment there and then, before duration or purpose were
+                    // set. This is a search box, so Enter should do nothing.
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                   />
                   {collaboratorSearch && (
                     <div className="max-h-32 overflow-y-auto border rounded-md p-2 space-y-1">
@@ -1380,6 +1557,12 @@ const Schedule = () => {
                         .map(u => (
                           <Button
                             key={u.id}
+                            // Without this the shadcn Button renders a bare <button>, whose
+                            // HTML default type is "submit". Sitting inside the booking form,
+                            // picking a collaborator SUBMITTED it - creating the booking on the
+                            // spot, before the user had set duration or purpose. The adjacent
+                            // remove-collaborator control already guarded itself this way.
+                            type="button"
                             variant="ghost"
                             size="sm"
                             className="w-full justify-start text-left"
@@ -1525,6 +1708,8 @@ const Schedule = () => {
                   fetchBookings();
                 }}
                 onEdit={(booking) => {
+                  // Reset first, then prefill - see the matching call in the list view.
+                  resetBookingForm();
                   setSelectedBooking(booking);
                   setIsEditDialogOpen(true);
                   setIsDetailsDialogOpen(false);
@@ -1537,6 +1722,9 @@ const Schedule = () => {
                       projectName: booking.projectName,
                       samples: booking.samplesProcessed
                     }]);
+                  } else {
+                    // See the matching branch in the list view above.
+                    setProjectSamples([]);
                   }
                   setSelectedEquipment([booking.equipmentId]);
                   setBookingDate(booking.startTime);
@@ -1555,13 +1743,10 @@ const Schedule = () => {
         {/* Edit Booking Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
           setIsEditDialogOpen(open);
-          if (!open) {
-            // Reset form when closing
-            setSelectedBooking(null);
-            setProjectSamples([]);
-            setSelectedCollaborators([]);
-            setCollaboratorSearch("");
-          }
+          // Deliberately does NOT clear the form. Both dialogs reset when they OPEN, which is
+          // the invariant that matters; resetting on close as well would wipe a half-typed
+          // booking the moment someone clicks the overlay by accident.
+          if (!open) setSelectedBooking(null);
         }}>
           <DialogContent className="max-w-[95vw] sm:max-w-[600px] lg:max-w-[700px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -1667,6 +1852,11 @@ const Schedule = () => {
                     placeholder="Search by name or email..."
                     value={collaboratorSearch}
                     onChange={(e) => setCollaboratorSearch(e.target.value)}
+                    // A lone text input inside a <form> triggers implicit submission on
+                    // Enter. Typing a labmate's name and pressing Enter - the reflex - used
+                    // to book the equipment there and then, before duration or purpose were
+                    // set. This is a search box, so Enter should do nothing.
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                   />
                   {collaboratorSearch && (
                     <div className="max-h-32 overflow-y-auto border rounded-md p-2 space-y-1">
@@ -1681,6 +1871,12 @@ const Schedule = () => {
                         .map(u => (
                           <Button
                             key={u.id}
+                            // Without this the shadcn Button renders a bare <button>, whose
+                            // HTML default type is "submit". Sitting inside the booking form,
+                            // picking a collaborator SUBMITTED it - creating the booking on the
+                            // spot, before the user had set duration or purpose. The adjacent
+                            // remove-collaborator control already guarded itself this way.
+                            type="button"
                             variant="ghost"
                             size="sm"
                             className="w-full justify-start text-left"

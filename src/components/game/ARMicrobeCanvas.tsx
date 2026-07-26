@@ -57,8 +57,31 @@ interface ARMicrobeCanvasProps {
 /** Microbes in a wave. Grows steadily rather than exploding. */
 const WAVE_SIZE = (wave: number) => 4 + wave * 2;
 
-/** Gap between spawns, tightening with the wave but never below ~0.9s. */
-const WAVE_SPAWN_INTERVAL_MS = (wave: number) => Math.max(900, 2400 - (wave - 1) * 140);
+/** Gap between spawns, tightening with the wave but never below ~1.1s. */
+const WAVE_SPAWN_INTERVAL_MS = (wave: number) => Math.max(1100, 2600 - (wave - 1) * 130);
+
+/**
+ * Approach speed in world units per 16ms tick (~62.5 ticks/sec), with a HARD CEILING.
+ *
+ * Every microbe type used to ramp without a cap, so by wave 12 a "fast" was crossing the
+ * 14-22 unit spawn range in under two seconds - less time than it takes to spot something on
+ * a phone screen, decide, and land a thumb. The cap is what keeps late waves difficult
+ * instead of impossible: waves keep adding MORE microbes, they just stop getting faster.
+ */
+const rampedSpeed = (base: number, perWave: number, ceiling: number, wave: number) =>
+  Math.min(ceiling, base + wave * perWave);
+
+/**
+ * On-screen size multiplier for a microbe at a given world distance.
+ *
+ * Shared by the renderer and the hit test so the tappable area always matches the thing you
+ * can see - they used to be computed independently, with the hit test using a flat radius.
+ * The floor is 1.8 (was 1.2): at the far end of the 14-22 unit spawn range a basic microbe
+ * now draws about 105px across instead of 60px, which is the difference between "a speck
+ * somewhere over there" and a target on a phone held at arm's length.
+ */
+const microbeScale = (distance: number) =>
+  Math.max(1.8, Math.min(5, 1.5 + (15 - distance) / 15 * 3.5));
 
 const projectToScreen = (
   worldX: number,
@@ -231,34 +254,36 @@ export const ARMicrobeCanvas = ({
     // you have even located them. Spotting, turning and tapping on a phone eats most of a
     // second by itself. 0.055 + wave*0.005 gives ~3.4 u/s at wave 1, which against the
     // new 14-22 unit spawn range is a 4-6 second window, tightening as waves progress.
-    let speed = 0.055 + (wave * 0.005);
-    // FIXED: Larger base size - 50 instead of 30
-    let size = 50;
+    // Roughly a third slower than before at wave 1, and capped thereafter. At ~18 units of
+    // travel this gives a basic microbe a ~7 second window on wave 1 and never less than
+    // ~4 seconds however far you get - enough to see it, turn, and aim on a handset.
+    let speed = rampedSpeed(0.036, 0.003, 0.075, wave);
+    let size = 58;
 
     if (wave > 5 && rand < 5) {
       type = "boss";
       health = 8 + wave;
       points = 250;
-      speed = 0.048 + (wave * 0.004);
-      size = 80;
+      speed = rampedSpeed(0.030, 0.0022, 0.058, wave);
+      size = 92;
     } else if (rand < 5) {
       type = "golden";
       health = 1;
       points = 100;
-      speed = 0.078 + (wave * 0.006);
-      size = 45;
+      speed = rampedSpeed(0.052, 0.0035, 0.092, wave);
+      size = 54;
     } else if (wave > 3 && rand < 20) {
       type = "tank";
       health = 2 + Math.floor(wave / 2);
       points = 50;
-      speed = 0.042 + (wave * 0.0035);
-      size = 65;
+      speed = rampedSpeed(0.028, 0.0022, 0.056, wave);
+      size = 76;
     } else if (wave > 2 && rand < 35) {
       type = "fast";
       health = 1;
       points = 25;
-      speed = 0.072 + (wave * 0.006);
-      size = 40;
+      speed = rampedSpeed(0.050, 0.0040, 0.098, wave);
+      size = 48;
     }
 
     // Spawn far enough away to be seen and reacted to. Paired with the slower approach
@@ -641,20 +666,16 @@ export const ARMicrobeCanvas = ({
         const screenX = projection.screenX;
         const screenY = projection.screenY;
         
-        // FIXED: Better size scaling - much more visible at all distances
-        // Old: max(0.3, min(3, 8/distance)) gave 9px at distance 25
-        // New: 1.5 + (15-distance)/15 * 3 gives better range
-        // Distance 15: 1.5 scale = 75px
-        // Distance 10: 2.5 scale = 125px
-        // Distance 5: 3.5 scale = 175px
-        // Distance 2: 4.3 scale = 215px
-        const scaleFactor = Math.max(1.2, Math.min(5, 1.5 + (15 - projection.distance) / 15 * 3.5));
-        const size = microbe.size * scaleFactor;
-        
-        const distanceFromCrosshair = Math.hypot(screenX - centerX, screenY - centerY);
+        // Shared with the hit test - see microbeScale().
+        const size = microbe.size * microbeScale(projection.distance);
+
         const baseColor = getMicrobeColor(microbe.type);
-        const targetColor = distanceFromCrosshair < 150 ? '#00ff00' : baseColor;
-        
+        // The body used to turn bright green whenever it drifted within 150px of the screen
+        // centre, because the centre was the only place you could shoot. Now that taps land
+        // where the finger does, that cue points at the wrong thing, so every microbe simply
+        // reads as its own colour and is tappable wherever it is.
+        const targetColor = baseColor;
+
         ctx.globalAlpha = microbe.opacity;
         
         // Draw tentacles
@@ -694,7 +715,18 @@ export const ARMicrobeCanvas = ({
         }
         ctx.closePath();
         ctx.fill();
-        
+
+        // High-contrast rim. The body is a flat fill drawn over a live camera feed, so
+        // against a pale wall or a bright window a mid-tone microbe had almost no edge to
+        // catch. A dark outline under a white one reads on any background.
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        ctx.lineWidth = Math.max(3, size * 0.06);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = Math.max(1.5, size * 0.025);
+        ctx.stroke();
+
         // Nucleus
         const nucleusColors: { [key: string]: string } = {
           basic: "#166534",
@@ -905,34 +937,35 @@ export const ARMicrobeCanvas = ({
     };
   }, [isPaused]);
 
-  const handleTap = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
-    // React attaches onTouchStart passively, so preventDefault() here is a no-op that
-    // logs "Unable to preventDefault inside passive event listener invocation" on every
-    // shot. touch-action: none on the canvas suppresses the gesture instead.
+  const handleTap = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    // touch-action: none on the canvas suppresses the browser gesture; calling
+    // preventDefault() in a passive React handler would only log a warning.
     if (isPaused || !canvasRef.current) return;
 
     const canvas = canvasRef.current;
 
-    // Where the shot lands.
+    // ALWAYS shoot where the finger lands.
     //
-    // With working motion sensors this is a crosshair shooter: you aim by pointing the
-    // phone, so every tap fires at the centre of the screen. But in touch mode (sensors
-    // unavailable or denied) the camera never turns, so microbes that spawn behind or
-    // beside you are permanently unreachable and the game is unwinnable. When there is
-    // no sensor, aim at the point actually touched instead.
+    // This used to fire at the centre of the screen whenever motion sensors were working -
+    // i.e. on every normal Android and iPhone - and only aimed at the touch point in the
+    // no-sensor fallback. That made it a crosshair shooter you steer by physically turning
+    // the phone: a microbe drifting down the left third of the screen simply could not be
+    // shot, no matter how accurately you tapped it, until you swung the handset far enough
+    // to bring it through the middle. On a phone that is the whole "impossible to hit"
+    // complaint. Pointing still aims - it is what moves microbes across the frame - but a
+    // direct tap now works too, which is what everyone expects on a touchscreen.
+    //
+    // PointerEvent rather than TouchEvent so the same handler covers mouse and stylus;
+    // previously a desktop browser could not shoot at all.
     const VW = viewRef.current.w || canvas.width;
     const VH = viewRef.current.h || canvas.height;
-    let centerX = VW / 2;
-    let centerY = VH / 2;
-
-    if (!sensorMode) {
-      const touch = e.touches?.[0] ?? e.changedTouches?.[0];
-      if (touch) {
-        const rect = canvas.getBoundingClientRect();
-        // Both the touch and our drawing space are CSS pixels now, so no scaling needed.
-        centerX = touch.clientX - rect.left;
-        centerY = touch.clientY - rect.top;
-      }
+    const rect = canvas.getBoundingClientRect();
+    let centerX = Number.isFinite(e.clientX) ? e.clientX - rect.left : VW / 2;
+    let centerY = Number.isFinite(e.clientY) ? e.clientY - rect.top : VH / 2;
+    // A tap that somehow reports outside the canvas falls back to the crosshair.
+    if (centerX < 0 || centerX > VW || centerY < 0 || centerY > VH) {
+      centerX = VW / 2;
+      centerY = VH / 2;
     }
 
     // Report the shot before we know whether it hit, so accuracy means something.
@@ -980,15 +1013,30 @@ export const ARMicrobeCanvas = ({
     // awarding points and combo twice for one tap.
     let hit: { microbe: Microbe; screenX: number; screenY: number } | null = null;
     {
-      let minDistance = Infinity;
+      // Pick the microbe CLOSEST TO THE TAP, breaking ties by world distance.
+      //
+      // This used to rank candidates by world distance alone: of everything inside the hit
+      // radius, whichever was nearest the camera died. With a generous radius that means
+      // tapping squarely on one microbe kills a different one several centimetres away -
+      // measured at 13 of 14 taps in a browser test on an iPhone-sized viewport. It reads as
+      // "my taps do nothing", because the thing under your thumb visibly survives.
+      let best = Infinity;
       microbesRef.current.forEach((microbe) => {
         const projection = projectToScreen(microbe.x, microbe.y, microbe.z, cameraYaw, cameraPitch, VW, VH);
         if (!projection.isVisible) return;
         const screenDistance = Math.hypot(projection.screenX - centerX, projection.screenY - centerY);
-        // rapid widens the effective hit radius, giving the power-up a real effect.
-        const hitRadius = activePowerUpRef.current?.type === "rapid" ? 240 : 150;
-        if (screenDistance < hitRadius && projection.distance < minDistance) {
-          minDistance = projection.distance;
+        // Forgiving, and tied to how big the microbe actually LOOKS rather than a flat 150px.
+        // A thumb print is ~40px, so the 110px floor means a tap that lands anywhere near a
+        // distant microbe still counts, while a close-up boss is hittable across its whole body.
+        // rapid widens it further, giving the power-up a real effect.
+        const drawnSize = microbe.size * microbeScale(projection.distance);
+        const baseRadius = Math.max(110, drawnSize * 0.8);
+        const hitRadius = activePowerUpRef.current?.type === "rapid" ? baseRadius * 1.6 : baseRadius;
+        if (screenDistance >= hitRadius) return;
+        // Sub-pixel weighting on world distance only breaks exact screen-distance ties.
+        const rank = screenDistance + projection.distance * 0.001;
+        if (rank < best) {
+          best = rank;
           hit = { microbe, screenX: projection.screenX, screenY: projection.screenY };
         }
       });
@@ -1042,13 +1090,13 @@ export const ARMicrobeCanvas = ({
         current.map((m) => (m.id === target.id ? { ...m, health: newHealth } : m))
       );
     }
-  }, [isPaused, sensorMode, onScoreChange, onComboChange, onMicrobeEliminated, activatePowerUp, onTap]);
+  }, [isPaused, onScoreChange, onComboChange, onMicrobeEliminated, activatePowerUp, onTap]);
 
   return (
     <>
       <canvas
         ref={canvasRef}
-        onTouchStart={handleTap}
+        onPointerDown={handleTap}
         onContextMenu={(e) => e.preventDefault()}
         className="absolute inset-0 w-full h-full z-10 touch-action-none"
         style={{ width: "100%", height: "100%", touchAction: "none" }}
