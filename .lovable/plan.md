@@ -14,4 +14,4 @@ Redeploy all existing backend edge functions without changing their code.
 
 ## Notes
 - No code changes, no database migrations.
-- Existing config (`verify_jwt = false` for `send-password-reset` and `configure-smtp`) stays as-is.
+- Existing config stays as-is.
