@@ -9,6 +9,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { Footer } from "@/components/Footer";
 
+/**
+ * Whether to offer self-service password reset on the sign-in form.
+ *
+ * Flip to true once Supabase Auth has working custom SMTP. Everything behind it - the
+ * resetPasswordForEmail call, the /reset-password route and the PKCE recovery handling in
+ * App.tsx - is already in place and does not need touching.
+ */
+const SHOW_FORGOT_PASSWORD = false;
+
 const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -59,24 +68,22 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke("request-password-reset", {
-        body: { email },
+      // Supabase Auth sends this itself, over whatever SMTP is configured in the dashboard.
+      // It replaces a hand-rolled flow that generated its own token, stored it in a
+      // password_reset_tokens table and mailed it via Resend. Supabase generates, expires and
+      // single-uses the token, so none of that is ours to get wrong any more.
+      //
+      // redirectTo must be listed under Authentication -> URL Configuration -> Redirect URLs
+      // or Supabase refuses to honour it and sends the user to the Site URL instead.
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}${window.location.pathname}`,
       });
 
-      // A non-2xx response gives { data: null, error: FunctionsHttpError } whose message
-      // is the useless constant "Edge Function returned a non-2xx status code". The real
-      // payload lives on error.context, so the `data?.error` branch below was dead code.
       if (error) {
-        // Deliberately generic. This page is reachable while logged out, and
-        // request-password-reset returns success even for unknown addresses precisely to
-        // avoid confirming whether an account exists - surfacing the server's own message
-        // here would undo that.
-        console.error("Password reset request failed:", await readFunctionError(error, "unknown"));
+        // Deliberately generic: this page is reachable while logged out, so echoing the
+        // server's message could confirm whether an account exists.
+        console.error("Password reset request failed:", error.message);
         throw new Error("Could not send the reset email right now. Please try again shortly.");
-      }
-
-      if (data?.error) {
-        throw new Error(data.error);
       }
 
       toast({
@@ -131,14 +138,28 @@ const Auth = () => {
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Signing in..." : "Sign In"}
                 </Button>
-                <Button
-                  type="button"
-                  variant="link"
-                  className="w-full"
-                  onClick={() => setShowForgotPassword(true)}
-                >
-                  Forgot Password?
-                </Button>
+                {/* Self-service password reset is HIDDEN, not deleted.
+                    It depends on outbound email, and there is currently no mail provider
+                    configured, so the link would send people into a flow that silently never
+                    delivers. Meanwhile a PI can set a new password directly from Lab
+                    Configuration -> Users (the key icon), which needs no email at all.
+                    To restore this: set SHOW_FORGOT_PASSWORD back to true once custom SMTP is
+                    configured in Supabase (Authentication -> Emails -> SMTP Settings). The
+                    handler, the route and ResetPasswordVerify are all still wired up and use
+                    Supabase's native recovery flow, so nothing else needs changing. */}
+                {SHOW_FORGOT_PASSWORD && (
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="w-full"
+                    onClick={() => setShowForgotPassword(true)}
+                  >
+                    Forgot Password?
+                  </Button>
+                )}
+                <p className="text-center text-xs text-muted-foreground">
+                  Forgotten your password? Ask Chris to set a new one for you.
+                </p>
               </form>
             ) : (
               <form onSubmit={handleForgotPassword} className="space-y-4">

@@ -13,5 +13,14 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
+    // PKCE, not the default 'implicit'.
+    //
+    // The app uses HashRouter, so it owns the URL fragment. An implicit-flow recovery link
+    // comes back as "...#access_token=...&type=recovery", which the router would try to read
+    // as a route and the login would break. PKCE returns "?code=..." in the QUERY string
+    // instead, and supabase-js gives search params precedence when it looks for a callback,
+    // so the two never collide. On load the client exchanges the code automatically and
+    // fires onAuthStateChange('PASSWORD_RECOVERY').
+    flowType: 'pkce',
   }
 });

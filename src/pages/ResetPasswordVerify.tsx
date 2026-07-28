@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { readFunctionError } from "@/lib/dbWrite";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +9,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Footer } from "@/components/Footer";
 
 const ResetPasswordVerify = () => {
-  const [searchParams] = useSearchParams();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -19,22 +17,55 @@ const ResetPasswordVerify = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const token = searchParams.get("token");
-
+  // A recovery session, not a hand-rolled token.
+  //
+  // Supabase's PKCE recovery link lands on the site root as "?code=...". supabase-js
+  // exchanges it during client init and fires PASSWORD_RECOVERY, which AuthContext routes
+  // here. By the time this page renders there is a real, short-lived session on the account,
+  // and updateUser() is authorised by it. The old ?token= query param, the
+  // password_reset_tokens table and the update-password function are all gone.
   useEffect(() => {
-    if (!token) {
-      toast({
-        title: "Invalid Link",
-        description: "This password reset link is invalid.",
-        variant: "destructive",
-      });
-      setTimeout(() => navigate("/auth"), 2000);
-      return;
-    }
+    let cancelled = false;
 
-    setVerifying(false);
-    setTokenValid(true);
-  }, [token, navigate, toast]);
+    const check = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (cancelled) return;
+
+      if (data.session) {
+        setTokenValid(true);
+        setVerifying(false);
+        return;
+      }
+
+      // The client may still be mid-exchange on a cold load, so give it one beat before
+      // declaring the link dead.
+      const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (cancelled || !session) return;
+        setTokenValid(true);
+        setVerifying(false);
+      });
+
+      setTimeout(() => {
+        if (cancelled) return;
+        setVerifying(prev => {
+          if (!prev) return prev;
+          toast({
+            title: "Invalid or expired link",
+            description: "This password reset link is no longer valid. Please request a new one.",
+            variant: "destructive",
+          });
+          setTimeout(() => navigate("/auth"), 2000);
+          return false;
+        });
+      }, 4000);
+
+      return () => sub.subscription.unsubscribe();
+    };
+
+    check();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,20 +91,11 @@ const ResetPasswordVerify = () => {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke("update-password", {
-        body: {
-          token,
-          newPassword: password,
-        },
-      });
+      // Authorised by the recovery session established above.
+      const { error } = await supabase.auth.updateUser({ password });
 
-      // update-password returns every failure as 400 or 422, so `error` is always set and
-      // `data` is always null on the failure paths - which made the whole block below
-      // unreachable and showed users the raw string "Edge Function returned a non-2xx
-      // status code" instead of "Reset token has expired". Read the real body back off
-      // error.context.
       if (error) {
-        const message = await readFunctionError(error, "Failed to reset password. The link may have expired.");
+        const message = error.message || "Failed to reset password. The link may have expired.";
         if (/weak|pwned|compromis/i.test(message)) {
           toast({
             title: "Weak Password",
@@ -86,9 +108,8 @@ const ResetPasswordVerify = () => {
         throw new Error(message);
       }
 
-      if (data?.error) {
-        throw new Error(data.error);
-      }
+      // Don't leave the recovery session lying around - it is a full session on the account.
+      await supabase.auth.signOut();
 
       toast({
         title: "Password Updated",

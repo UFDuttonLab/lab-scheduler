@@ -2,7 +2,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { HashRouter, Routes, Route } from "react-router-dom";
+import { HashRouter, Routes, Route, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 // Page imports
@@ -24,6 +26,34 @@ import ARMicrobeShooter from "./pages/ARMicrobeShooter";
 
 const queryClient = new QueryClient();
 
+/**
+ * Sends a user arriving on a password-recovery link to the reset form.
+ *
+ * Supabase's PKCE recovery link lands on the site ROOT as "?code=...". supabase-js exchanges
+ * it during client init and fires PASSWORD_RECOVERY. Without this, that exchange leaves the
+ * user holding a valid session on "/", so ProtectedRoute happily shows them the dashboard and
+ * the reset form is never reached - they would appear to be "logged in" instead of being asked
+ * for a new password.
+ *
+ * Lives inside HashRouter because it needs useNavigate.
+ */
+const RecoveryRedirect = () => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        // Strip ?code= so a refresh cannot retry a code that has already been consumed.
+        window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+        navigate("/reset-password", { replace: true });
+      }
+    });
+    return () => data.subscription.unsubscribe();
+  }, [navigate]);
+
+  return null;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -31,6 +61,7 @@ const App = () => (
       <Sonner />
       <HashRouter>
         <AuthProvider>
+          <RecoveryRedirect />
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/reset-password" element={<ResetPasswordVerify />} />

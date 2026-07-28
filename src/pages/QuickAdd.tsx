@@ -277,9 +277,20 @@ export default function QuickAdd() {
     { value: "10080", label: "7 days" },
   ];
 
-  const timeSlots = Array.from({ length: 16 }, (_, i) => {
-    const hour = i + 6;
-    return `${hour.toString().padStart(2, '0')}:00`;
+  /**
+   * Every half hour across the WHOLE day, 00:00 to 23:30.
+   *
+   * This offered whole hours from 06:00 to 21:00 only - 16 options - which is a booking
+   * policy, not a logging one. Quick Add records work that already happened, so the grid has
+   * to be able to express when it actually happened: a 14:30 start, an overnight sequencing
+   * run begun at 23:00, an early prep at 05:00. None of those could be entered, so people had
+   * to round to a wrong hour or give up. The duration list already offers 15 minutes, which
+   * hourly starts made impossible to place accurately.
+   */
+  const timeSlots = Array.from({ length: 48 }, (_, i) => {
+    const hour = Math.floor(i / 2);
+    const minute = i % 2 === 0 ? "00" : "30";
+    return `${hour.toString().padStart(2, '0')}:${minute}`;
   });
 
   return (
@@ -429,6 +440,11 @@ export default function QuickAdd() {
                   placeholder="Search users..."
                   value={collaboratorSearch}
                   onChange={(e) => setCollaboratorSearch(e.target.value)}
+                  // A text input inside a <form> triggers implicit submission on Enter, so
+                  // typing a labmate's name and pressing Enter - the reflex - logged the usage
+                  // record there and then, before notes or duration were set. It is a search
+                  // box; Enter should do nothing.
+                  onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                   className="mb-2"
                 />
                 <div className="border rounded-md p-3 space-y-2 max-h-40 overflow-y-auto">

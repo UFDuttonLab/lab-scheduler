@@ -258,6 +258,58 @@ Deno.serve(async (req) => {
       })
     }
 
+    if (action === 'resetPassword') {
+      // Set a new password directly and hand it back to the caller.
+      //
+      // Exists because email delivery is the single point of failure in the self-service
+      // reset flow: when the mail provider is down, misconfigured, or unpaid, a locked-out
+      // student has no route back in at all. This gives the PI an offline path that depends
+      // on nothing external. PI only - a manager can change roles but must not be able to
+      // take over an account by setting its password and reading it back.
+      if (!callerIsPi) {
+        return new Response(
+          JSON.stringify({ error: "Only a PI can reset another user's password." }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      if (!userId) {
+        return new Response(
+          JSON.stringify({ error: 'No user specified.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const newPassword = crypto.randomUUID()
+
+      const { error: pwError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        password: newPassword,
+      })
+
+      if (pwError) {
+        console.error('Password reset error:', pwError)
+        return new Response(JSON.stringify({ error: pwError.message }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Log that it happened, but never the password itself.
+      await supabaseAdmin.from('activity_logs').insert({
+        user_id: authenticatedUserId,
+        action_type: 'update',
+        entity_type: 'user',
+        entity_id: userId,
+        entity_name: email || 'User',
+        metadata: { action: 'reset_password' }
+      })
+
+      console.log('Password reset for user:', userId)
+      return new Response(JSON.stringify({ success: true, password: newPassword }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
     if (action === 'reactivate') {
       const { error: reactivateError } = await supabaseAdmin.rpc('set_user_active', {
         _target: userId,

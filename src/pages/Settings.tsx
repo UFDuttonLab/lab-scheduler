@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Project } from "@/lib/types";
-import { Plus, Trash2, Edit, Loader2, Pencil, User, Mail, Smile, Tag } from "lucide-react";
+import { Plus, Trash2, Edit, Loader2, Pencil, User, Mail, Smile, Tag, KeyRound } from "lucide-react";
 import * as Icons from "lucide-react";
 import { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -189,7 +189,11 @@ const SPIRIT_ANIMALS = [
 ];
 
 const Settings = () => {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, userRole } = useAuth();
+  // Password reset is PI-only server-side; mirror that here so the button is not offered
+  // to a manager who would only get a 403.
+  const canResetPasswords = userRole === "pi";
+  const [resetResult, setResetResult] = useState<{ name: string; password: string } | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [versions, setVersions] = useState<AppVersion[]>([]);
@@ -590,6 +594,35 @@ const Settings = () => {
     fetchUsers();
   };
 
+  const handleResetUserPassword = async (userId: string, name: string) => {
+    if (!confirm(
+      `Set a new password for ${name}?\n\n` +
+      `Their current password stops working immediately. The new one is shown to you once - ` +
+      `you pass it on to them yourself, so this works even when email delivery is down.`
+    )) return;
+
+    const { data, error } = await supabase.functions.invoke('manage-users', {
+      body: { action: 'resetPassword', userId, email: name }
+    });
+
+    if (error || data?.error) {
+      const message = error
+        ? await readFunctionError(error, "Failed to reset password")
+        : String(data.error);
+      toast.error(message);
+      return;
+    }
+
+    if (!data?.password) {
+      toast.error("The server did not return a new password. Nothing was changed.");
+      return;
+    }
+
+    // Shown in a dialog, not a toast: a toast disappears, and losing this string means the
+    // account has a password nobody knows.
+    setResetResult({ name, password: data.password });
+  };
+
   const handleSaveUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -790,6 +823,17 @@ const Settings = () => {
               >
                 <Pencil className="w-4 h-4" />
               </Button>
+              {canResetPasswords && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => handleResetUserPassword(user.id, user.full_name || user.email)}
+                  title="Set a new password"
+                >
+                  <KeyRound className="w-4 h-4" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
@@ -1393,6 +1437,40 @@ const Settings = () => {
           </DialogContent>
         </Dialog>
       </main>
+      {/* Shown once, in a dialog rather than a toast: this string is the only copy of the
+          new password, and a toast that scrolls away leaves an account nobody can get into. */}
+      <Dialog open={!!resetResult} onOpenChange={(open) => { if (!open) setResetResult(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>New password for {resetResult?.name}</DialogTitle>
+            <DialogDescription>
+              Their old password stopped working. Give them this one directly - it is not
+              emailed anywhere and cannot be shown again. They can change it after signing in.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border bg-muted p-4 font-mono text-sm break-all select-all">
+            {resetResult?.password}
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(resetResult?.password ?? "");
+                  toast.success("Password copied");
+                } catch {
+                  // Clipboard access is blocked outside a secure context or without
+                  // permission; the value is selectable above, so this is not fatal.
+                  toast.error("Could not copy automatically - select the text and copy it.");
+                }
+              }}
+            >
+              Copy
+            </Button>
+            <Button variant="outline" onClick={() => setResetResult(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Footer />
     </div>
   );

@@ -1,7 +1,10 @@
 project_id = "ypaobygipbnkvnismhyy"
 
-[functions.send-password-reset]
-verify_jwt = false
-
-[functions.configure-smtp]
-verify_jwt = false
+# Password reset is now handled entirely by Supabase Auth over custom SMTP (Brevo).
+# The three functions that used to implement it by hand - request-password-reset,
+# send-password-reset (a Send Email Hook) and update-password - are gone, along with the
+# password_reset_tokens table they depended on. Supabase generates, expires and single-uses
+# the recovery token itself.
+#
+# manage-users is NOT listed here on purpose: without an entry it inherits verify_jwt = true,
+# so the gateway validates the caller's JWT signature before the function runs.
