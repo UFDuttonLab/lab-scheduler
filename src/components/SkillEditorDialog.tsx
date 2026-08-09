@@ -57,6 +57,29 @@ interface DraftCheck {
   isCritical: boolean;
 }
 
+/**
+ * Verdict on one half of a "delete every child row, then re-insert them" replace.
+ *
+ * These deletes cannot be handed straight to settleWrite: settleWrite reads zero rows
+ * changed as a denial, and a skill that legitimately has no checklist yet deletes nothing.
+ * The failure that actually bites here is the mirror image - RLS filtering the delete to
+ * zero rows while PostgREST still reports `error: null`, after which the insert that
+ * follows appends a SECOND full copy of the checklist and the user is shown a success
+ * toast. So the delete is checked for an error and then the table is re-read: anything
+ * still standing for this skill means the delete did not do what it claimed, and the
+ * insert must not run.
+ */
+const clearedOrProblem = (
+  del: { error: { message: string } | null },
+  after: { count: number | null; error: { message: string } | null },
+  denied: string
+): string | null => {
+  if (del.error) return del.error.message;
+  if (after.error) return `Could not confirm the change: ${after.error.message}`;
+  if ((after.count ?? 0) > 0) return denied;
+  return null;
+};
+
 export const SkillEditorDialog = ({
   open,
   skill,
@@ -214,7 +237,24 @@ export const SkillEditorDialog = ({
       // Checklist, prerequisites and equipment links are replaced wholesale. Simpler than
       // diffing, and safe: checklist_results on past sign-offs are a snapshot taken at
       // sign-off time, so rewriting the current checklist cannot rewrite history.
-      await supabase.from("skill_checklist_items").delete().eq("skill_id", skillId);
+      const clDel = await supabase
+        .from("skill_checklist_items")
+        .delete()
+        .eq("skill_id", skillId)
+        .select("skill_id");
+      const clAfter = await supabase
+        .from("skill_checklist_items")
+        .select("skill_id", { count: "exact", head: true })
+        .eq("skill_id", skillId);
+      const clProblem = clearedOrProblem(
+        clDel,
+        clAfter,
+        "You don't have permission to replace this skill's checklist. The old checklist is still in place and nothing was added on top of it."
+      );
+      if (clProblem) {
+        toast.error(clProblem);
+        return;
+      }
       if (cleanChecks.length) {
         const { error } = await supabase.from("skill_checklist_items").insert(
           cleanChecks.map((c, i) => ({
@@ -227,7 +267,24 @@ export const SkillEditorDialog = ({
         if (error) throw error;
       }
 
-      await supabase.from("skill_prerequisites").delete().eq("skill_id", skillId);
+      const preDel = await supabase
+        .from("skill_prerequisites")
+        .delete()
+        .eq("skill_id", skillId)
+        .select("skill_id");
+      const preAfter = await supabase
+        .from("skill_prerequisites")
+        .select("skill_id", { count: "exact", head: true })
+        .eq("skill_id", skillId);
+      const preProblem = clearedOrProblem(
+        preDel,
+        preAfter,
+        "You don't have permission to replace this skill's prerequisites. The old prerequisites are still in place."
+      );
+      if (preProblem) {
+        toast.error(preProblem);
+        return;
+      }
       if (prereqIds.length) {
         const { error } = await supabase
           .from("skill_prerequisites")
@@ -235,7 +292,24 @@ export const SkillEditorDialog = ({
         if (error) throw error;
       }
 
-      await supabase.from("skill_equipment").delete().eq("skill_id", skillId);
+      const eqDel = await supabase
+        .from("skill_equipment")
+        .delete()
+        .eq("skill_id", skillId)
+        .select("skill_id");
+      const eqAfter = await supabase
+        .from("skill_equipment")
+        .select("skill_id", { count: "exact", head: true })
+        .eq("skill_id", skillId);
+      const eqProblem = clearedOrProblem(
+        eqDel,
+        eqAfter,
+        "You don't have permission to replace this skill's equipment links. The old links are still in place."
+      );
+      if (eqProblem) {
+        toast.error(eqProblem);
+        return;
+      }
       if (equipIds.length) {
         const { error } = await supabase
           .from("skill_equipment")

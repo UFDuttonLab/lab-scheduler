@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { SkillDetailDialog } from "@/components/SkillDetailDialog";
+import { SkillQuizDialog } from "@/components/SkillQuizDialog";
+import { SkillQuizEditorDialog } from "@/components/SkillQuizEditorDialog";
 import { SkillEditorDialog } from "@/components/SkillEditorDialog";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,7 +32,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   Loader2,
-  GraduationCap,
   EyeOff,
   Eye,
   X,
@@ -38,6 +39,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   BookOpen,
+  ListChecks,
   Pencil,
   Plus,
   Trash2,
@@ -60,6 +62,7 @@ import {
   STAGE_CLASSES,
   RISK_CLASSES,
   RiskLevel,
+  QuizStatus,
   ReadingRef,
   isLapsed,
   isExpired,
@@ -106,6 +109,13 @@ const Skills = () => {
   const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
   const [manageCat, setManageCat] = useState<string>("all");
 
+  // Quiz state. Counts come from the question bank (which everyone may read); status comes
+  // from skill_quiz_status, which RLS scopes to your own rows unless you are pi/manager.
+  const [quizSkill, setQuizSkill] = useState<Skill | null>(null);
+  const [quizEditSkill, setQuizEditSkill] = useState<Skill | null>(null);
+  const [quizCounts, setQuizCounts] = useState<Record<string, number>>({});
+  const [myQuizStatus, setMyQuizStatus] = useState<Record<string, QuizStatus>>({});
+
   // Sign-off dialog state
   const [signOffOpen, setSignOffOpen] = useState(false);
   const [soTrainee, setSoTrainee] = useState<string>("");
@@ -123,9 +133,54 @@ const Skills = () => {
   }, [flagLoading, canSeeModule, navigate]);
 
   useEffect(() => {
-    if (canSeeModule) fetchAll();
+    if (canSeeModule) {
+      fetchAll();
+      loadQuizState();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canSeeModule]);
+
+  /**
+   * Quiz counts and this user's standing. Kept separate from fetchAll so it can be re-run
+   * on its own the moment someone passes, without refetching the whole catalog.
+   *
+   * Note we count questions rather than reading the answer key - the key is invisible to
+   * anyone but a PI, and the count is all the UI needs to know whether a gate applies.
+   */
+  const loadQuizState = async () => {
+    const [q, st] = await Promise.all([
+      supabase.from("skill_quiz_questions").select("skill_id").eq("active", true),
+      supabase.from("skill_quiz_status").select("*"),
+    ]);
+
+    // Both failures are silent-but-wrong if swallowed: an unread question count hides the
+    // quiz entirely (and the sign-off is then rejected server-side with no explanation),
+    // and an unread status makes someone who has already passed be told they have not.
+    if (q.error) {
+      toast.error(`Could not check which skills have a quiz: ${q.error.message}`);
+    } else {
+      const counts: Record<string, number> = {};
+      for (const row of q.data ?? []) counts[row.skill_id] = (counts[row.skill_id] ?? 0) + 1;
+      setQuizCounts(counts);
+    }
+    if (st.error) {
+      toast.error(`Could not load your quiz results: ${st.error.message}`);
+    }
+    if (!st.error) {
+      const byId: Record<string, QuizStatus> = {};
+      for (const r of st.data ?? []) {
+        if (r.user_id !== user?.id || !r.skill_id) continue;
+        byId[r.skill_id] = {
+          userId: r.user_id,
+          skillId: r.skill_id,
+          attempts: r.attempts ?? 0,
+          bestPct: r.best_pct === null || r.best_pct === undefined ? null : Number(r.best_pct),
+          passed: !!r.passed,
+        };
+      }
+      setMyQuizStatus(byId);
+    }
+  };
 
   const fetchAll = async () => {
     try {
@@ -176,6 +231,10 @@ const Skills = () => {
           riskLevel: s.risk_level as RiskLevel,
           sortOrder: s.sort_order,
           active: s.active,
+          // Must be mapped: without these the quiz dialog falls back to a hardcoded 80 and
+          // would tell a trainee the wrong pass mark the moment a PI changes it.
+          quizPassPct: s.quiz_pass_pct ?? undefined,
+          quizVersion: s.quiz_version ?? undefined,
         }))
       );
       setChecklists(
@@ -957,6 +1016,20 @@ const Skills = () => {
                                   {s.active ? "Active" : "Off"}
                                 </span>
                               </label>
+                              {/* Count is of ACTIVE questions - the ones the grader will
+                                  actually ask - which is what loadQuizState collects. */}
+                              <span className="text-xs text-muted-foreground hidden md:inline">
+                                {quizCounts[s.id] ?? 0} quiz
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                aria-label={`Edit quiz questions for ${s.code}`}
+                                onClick={() => setQuizEditSkill(s)}
+                              >
+                                <ListChecks className="w-4 h-4" />
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -999,6 +1072,23 @@ const Skills = () => {
         onAcknowledgeReading={handleAcknowledgeReading}
         acknowledging={acknowledging}
         onOpenChange={(open) => !open && setDetailSkill(null)}
+        quizQuestionCount={detailSkill ? quizCounts[detailSkill.id] ?? 0 : 0}
+        quizStatus={detailSkill ? myQuizStatus[detailSkill.id] : undefined}
+        onTakeQuiz={(s) => setQuizSkill(s)}
+      />
+
+      <SkillQuizDialog
+        skill={quizSkill}
+        open={!!quizSkill}
+        onOpenChange={(open) => !open && setQuizSkill(null)}
+        onPassed={loadQuizState}
+      />
+
+      <SkillQuizEditorDialog
+        skill={quizEditSkill}
+        open={!!quizEditSkill}
+        onOpenChange={(open) => !open && setQuizEditSkill(null)}
+        onSaved={loadQuizState}
       />
 
       <SkillEditorDialog

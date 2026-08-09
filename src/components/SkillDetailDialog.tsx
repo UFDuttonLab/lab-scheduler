@@ -25,6 +25,7 @@ import {
   ChecklistItem,
   UserSkill,
   SkillSignoff,
+  QuizStatus,
   RefKind,
   STAGE_LABELS,
   STAGE_CLASSES,
@@ -37,6 +38,7 @@ import {
   refKind,
   sortedRefs,
 } from "@/lib/skills";
+import { QuizStatusLine } from "@/components/SkillQuizDialog";
 
 const REF_ICONS: Record<RefKind, typeof ExternalLink> = {
   video: PlayCircle,
@@ -60,6 +62,10 @@ interface SkillDetailDialogProps {
   onAcknowledgeReading: (skill: Skill) => void;
   acknowledging: boolean;
   onOpenChange: (open: boolean) => void;
+  /** How many active questions this skill has. Zero means the quiz gate does not apply. */
+  quizQuestionCount?: number;
+  quizStatus?: QuizStatus;
+  onTakeQuiz?: (skill: Skill) => void;
 }
 
 export const SkillDetailDialog = ({
@@ -73,6 +79,9 @@ export const SkillDetailDialog = ({
   onAcknowledgeReading,
   acknowledging,
   onOpenChange,
+  quizQuestionCount = 0,
+  quizStatus,
+  onTakeQuiz,
 }: SkillDetailDialogProps) => {
   const bodyHtml = useMemo(() => renderSkillMarkdown(skill?.instructionsMd), [skill]);
 
@@ -206,6 +215,18 @@ export const SkillDetailDialog = ({
                     </>
                   )}
                 </div>
+              )}
+
+              {/* The quiz sits between the reading and the practical, because that is the
+                  order it gates in: read, acknowledge, pass, then be observed. */}
+              {onTakeQuiz && (
+                <QuizStatusLine
+                  hasQuiz={quizQuestionCount > 0}
+                  passed={!!quizStatus?.passed}
+                  attempts={quizStatus?.attempts ?? 0}
+                  bestPct={quizStatus?.bestPct ?? null}
+                  onTake={() => onTakeQuiz(skill)}
+                />
               )}
             </section>
 

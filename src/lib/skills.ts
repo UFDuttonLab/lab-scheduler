@@ -129,6 +129,22 @@ export interface Skill {
   riskLevel: RiskLevel;
   sortOrder: number;
   active: boolean;
+  /** Overall percentage needed to pass this skill's quiz. Critical questions are all-or-nothing on top. */
+  quizPassPct?: number;
+  /** Bumped whenever the question bank changes. Informational: it does not revoke a pass. */
+  quizVersion?: number;
+}
+
+/**
+ * Per-user, per-skill quiz standing, derived from the append-only attempts ledger rather
+ * than stored - see 20260809200000_skills_quiz.sql for why.
+ */
+export interface QuizStatus {
+  userId: string;
+  skillId: string;
+  attempts: number;
+  bestPct: number | null;
+  passed: boolean;
 }
 
 export interface ChecklistItem {

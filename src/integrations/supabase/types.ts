@@ -574,6 +574,145 @@ export type Database = {
           },
         ]
       }
+      skill_quiz_answers: {
+        Row: {
+          correct_keys: string[]
+          explanation: string | null
+          question_id: string
+          updated_at: string
+        }
+        Insert: {
+          correct_keys: string[]
+          explanation?: string | null
+          question_id: string
+          updated_at?: string
+        }
+        Update: {
+          correct_keys?: string[]
+          explanation?: string | null
+          question_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "skill_quiz_answers_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: true
+            referencedRelation: "skill_quiz_questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      skill_quiz_attempts: {
+        Row: {
+          answers: Json
+          attempt_no: number
+          id: string
+          n_correct: number
+          n_critical: number
+          n_critical_correct: number
+          n_questions: number
+          pass_pct_required: number
+          passed: boolean
+          quiz_version: number
+          score_pct: number
+          skill_id: string
+          submitted_at: string
+          user_id: string
+        }
+        Insert: {
+          answers?: Json
+          attempt_no: number
+          id?: string
+          n_correct: number
+          n_critical: number
+          n_critical_correct: number
+          n_questions: number
+          pass_pct_required: number
+          passed: boolean
+          quiz_version: number
+          score_pct: number
+          skill_id: string
+          submitted_at?: string
+          user_id: string
+        }
+        Update: {
+          answers?: Json
+          attempt_no?: number
+          id?: string
+          n_correct?: number
+          n_critical?: number
+          n_critical_correct?: number
+          n_questions?: number
+          pass_pct_required?: number
+          passed?: boolean
+          quiz_version?: number
+          score_pct?: number
+          skill_id?: string
+          submitted_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "skill_quiz_attempts_skill_id_fkey"
+            columns: ["skill_id"]
+            isOneToOne: false
+            referencedRelation: "skills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "skill_quiz_attempts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      skill_quiz_questions: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          is_critical: boolean
+          options: Json
+          prompt: string
+          skill_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          is_critical?: boolean
+          options?: Json
+          prompt: string
+          skill_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          is_critical?: boolean
+          options?: Json
+          prompt?: string
+          skill_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "skill_quiz_questions_skill_id_fkey"
+            columns: ["skill_id"]
+            isOneToOne: false
+            referencedRelation: "skills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       skill_signoffs: {
         Row: {
           checklist_results: Json
@@ -583,6 +722,7 @@ export type Database = {
           id: string
           observed_at: string
           prereqs_waived: boolean
+          quiz_waived: boolean
           revoke_reason: string | null
           revoked_at: string | null
           revoked_by: string | null
@@ -600,6 +740,7 @@ export type Database = {
           id?: string
           observed_at?: string
           prereqs_waived?: boolean
+          quiz_waived?: boolean
           revoke_reason?: string | null
           revoked_at?: string | null
           revoked_by?: string | null
@@ -617,6 +758,7 @@ export type Database = {
           id?: string
           observed_at?: string
           prereqs_waived?: boolean
+          quiz_waived?: boolean
           revoke_reason?: string | null
           revoked_at?: string | null
           revoked_by?: string | null
@@ -732,6 +874,8 @@ export type Database = {
           instructions_md: string | null
           instructions_version: number
           name: string
+          quiz_pass_pct: number
+          quiz_version: number
           reading_refs: Json
           recert_months: number | null
           requires_practical: boolean
@@ -752,6 +896,8 @@ export type Database = {
           instructions_md?: string | null
           instructions_version?: number
           name: string
+          quiz_pass_pct?: number
+          quiz_version?: number
           reading_refs?: Json
           recert_months?: number | null
           requires_practical?: boolean
@@ -772,6 +918,8 @@ export type Database = {
           instructions_md?: string | null
           instructions_version?: number
           name?: string
+          quiz_pass_pct?: number
+          quiz_version?: number
           reading_refs?: Json
           recert_months?: number | null
           requires_practical?: boolean
@@ -867,7 +1015,19 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      skill_quiz_status: {
+        Row: {
+          attempts: number | null
+          best_pct: number | null
+          first_passed_at: string | null
+          last_attempt_at: string | null
+          passed: boolean | null
+          passed_quiz_version: number | null
+          skill_id: string
+          user_id: string
+        }
+        Relationships: []
+      }
     }
     Functions: {
       get_current_version: { Args: never; Returns: string }
@@ -908,6 +1068,11 @@ export type Database = {
         }
         Returns: undefined
       }
+      grade_skill_quiz: {
+        Args: { _answers: Json; _skill_id: string }
+        Returns: Json
+      }
+      get_quiz_attempt_detail: { Args: { _attempt_id: string }; Returns: Json }
     }
     Enums: {
       action_type: "create" | "update" | "delete" | "login" | "logout"
