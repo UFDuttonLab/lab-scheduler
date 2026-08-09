@@ -2,13 +2,21 @@
 
 Dutton Lab, University of Florida — prepared for Chris Dutton, 9 August 2026
 
-Every question below is flagged `is_critical` in the training system. Critical questions are not
-scored on a curve: a trainee must answer **100% of them correctly** to pass the skill at all, no
-matter how well they do on the rest of the quiz. That makes each answer key load-bearing. If a key
-is wrong, the correct real-world answer is marked wrong, every trainee who knows the material fails,
-and the skill stays locked for the whole lab — there is no appeal path in the software and no way
-round it except a PI waiver granted one person at a time. This review is the last line of defence
-before that happens.
+Every question below is flagged `is_critical` in the training system.
+
+**The pass rule changed on 9 August 2026.** Passing is now the overall percentage alone —
+80% — regardless of critical questions. The earlier rule required 100% of critical questions
+as well, and that turned out to be far sharper than it sounded: with only 5–7 questions per
+skill, 80% already tolerates just one wrong answer, so the critical veto mostly served to
+fail someone at 86% for a single slip, and it made every one of these 167 keys capable of
+locking a skill for the whole lab with no way through except a per-person waiver. That risk
+is gone. A wrong key here now costs a trainee one question, not the skill.
+
+Critical questions still matter and are still worth your time. They remain flagged, they are
+still shown to the trainee as critical, and every attempt records how many critical questions
+were missed — so "passed but got a critical one wrong" is visible to you and is exactly the
+conversation to have before you sign someone off on the practical. What has changed is the
+consequence of an error in this document: it is now a quality problem, not an outage.
 
 Work through the checkboxes and tick the ones you agree with. Where you disagree, **strike through
 or annotate the line in this document rather than editing the database** — leave the wrong key
@@ -17,8 +25,10 @@ in one reviewed batch instead of drifting in one edit at a time. Prompts, option
 below are reproduced verbatim from the database; the only thing added is the `✓` marking which
 option the key currently treats as correct.
 
-There are **167 critical questions across 51 skills**. The 17 with the worst failure mode are
-listed first.
+There are **167 critical questions across 51 skills** — the two without any are HPG-30
+(writing a SLURM job script) and HPG-40 (right-sizing jobs with `seff`), where nothing in the
+skill can hurt a person or destroy hardware. The 17 with the worst failure mode are listed
+first.
 
 ---
 

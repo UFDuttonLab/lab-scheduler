@@ -1,77 +1,22 @@
 -- =====================================================================================
--- 2026-08-08  Reconcile migration history with the hand-rolled password-reset removal.
+-- 2026-08-08  SUPERSEDED — this migration is intentionally a NO-OP. Do not restore it.
 --
--- WHAT THIS IS. Unlike the other hand-written migrations in this directory, this one is
--- NOT a record of a change already applied through here. It is the reverse: the change
--- was made to the live database out of band (dashboard / Lovable), and the migration
--- history was never told. This file closes that gap.
+-- This file once contained `DROP TABLE public.password_reset_tokens`. It was written on the
+-- strength of a comment in supabase/config.toml claiming the table had already been dropped
+-- in production. That claim was wrong. The table is live and holds 44 rows.
 --
--- WHAT DRIFTED. supabase/config.toml states:
+-- It was NEVER APPLIED, and the decision was reversed: the table stays. It is orphaned but
+-- harmless — nothing in src/ reads it, manage-users does not touch it, and a dependency
+-- check found no views, functions, triggers or foreign keys referencing it. Dropping it
+-- gains nothing, and the old password-reset edge functions may still be deployed
+-- server-side even though their source has been removed from this repo.
 --
---     "Password reset is now handled entirely by Supabase Auth over custom SMTP (Brevo).
---      The three functions that used to implement it by hand - request-password-reset,
---      send-password-reset (a Send Email Hook) and update-password - are gone, along with
---      the password_reset_tokens table they depended on."
---
--- but nothing ever dropped the table in a migration. `password_reset_tokens` is still
--- created by 20251002190904 and given four deny-all policies by 20251002191145, so a
--- fresh `supabase db reset` - or a new branch, or a rebuild of the project - resurrects a
--- table that does not exist in production, with a foreign key onto profiles and four
--- policies referencing it. That is the kind of divergence that makes the migration
--- directory untrustworthy, which is the same root cause the 2026-07-25 audit was about:
--- two sources of truth for one thing.
---
--- WHY THE TABLE IS SAFE TO DROP.
---   * Nothing in src/ reads or writes it. The only remaining mentions are three
---     explanatory comments (Auth.tsx:73, ResetPasswordVerify.tsx:26) and a stale block in
---     the generated src/integrations/supabase/types.ts, removed in the same commit.
---   * The only surviving edge function is manage-users. supabase.functions.invoke is
---     called five times in the codebase, all five for manage-users (Settings.tsx).
---   * Recovery now runs on Supabase's own PKCE flow: the link lands on the site root as
---     "?code=...", supabase-js exchanges it during client init and fires
---     PASSWORD_RECOVERY, AuthContext routes to /reset-password, and updateUser() is
---     authorised by the real short-lived session. Supabase generates, expires and
---     single-uses the token itself. See the comment block at ResetPasswordVerify.tsx:20-26.
---
--- IDEMPOTENT AND ORDER-SAFE. IF EXISTS throughout, and CASCADE takes the two indexes, the
--- four policies and the profiles foreign key with the table. Running this against the live
--- database (where the table is already gone) is a no-op. Running it against a freshly
--- reset database undoes 20251002190904 and 20251002191145. Both are correct outcomes.
+-- The body is emptied rather than the file deleted because the file is already committed and
+-- an unapplied DROP sitting in supabase/migrations/ is a live hazard: anyone running
+-- `supabase db push`, resetting a branch, or rebuilding an environment from this directory
+-- would destroy production data that a deliberate decision chose to keep. If you would
+-- rather it were gone entirely, `git rm` this file — that is safe, since it has never been
+-- applied anywhere and appears in no migration ledger.
 -- =====================================================================================
 
--- 1. Drop the table.
---
--- The four "Deny all ..." policies from 20251002191145 and the two indexes from
--- 20251002190904 are dependent objects and go with it; they are not dropped separately
--- because DROP POLICY on a non-existent table errors even with IF EXISTS.
-
-DROP TABLE IF EXISTS public.password_reset_tokens CASCADE;
-
-
--- 2. Verification.
---
--- Run against the live project after applying. Expected: zero rows from all three.
---
---   -- the table is gone
---   SELECT to_regclass('public.password_reset_tokens');            -- expect NULL
---
---   -- no orphaned policies
---   SELECT policyname FROM pg_policies
---    WHERE schemaname = 'public' AND tablename = 'password_reset_tokens';
---
---   -- no orphaned indexes
---   SELECT indexname FROM pg_indexes
---    WHERE schemaname = 'public' AND tablename = 'password_reset_tokens';
---
--- Then regenerate the client types so they match:
---
---   npx supabase gen types typescript --project-id ypaobygipbnkvnismhyy \
---     > src/integrations/supabase/types.ts
---
--- Verified 2026-08-08:
---   nothing in src/ invokes request-password-reset ............... PASS
---   nothing in src/ invokes send-password-reset .................. PASS
---   nothing in src/ invokes update-password ...................... PASS
---   all 5 functions.invoke call sites target manage-users ........ PASS
---   password_reset_tokens absent from src/ outside types.ts ...... PASS
---   npm run typecheck after removing the types.ts block .......... see commit
+SELECT 1 WHERE false;  -- deliberately does nothing

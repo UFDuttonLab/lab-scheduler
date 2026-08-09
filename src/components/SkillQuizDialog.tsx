@@ -255,7 +255,7 @@ export const SkillQuizDialog = ({
               ? result.passed
                 ? "Passed. The correct answers and explanations are below — worth reading before you go."
                 : "Not passed this time. The questions you got wrong are marked; go back over those parts of the instructions and try again."
-              : `Every question must be answered. You need ${skill.quizPassPct ?? 80}% overall and every critical question right. You can retake this as many times as you need.`}
+              : `Every question must be answered. You need ${skill.quizPassPct ?? 80}% overall to pass. You can retake this as many times as you need.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -294,9 +294,16 @@ export const SkillQuizDialog = ({
                   </p>
                   {!result.passed && (
                     <p className="text-muted-foreground mt-1">
-                      {result.n_critical_correct < result.n_critical
-                        ? "Every critical question has to be right, whatever the overall score."
-                        : `You need ${result.pass_pct_required}% overall.`}
+                      You need {result.pass_pct_required}% overall.
+                      {result.n_critical_correct < result.n_critical &&
+                        " One of the ones you missed was a critical item — worth re-reading that part closely."}
+                    </p>
+                  )}
+                  {result.passed && result.n_critical_correct < result.n_critical && (
+                    <p className="text-amber-700 dark:text-amber-400 mt-1">
+                      You passed, but missed {result.n_critical - result.n_critical_correct} critical
+                      question{result.n_critical - result.n_critical_correct === 1 ? "" : "s"}. Go back
+                      over those before your practical check.
                     </p>
                   )}
                 </div>
