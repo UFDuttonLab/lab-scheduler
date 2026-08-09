@@ -908,22 +908,6 @@ export const ARMicrobeCanvas = ({
         ctx.restore();
       }
 
-      // Crosshair
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 20, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(centerX, centerY - 25);
-      ctx.lineTo(centerX, centerY - 15);
-      ctx.moveTo(centerX, centerY + 25);
-      ctx.lineTo(centerX, centerY + 15);
-      ctx.moveTo(centerX - 25, centerY);
-      ctx.lineTo(centerX - 15, centerY);
-      ctx.moveTo(centerX + 25, centerY);
-      ctx.lineTo(centerX + 15, centerY);
-      ctx.stroke();
 
       // Damage flash - drawn last so it sits over the whole scene.
       const sinceDamage = now - damageFlashRef.current;
