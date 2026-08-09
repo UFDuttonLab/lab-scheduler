@@ -8,7 +8,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { BookOpen, CheckCircle2, ExternalLink, AlertTriangle, Clock } from "lucide-react";
 import {
   Skill,
@@ -90,7 +89,7 @@ export const SkillDetailDialog = ({
           {skill.summary && <DialogDescription>{skill.summary}</DialogDescription>}
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4 -mr-4">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-4 -mr-4">
           <div className="space-y-6 pb-2">
             {prereqs.length > 0 && (
               <div className="text-sm text-muted-foreground">
@@ -106,7 +105,7 @@ export const SkillDetailDialog = ({
               </h3>
               {skill.instructionsMd ? (
                 <div
-                  className="text-sm leading-relaxed [&_strong]:font-semibold"
+                  className="text-sm leading-relaxed break-words [&_strong]:font-semibold"
                   dangerouslySetInnerHTML={{ __html: bodyHtml }}
                 />
               ) : (
@@ -237,7 +236,7 @@ export const SkillDetailDialog = ({
               )}
             </section>
           </div>
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );

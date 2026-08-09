@@ -952,7 +952,7 @@ const Settings = () => {
                     Add Project
                   </Button>
                 </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>{editingProject ? "Edit Project" : "Add New Project"}</DialogTitle>
                   <DialogDescription>
@@ -1134,7 +1134,7 @@ const Settings = () => {
                     Release New Version
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Release New Version</DialogTitle>
                     <DialogDescription>
@@ -1234,7 +1234,7 @@ const Settings = () => {
 
         {/* Add User Dialog */}
         <Dialog open={isAddUserDialogOpen} onOpenChange={setIsAddUserDialogOpen}>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New User</DialogTitle>
             <DialogDescription>
@@ -1337,7 +1337,7 @@ const Settings = () => {
 
         {/* Edit User Dialog */}
         <Dialog open={isEditUserDialogOpen} onOpenChange={setIsEditUserDialogOpen}>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit User</DialogTitle>
               <DialogDescription>

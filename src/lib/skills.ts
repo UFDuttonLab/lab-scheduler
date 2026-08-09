@@ -183,9 +183,19 @@ export const recertLabel = (months?: number): string => {
  *
  * Deliberately hand-rolled rather than adding react-markdown: this app has no markdown
  * dependency today and the seeded instruction text only uses bold, italic, inline code,
- * bullet and numbered lists, and simple pipe tables. Everything is HTML-escaped FIRST, so
- * the output is safe to feed to dangerouslySetInnerHTML - the only tags in the result are
- * the ones this function emits.
+ * fenced code blocks, bullet and numbered lists, and simple pipe tables. Everything is
+ * HTML-escaped FIRST, so the output is safe to feed to dangerouslySetInnerHTML - the only
+ * tags in the result are the ones this function emits.
+ *
+ * SOFT WRAP. Markdown paragraphs are separated by BLANK lines, not by every newline. The
+ * seeded instruction text is hard-wrapped at ~90 characters for readability in the editor
+ * and in the migration files, so treating each source line as its own paragraph pinned the
+ * rendered text to that 90-character measure instead of letting it reflow to the width of
+ * whatever it is being read in, and put paragraph spacing between what should have been
+ * consecutive lines of one paragraph. It also split **bold spans** that happened to cross a
+ * line break, leaving literal asterisks on screen (28 lines across the catalog did this).
+ * Consecutive non-blank lines are therefore joined into a single block before any inline
+ * formatting runs. Line breaks are preserved in exactly one place: inside a ``` fence.
  */
 export const renderSkillMarkdown = (src: string | null | undefined): string => {
   if (!src) return '';
@@ -197,14 +207,33 @@ export const renderSkillMarkdown = (src: string | null | undefined): string => {
     s
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/(^|[^\w*])\*(?!\s)([^*]+?)(?<!\s)\*(?![\w*])/g, '$1<em>$2</em>')
-      .replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 rounded bg-muted text-[0.85em]">$1</code>');
+      .replace(
+        /`([^`]+)`/g,
+        '<code class="px-1 py-0.5 rounded bg-muted text-[0.85em] break-words">$1</code>'
+      );
 
   const out: string[] = [];
+
+  let para: string[] = [];          // buffered soft-wrapped paragraph lines
+  let item: string[] | null = null; // buffered soft-wrapped lines of the open <li>
   let inTable = false;
   let inList = false;
   let listTag: 'ul' | 'ol' = 'ul';
 
+  const flushPara = () => {
+    if (para.length) {
+      out.push(`<p class="my-2">${inline(para.join(' '))}</p>`);
+      para = [];
+    }
+  };
+  const flushItem = () => {
+    if (item) {
+      out.push(`<li>${inline(item.join(' '))}</li>`);
+      item = null;
+    }
+  };
   const closeList = () => {
+    flushItem();
     if (inList) {
       out.push(`</${listTag}>`);
       inList = false;
@@ -217,13 +246,35 @@ export const renderSkillMarkdown = (src: string | null | undefined): string => {
     }
   };
 
-  for (const raw of esc(src).split('\n')) {
+  const lines = esc(src).split('\n');
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
     const line = raw.trim();
+
+    // ``` fenced code block - the one construct where newlines are meaningful.
+    if (/^```/.test(line)) {
+      flushPara();
+      closeList();
+      closeTable();
+      const body: string[] = [];
+      i++;
+      while (i < lines.length && !/^```/.test(lines[i].trim())) {
+        body.push(lines[i]);
+        i++;
+      }
+      out.push(
+        '<pre class="my-3 p-3 rounded-md bg-muted overflow-x-auto text-xs leading-relaxed">' +
+          `<code>${body.join('\n')}</code></pre>`
+      );
+      continue;
+    }
 
     // pipe table
     if (line.startsWith('|') && line.endsWith('|')) {
       const cells = line.slice(1, -1).split('|').map((c) => c.trim());
       if (cells.every((c) => /^:?-{2,}:?$/.test(c))) continue; // separator row
+      flushPara();
       closeList();
       if (!inTable) {
         out.push(
@@ -246,11 +297,13 @@ export const renderSkillMarkdown = (src: string | null | undefined): string => {
     }
     closeTable();
 
-    const bullet = /^-\s+(.*)$/.exec(line);
-    const numbered = /^\d+\.\s+(.*)$/.exec(line);
+    const bullet = /^[-*]\s+(.*)$/.exec(line);
+    const numbered = /^\d+[.)]\s+(.*)$/.exec(line);
     if (bullet || numbered) {
+      flushPara();
       const wantTag: 'ul' | 'ol' = bullet ? 'ul' : 'ol';
       if (inList && listTag !== wantTag) closeList();
+      flushItem();
       if (!inList) {
         listTag = wantTag;
         out.push(
@@ -260,14 +313,24 @@ export const renderSkillMarkdown = (src: string | null | undefined): string => {
         );
         inList = true;
       }
-      out.push(`<li>${inline((bullet ?? numbered)![1])}</li>`);
+      item = [(bullet ?? numbered)![1]];
       continue;
     }
-    closeList();
 
-    if (!line) continue;
-    out.push(`<p class="my-2">${inline(line)}</p>`);
+    // Blank line: end whatever block was open.
+    if (!line) {
+      flushPara();
+      closeList();
+      continue;
+    }
+
+    // Plain text. Inside an open list it is a continuation of that bullet (55 lines in the
+    // catalog do this); otherwise it is a continuation of the paragraph.
+    if (item) item.push(line);
+    else para.push(line);
   }
+
+  flushPara();
   closeList();
   closeTable();
   return out.join('\n');
