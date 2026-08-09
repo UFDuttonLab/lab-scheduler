@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Calendar, Settings, History, Wrench, BarChart3, LogOut, Clock, FileText, HelpCircle } from "lucide-react";
+import { Home, Calendar, Settings, History, Wrench, BarChart3, LogOut, Clock, FileText, HelpCircle, GraduationCap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -8,12 +8,15 @@ import { ROLE_LABELS } from "@/lib/permissions";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { MobileNavigation } from "./MobileNavigation";
 import { MobileHeader } from "./MobileHeader";
+import { useSkillsModule } from "@/hooks/useSkillsModule";
 
 export const Navigation = () => {
   const location = useLocation();
   const { user, userRole, permissions, signOut } = useAuth();
   const isMobile = useIsMobile();
   const isZombieUnlocked = sessionStorage.getItem('zombieLunchUnlocked') === 'true';
+  // Hidden until a PI flips skill_module_settings.visible_to_all; pi/manager see it early.
+  const { canSeeModule: canSeeSkills } = useSkillsModule();
 
   if (isMobile) {
     return (
@@ -32,6 +35,7 @@ export const Navigation = () => {
     { path: "/analytics", label: "Analytics", icon: BarChart3, requirePermission: 'canViewAnalytics' },
     { path: "/history", label: "History", icon: History },
     { path: "/activity-log", label: "Activity Log", icon: FileText },
+    ...(canSeeSkills ? [{ path: "/skills", label: "Skills", icon: GraduationCap }] : []),
     { path: "/settings", label: "Settings", icon: Settings, requirePermission: 'canManageUsers' },
     { path: "/help", label: "Help", icon: HelpCircle },
   ];

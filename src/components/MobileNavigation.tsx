@@ -1,13 +1,15 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Calendar, Settings, History, Wrench, BarChart3, Clock, FileText, HelpCircle } from "lucide-react";
+import { Home, Calendar, Settings, History, Wrench, BarChart3, Clock, FileText, HelpCircle, GraduationCap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSkillsModule } from "@/hooks/useSkillsModule";
 
 export const MobileNavigation = () => {
   const location = useLocation();
   const { permissions } = useAuth();
   const isZombieUnlocked = sessionStorage.getItem('zombieLunchUnlocked') === 'true';
   const isARMicrobeUnlocked = sessionStorage.getItem('arMicrobeUnlocked') === 'true';
+  const { canSeeModule: canSeeSkills } = useSkillsModule();
 
   const baseNavItems = [
     { path: "/", label: "Home", icon: Home },
@@ -17,6 +19,7 @@ export const MobileNavigation = () => {
     { path: "/analytics", label: "Stats", icon: BarChart3, requirePermission: 'canViewAnalytics' },
     { path: "/history", label: "History", icon: History },
     { path: "/activity-log", label: "Activity", icon: FileText },
+    ...(canSeeSkills ? [{ path: "/skills", label: "Skills", icon: GraduationCap }] : []),
     { path: "/settings", label: "Settings", icon: Settings, requirePermission: 'canManageUsers' },
     { path: "/help", label: "Help", icon: HelpCircle },
   ];

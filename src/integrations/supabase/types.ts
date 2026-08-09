@@ -275,41 +275,6 @@ export type Database = {
           },
         ]
       }
-      password_reset_tokens: {
-        Row: {
-          created_at: string
-          expires_at: string
-          id: string
-          token: string
-          used: boolean
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          expires_at: string
-          id?: string
-          token: string
-          used?: boolean
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          expires_at?: string
-          id?: string
-          token?: string
-          used?: boolean
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "password_reset_tokens_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       profiles: {
         Row: {
           active: boolean
@@ -445,6 +410,461 @@ export type Database = {
         }
         Relationships: []
       }
+      skill_categories: {
+        Row: {
+          active: boolean
+          code: string
+          created_at: string
+          description: string | null
+          icon: string | null
+          id: string
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          code: string
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          code?: string
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+        ]
+      }
+      skill_checklist_items: {
+        Row: {
+          created_at: string
+          id: string
+          is_critical: boolean
+          item_text: string
+          skill_id: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_critical: boolean
+          item_text: string
+          skill_id: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_critical?: boolean
+          item_text?: string
+          skill_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "skill_checklist_items_skill_id_fkey"
+            columns: ["skill_id"]
+            isOneToOne: false
+            referencedRelation: "skills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      skill_equipment: {
+        Row: {
+          equipment_id: string
+          skill_id: string
+        }
+        Insert: {
+          equipment_id: string
+          skill_id: string
+        }
+        Update: {
+          equipment_id?: string
+          skill_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "skill_equipment_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "skill_equipment_skill_id_fkey"
+            columns: ["skill_id"]
+            isOneToOne: false
+            referencedRelation: "skills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      skill_module_settings: {
+        Row: {
+          allowlist_user_ids: string[]
+          id: boolean
+          updated_at: string
+          updated_by: string | null
+          visible_to_all: boolean
+        }
+        Insert: {
+          allowlist_user_ids?: string[]
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+          visible_to_all?: boolean
+        }
+        Update: {
+          allowlist_user_ids?: string[]
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+          visible_to_all?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "skill_module_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      skill_prerequisites: {
+        Row: {
+          prereq_id: string
+          skill_id: string
+        }
+        Insert: {
+          prereq_id: string
+          skill_id: string
+        }
+        Update: {
+          prereq_id?: string
+          skill_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "skill_prerequisites_prereq_id_fkey"
+            columns: ["prereq_id"]
+            isOneToOne: false
+            referencedRelation: "skills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "skill_prerequisites_skill_id_fkey"
+            columns: ["skill_id"]
+            isOneToOne: false
+            referencedRelation: "skills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      skill_signoffs: {
+        Row: {
+          checklist_results: Json
+          comments: string | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          observed_at: string
+          prereqs_waived: boolean
+          revoke_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          signed_by: string
+          skill_id: string
+          stage_granted: Database["public"]["Enums"]["skill_stage"]
+          user_id: string
+          waiver_reason: string | null
+        }
+        Insert: {
+          checklist_results?: Json
+          comments?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          observed_at?: string
+          prereqs_waived?: boolean
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          signed_by: string
+          skill_id: string
+          stage_granted: Database["public"]["Enums"]["skill_stage"]
+          user_id: string
+          waiver_reason?: string | null
+        }
+        Update: {
+          checklist_results?: Json
+          comments?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          observed_at?: string
+          prereqs_waived?: boolean
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          signed_by?: string
+          skill_id?: string
+          stage_granted?: Database["public"]["Enums"]["skill_stage"]
+          user_id?: string
+          waiver_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "skill_signoffs_signed_by_fkey"
+            columns: ["signed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "skill_signoffs_skill_id_fkey"
+            columns: ["skill_id"]
+            isOneToOne: false
+            referencedRelation: "skills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "skill_signoffs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      skill_track_items: {
+        Row: {
+          skill_id: string
+          sort_order: number
+          track_id: string
+        }
+        Insert: {
+          skill_id: string
+          sort_order?: number
+          track_id: string
+        }
+        Update: {
+          skill_id?: string
+          sort_order?: number
+          track_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "skill_track_items_skill_id_fkey"
+            columns: ["skill_id"]
+            isOneToOne: false
+            referencedRelation: "skills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "skill_track_items_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "skill_tracks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      skill_tracks: {
+        Row: {
+          active: boolean
+          code: string
+          created_at: string
+          description: string | null
+          icon: string | null
+          id: string
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          code: string
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          code?: string
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+        ]
+      }
+      skills: {
+        Row: {
+          active: boolean
+          category_id: string
+          code: string
+          created_at: string
+          est_train_minutes: number | null
+          external_ref: string | null
+          id: string
+          instructions_md: string | null
+          instructions_version: number
+          name: string
+          reading_refs: Json
+          recert_months: number | null
+          requires_practical: boolean
+          requires_reading: boolean
+          risk_level: string
+          sort_order: number
+          summary: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          category_id: string
+          code: string
+          created_at?: string
+          est_train_minutes?: number | null
+          external_ref?: string | null
+          id?: string
+          instructions_md?: string | null
+          instructions_version?: number
+          name: string
+          reading_refs?: Json
+          recert_months?: number | null
+          requires_practical?: boolean
+          requires_reading?: boolean
+          risk_level?: string
+          sort_order?: number
+          summary?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          category_id?: string
+          code?: string
+          created_at?: string
+          est_train_minutes?: number | null
+          external_ref?: string | null
+          id?: string
+          instructions_md?: string | null
+          instructions_version?: number
+          name?: string
+          reading_refs?: Json
+          recert_months?: number | null
+          requires_practical?: boolean
+          requires_reading?: boolean
+          risk_level?: string
+          sort_order?: number
+          summary?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "skills_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "skill_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_skills: {
+        Row: {
+          expires_at: string | null
+          id: string
+          last_signoff_id: string | null
+          notes: string | null
+          reading_ack_at: string | null
+          reading_ack_version: number | null
+          signed_off_at: string | null
+          signed_off_by: string | null
+          skill_id: string
+          stage: Database["public"]["Enums"]["skill_stage"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          expires_at?: string | null
+          id?: string
+          last_signoff_id?: string | null
+          notes?: string | null
+          reading_ack_at?: string | null
+          reading_ack_version?: number | null
+          signed_off_at?: string | null
+          signed_off_by?: string | null
+          skill_id: string
+          stage?: Database["public"]["Enums"]["skill_stage"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          expires_at?: string | null
+          id?: string
+          last_signoff_id?: string | null
+          notes?: string | null
+          reading_ack_at?: string | null
+          reading_ack_version?: number | null
+          signed_off_at?: string | null
+          signed_off_by?: string | null
+          skill_id?: string
+          stage?: Database["public"]["Enums"]["skill_stage"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_skills_last_signoff_id_fkey"
+            columns: ["last_signoff_id"]
+            isOneToOne: false
+            referencedRelation: "skill_signoffs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_skills_signed_off_by_fkey"
+            columns: ["signed_off_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_skills_skill_id_fkey"
+            columns: ["skill_id"]
+            isOneToOne: false
+            referencedRelation: "skills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_skills_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -466,6 +886,16 @@ export type Database = {
         Returns: boolean
       }
       is_active_user: { Args: { _user_id: string }; Returns: boolean }
+      can_grant_trainer: { Args: { _signer: string }; Returns: boolean }
+      can_see_skills_module: { Args: { _user: string }; Returns: boolean }
+      can_sign_off_skill: {
+        Args: { _signer: string; _skill_id: string }
+        Returns: boolean
+      }
+      skill_stage_rank: {
+        Args: { _s: Database["public"]["Enums"]["skill_stage"] }
+        Returns: number
+      }
       set_user_active: {
         Args: { _active: boolean; _actor: string; _target: string }
         Returns: undefined
@@ -489,6 +919,12 @@ export type Database = {
         | "manager"
         | "user"
         | "pi_external"
+      skill_stage:
+        | "not_started"
+        | "reading_done"
+        | "trained"
+        | "competent"
+        | "trainer"
       entity_type:
         | "booking"
         | "equipment"
@@ -632,6 +1068,13 @@ export const Constants = {
         "manager",
         "user",
         "pi_external",
+      ],
+      skill_stage: [
+        "not_started",
+        "reading_done",
+        "trained",
+        "competent",
+        "trainer",
       ],
       entity_type: [
         "booking",

@@ -19,6 +19,7 @@ import ActivityLog from "./pages/ActivityLog";
 import Auth from "./pages/Auth";
 import ResetPasswordVerify from "./pages/ResetPasswordVerify";
 import Help from "./pages/Help";
+import Skills from "./pages/Skills";
 import NotFound from "./pages/NotFound";
 import MicrobeBlaster from "./pages/MicrobeBlaster";
 import ZombieLunch from "./pages/ZombieLunch";
@@ -73,6 +74,9 @@ const App = () => (
             <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
             <Route path="/activity-log" element={<ProtectedRoute><ActivityLog /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute requirePermission="canManageUsers"><Settings /></ProtectedRoute>} />
+            {/* Skills gates itself on skill_module_settings.visible_to_all - while that is
+                false only pi/manager get past it, so no ProtectedRoute permission is needed. */}
+            <Route path="/skills" element={<ProtectedRoute><Skills /></ProtectedRoute>} />
             <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
             <Route path="/microbe-blaster" element={<ProtectedRoute><MicrobeBlaster /></ProtectedRoute>} />
             <Route path="/zombie-lunch" element={<ProtectedRoute><ZombieLunch /></ProtectedRoute>} />
