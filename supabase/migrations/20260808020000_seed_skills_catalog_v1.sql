@@ -1,21 +1,31 @@
 -- =====================================================================================
 -- 2026-08-08  Skills module: seed catalog v1
 --
--- Idempotent. Every INSERT is ON CONFLICT ... DO UPDATE keyed on the natural code, so
--- re-running this file updates content in place rather than duplicating it. Later
--- catalog revisions ship as new migrations of the same shape.
+-- ⚠️ SUPERSEDED AS A SOURCE OF TRUTH — DO NOT RE-RUN THIS FILE. ⚠️
 --
--- IMPORTANT - what this file does NOT touch:
---   * skills.active is only set on INSERT, never on UPDATE. If you disable a skill in
---     the UI, re-running this migration will NOT re-enable it. Your enable/disable
---     decisions win over the seed.
---   * instructions_md IS updated on conflict, because that is the content this file
---     exists to deliver. If you have edited instructions in the UI and want to keep
---     them, bump instructions_version in the UI first and remove that row here.
+-- This was a one-time bootstrap. Since it ran, the content has been curated in two ways
+-- that this file would silently destroy:
 --
--- Content provenance: every skill below is written from vendor documentation (Opentrons
--- Flex, DeNovix DS-11, Oxford Nanopore) or the UF EHS / Research Computing sites, fetched
--- 2026-08-08. Skills that need a lab-specific SOP are seeded as active=false stubs.
+--   1. is_critical was re-judged across all 304 checklist items on 2026-08-09. This file
+--      sets it mechanically (the first two items of every skill), which is where the
+--      flag came from originally and which was wrong - it is the flag that blocks a
+--      "competent" sign-off, so it has to reflect consequence, not position. The curated
+--      split is 133 critical / 171 not. Re-running this reverts it to 106/198.
+--   2. Seven instruction texts were corrected against primary vendor and UF
+--      documentation on 2026-08-09 (HPG-07 regulated data, HPG-40 seff attribution,
+--      HPG-22 ufrc module, OT2-01 and OT2-10 error recovery, SEQ-11 nanopore input,
+--      FLX-23 partial tip pickup, QC-03 baseline correction). This file carries the
+--      pre-correction text and updates instructions_md on conflict.
+--
+-- Once the in-app catalog editor exists, a seed file stops being authoritative by
+-- definition: the moment anyone edits a skill in the UI, the database is ahead of this
+-- file. THE LIVE DATABASE IS THE SOURCE OF TRUTH FOR CATALOG CONTENT. Keep this file for
+-- history and for rebuilding an empty database from scratch, and if you ever do rebuild,
+-- expect to redo the curation above.
+--
+-- (It remains idempotent and it never touches skills.active, so an accidental re-run
+-- would not re-enable anything you had disabled - but it would flatten the criticality
+-- judgements and revert seven corrected texts.)
 -- =====================================================================================
 
 BEGIN;

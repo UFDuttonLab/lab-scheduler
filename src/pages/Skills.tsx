@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { SkillDetailDialog } from "@/components/SkillDetailDialog";
+import { SkillEditorDialog } from "@/components/SkillEditorDialog";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +38,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   BookOpen,
+  Pencil,
+  Plus,
+  Trash2,
+  Settings2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -68,7 +73,7 @@ interface ProfileLite {
 }
 
 const Skills = () => {
-  const { user, userRole } = useAuth();
+  const { user, userRole, permissions } = useAuth();
   const navigate = useNavigate();
   const {
     visibleToAll,
@@ -88,6 +93,8 @@ const Skills = () => {
   const [profiles, setProfiles] = useState<ProfileLite[]>([]);
   const [prereqPairs, setPrereqPairs] = useState<{ skillId: string; prereqId: string }[]>([]);
   const [skillEquip, setSkillEquip] = useState<{ skillId: string; equipmentName: string }[]>([]);
+  const [skillEquipIds, setSkillEquipIds] = useState<{ skillId: string; equipmentId: string }[]>([]);
+  const [equipment, setEquipment] = useState<{ id: string; name: string }[]>([]);
 
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState<string>("all");
@@ -95,6 +102,9 @@ const Skills = () => {
   const [acknowledging, setAcknowledging] = useState(false);
   const [matrixCat, setMatrixCat] = useState<string>("");
   const [addViewerId, setAddViewerId] = useState<string>("");
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
+  const [manageCat, setManageCat] = useState<string>("all");
 
   // Sign-off dialog state
   const [signOffOpen, setSignOffOpen] = useState(false);
@@ -106,7 +116,8 @@ const Skills = () => {
   const [soWaiverReason, setSoWaiverReason] = useState("");
   const [soSubmitting, setSoSubmitting] = useState(false);
 
-  // Nobody but pi/manager reaches this page while the module is hidden.
+  // While the module is in private preview only allowlisted users get here - and RLS
+  // blocks everyone else at the data layer too, so this redirect is the polite half.
   useEffect(() => {
     if (!flagLoading && !canSeeModule) navigate("/");
   }, [flagLoading, canSeeModule, navigate]);
@@ -118,7 +129,7 @@ const Skills = () => {
 
   const fetchAll = async () => {
     try {
-      const [cats, sk, cl, us, so, pr, pre, se] = await Promise.all([
+      const [cats, sk, cl, us, so, pr, pre, se, eq] = await Promise.all([
         supabase.from("skill_categories").select("*").order("sort_order"),
         supabase.from("skills").select("*").order("sort_order"),
         supabase.from("skill_checklist_items").select("*").order("sort_order"),
@@ -126,11 +137,13 @@ const Skills = () => {
         supabase.from("skill_signoffs").select("*").order("observed_at", { ascending: false }),
         supabase.from("profiles").select("id, full_name, email").eq("active", true),
         supabase.from("skill_prerequisites").select("*"),
-        supabase.from("skill_equipment").select("skill_id, equipment(name)"),
+        supabase.from("skill_equipment").select("skill_id, equipment_id, equipment(name)"),
+        supabase.from("equipment").select("id, name").order("name"),
       ]);
 
       const firstError =
-        cats.error || sk.error || cl.error || us.error || so.error || pr.error || pre.error || se.error;
+        cats.error || sk.error || cl.error || us.error || so.error || pr.error ||
+        pre.error || se.error || eq.error;
       if (firstError) throw firstError;
 
       setCategories(
@@ -215,6 +228,10 @@ const Skills = () => {
           .filter((r: any) => r.equipment?.name)
           .map((r: any) => ({ skillId: r.skill_id, equipmentName: r.equipment.name }))
       );
+      setSkillEquipIds(
+        (se.data || []).map((r: any) => ({ skillId: r.skill_id, equipmentId: r.equipment_id }))
+      );
+      setEquipment((eq.data || []).map((e: any) => ({ id: e.id, name: e.name })));
     } catch (error) {
       console.error("Error fetching skills:", error);
       toast.error("Failed to load skills");
@@ -462,6 +479,77 @@ const Skills = () => {
     }
   };
 
+  // ---------------------------------------------------------------- catalog admin
+  const openNewSkill = () => {
+    setEditingSkill(null);
+    setEditorOpen(true);
+  };
+  const openEditSkill = (s: Skill) => {
+    setEditingSkill(s);
+    setEditorOpen(true);
+  };
+
+  /** Flip a single skill on or off without opening the editor. */
+  const handleToggleSkillActive = async (s: Skill, next: boolean) => {
+    const result = await settleWrite(
+      supabase.from("skills").update({ active: next }).eq("id", s.id).select("id"),
+      "You don't have permission to edit the skill catalog."
+    );
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
+    toast.success(`${s.code} ${next ? "enabled" : "disabled"}.`);
+    await fetchAll();
+  };
+
+  /**
+   * Delete a skill, but only when nothing depends on it. Follows the count-first pattern
+   * from Equipment.tsx: work out the real blast radius, bail out entirely if the count
+   * query itself fails, and offer the safer alternative by name.
+   */
+  const handleDeleteSkill = async (s: Skill) => {
+    const [signoffCount, progressCount] = await Promise.all([
+      supabase.from("skill_signoffs").select("id", { count: "exact", head: true }).eq("skill_id", s.id),
+      supabase.from("user_skills").select("id", { count: "exact", head: true }).eq("skill_id", s.id),
+    ]);
+    if (signoffCount.error || progressCount.error) {
+      toast.error("Could not check what depends on this skill. Nothing has been changed.");
+      return;
+    }
+    const signoffs = signoffCount.count ?? 0;
+    const progress = progressCount.count ?? 0;
+
+    if (signoffs > 0) {
+      toast.error(
+        `${s.code} has ${signoffs} sign-off${signoffs === 1 ? "" : "s"} against it. ` +
+          "Deleting it would erase that training record. Disable it instead — it disappears " +
+          "from the catalog but the history survives."
+      );
+      return;
+    }
+
+    const ok = window.confirm(
+      `Delete ${s.code} - ${s.name}?\n\n` +
+        `This removes the skill, its checklist, its prerequisites and its equipment links.\n` +
+        `${progress} person-record${progress === 1 ? "" : "s"} (reading acknowledgements) will also go.\n\n` +
+        `There are no sign-offs against it, so no training record is lost.\n\n` +
+        `If you only want it out of the way, cancel and use the Active switch instead.`
+    );
+    if (!ok) return;
+
+    const result = await settleWrite(
+      supabase.from("skills").delete().eq("id", s.id).select("id"),
+      "You don't have permission to delete from the skill catalog."
+    );
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
+    toast.success(`${s.code} deleted.`);
+    await fetchAll();
+  };
+
   // ---------------------------------------------------------------- render
   if (flagLoading || isLoading) {
     return (
@@ -586,6 +674,12 @@ const Skills = () => {
             <TabsTrigger value="mine">My Training</TabsTrigger>
             <TabsTrigger value="catalog">Catalog</TabsTrigger>
             <TabsTrigger value="matrix">Who Can Do What</TabsTrigger>
+            {permissions.canManageSkillCatalog && (
+              <TabsTrigger value="manage">
+                <Settings2 className="w-4 h-4 mr-1.5" />
+                Manage
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* ------------------------------------------------ My Training */}
@@ -793,6 +887,102 @@ const Skills = () => {
               </div>
             )}
           </TabsContent>
+
+          {/* ------------------------------------------------ Manage (catalog editor) */}
+          {permissions.canManageSkillCatalog && (
+            <TabsContent value="manage" className="space-y-4">
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                <Select value={manageCat} onValueChange={setManageCat}>
+                  <SelectTrigger className="sm:w-[320px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All categories</SelectItem>
+                    {categories.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.icon} {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex-1" />
+                <Button onClick={openNewSkill} className="min-h-[44px]">
+                  <Plus className="w-4 h-4 mr-2" />
+                  New skill
+                </Button>
+              </div>
+
+              <p className="text-sm text-muted-foreground">
+                Editing the instructions bumps the version, which asks everyone who already
+                read that skill to read it again. Disabling hides a skill from trainees but
+                keeps every sign-off already recorded against it.
+              </p>
+
+              {categories
+                .filter((c) => manageCat === "all" || c.id === manageCat)
+                .filter((c) => skills.some((s) => s.categoryId === c.id))
+                .map((cat) => (
+                  <div key={cat.id}>
+                    <h3 className="font-semibold mb-2 mt-4">
+                      {cat.icon} {cat.name}
+                    </h3>
+                    <div className="space-y-2">
+                      {skills
+                        .filter((s) => s.categoryId === cat.id)
+                        .sort((a, b) => a.code.localeCompare(b.code))
+                        .map((s) => (
+                          <Card
+                            key={s.id}
+                            className={`p-3 ${s.active ? "" : "opacity-60 border-dashed"}`}
+                          >
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <span className="font-mono text-xs px-2 py-1 rounded bg-muted">
+                                {s.code}
+                              </span>
+                              <span className="font-medium flex-1 min-w-[180px]">{s.name}</span>
+                              {s.riskLevel !== "standard" && (
+                                <Badge className={RISK_CLASSES[s.riskLevel]} variant="secondary">
+                                  {s.riskLevel}
+                                </Badge>
+                              )}
+                              <span className="text-xs text-muted-foreground hidden md:inline">
+                                {checklists.filter((c) => c.skillId === s.id).length} checks
+                              </span>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <Switch
+                                  checked={s.active}
+                                  onCheckedChange={(v) => handleToggleSkillActive(s, v)}
+                                />
+                                <span className="text-xs text-muted-foreground w-12">
+                                  {s.active ? "Active" : "Off"}
+                                </span>
+                              </label>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                aria-label={`Edit ${s.code}`}
+                                onClick={() => openEditSkill(s)}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                aria-label={`Delete ${s.code}`}
+                                onClick={() => handleDeleteSkill(s)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </Card>
+                        ))}
+                    </div>
+                  </div>
+                ))}
+            </TabsContent>
+          )}
         </Tabs>
       </main>
 
@@ -809,6 +999,23 @@ const Skills = () => {
         onAcknowledgeReading={handleAcknowledgeReading}
         acknowledging={acknowledging}
         onOpenChange={(open) => !open && setDetailSkill(null)}
+      />
+
+      <SkillEditorDialog
+        open={editorOpen}
+        skill={editingSkill}
+        categories={categories}
+        allSkills={skills}
+        equipment={equipment}
+        existingChecklist={checklists.filter((c) => c.skillId === editingSkill?.id)}
+        existingPrereqIds={prereqPairs
+          .filter((p) => p.skillId === editingSkill?.id)
+          .map((p) => p.prereqId)}
+        existingEquipmentIds={skillEquipIds
+          .filter((e) => e.skillId === editingSkill?.id)
+          .map((e) => e.equipmentId)}
+        onOpenChange={setEditorOpen}
+        onSaved={fetchAll}
       />
 
       {/* ------------------------------------------------ Sign-off dialog */}
