@@ -65,6 +65,42 @@ export interface ReadingRef {
   kind?: string;
 }
 
+/**
+ * Reference kinds used in skills.reading_refs. Everything unrecognised falls back to 'vendor'
+ * so an editor typing a new kind by hand can never blank out a link.
+ */
+export type RefKind = 'video' | 'vendor' | 'protocol' | 'course' | 'guidance' | 'paper' | 'standard';
+
+const REF_KINDS: RefKind[] = ['video', 'vendor', 'protocol', 'course', 'guidance', 'paper', 'standard'];
+
+export const refKind = (k: string | undefined): RefKind =>
+  REF_KINDS.includes(k as RefKind) ? (k as RefKind) : 'vendor';
+
+/** Watch it first, read it second, cite it third. Mirrors the ordering used when seeding. */
+export const REF_KIND_RANK: Record<RefKind, number> = {
+  video: 0,
+  protocol: 1,
+  vendor: 1,
+  course: 1,
+  guidance: 2,
+  paper: 3,
+  standard: 3,
+};
+
+export const REF_KIND_LABELS: Record<RefKind, string> = {
+  video: 'Video',
+  vendor: 'Manufacturer',
+  protocol: 'Protocol',
+  course: 'Course',
+  guidance: 'Guide',
+  paper: 'Paper',
+  standard: 'Standard',
+};
+
+/** Sorted for display without mutating the caller's array. */
+export const sortedRefs = (refs: ReadingRef[]): ReadingRef[] =>
+  [...refs].sort((a, b) => REF_KIND_RANK[refKind(a.kind)] - REF_KIND_RANK[refKind(b.kind)]);
+
 export interface SkillCategory {
   id: string;
   code: string;

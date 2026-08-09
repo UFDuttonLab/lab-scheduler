@@ -8,20 +8,45 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { BookOpen, CheckCircle2, ExternalLink, AlertTriangle, Clock } from "lucide-react";
+import {
+  BookOpen,
+  CheckCircle2,
+  ExternalLink,
+  AlertTriangle,
+  Clock,
+  PlayCircle,
+  GraduationCap,
+  FileText,
+  ClipboardList,
+  Factory,
+} from "lucide-react";
 import {
   Skill,
   ChecklistItem,
   UserSkill,
   SkillSignoff,
+  RefKind,
   STAGE_LABELS,
   STAGE_CLASSES,
   RISK_CLASSES,
+  REF_KIND_LABELS,
   renderSkillMarkdown,
   recertLabel,
   isLapsed,
   daysUntilExpiry,
+  refKind,
+  sortedRefs,
 } from "@/lib/skills";
+
+const REF_ICONS: Record<RefKind, typeof ExternalLink> = {
+  video: PlayCircle,
+  vendor: Factory,
+  protocol: ClipboardList,
+  course: GraduationCap,
+  guidance: BookOpen,
+  paper: FileText,
+  standard: FileText,
+};
 
 interface SkillDetailDialogProps {
   skill: Skill | null;
@@ -115,21 +140,39 @@ export const SkillDetailDialog = ({
               )}
 
               {skill.readingRefs.length > 0 && (
-                <ul className="mt-4 space-y-1 text-sm">
-                  {skill.readingRefs.map((r) => (
-                    <li key={r.url}>
-                      <a
-                        href={r.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-primary hover:underline"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        {r.label}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
+                <div className="mt-5">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                    Learn more
+                  </h4>
+                  <ul className="space-y-1.5 text-sm">
+                    {sortedRefs(skill.readingRefs).map((r, i) => {
+                      const kind = refKind(r.kind);
+                      const Icon = REF_ICONS[kind];
+                      return (
+                        <li key={`${r.url}-${i}`}>
+                          <a
+                            href={r.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group inline-flex items-start gap-2 text-primary hover:underline break-words"
+                          >
+                            <Icon
+                              className={`w-4 h-4 mt-0.5 shrink-0 ${
+                                kind === "video" ? "text-rose-600 dark:text-rose-400" : ""
+                              }`}
+                            />
+                            <span>
+                              {r.label}
+                              <span className="ml-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+                                {REF_KIND_LABELS[kind]}
+                              </span>
+                            </span>
+                          </a>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
               )}
 
               {skill.requiresReading && (
