@@ -685,19 +685,42 @@ const Skills = () => {
                   {allowlist.length === 0 && (
                     <span className="text-sm text-muted-foreground">Nobody — add someone below.</span>
                   )}
-                  {allowlist.map((id) => (
-                    <Badge key={id} variant="secondary" className="gap-1.5 py-1">
-                      {nameById[id] ?? id.slice(0, 8)}
-                      <button
-                        type="button"
-                        aria-label={`Remove ${nameById[id] ?? "user"}`}
-                        className="hover:text-destructive"
-                        onClick={() => handleSetAllowlist(allowlist.filter((x) => x !== id))}
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </Badge>
-                  ))}
+                  {allowlist.map((id) => {
+                    // Removing yourself, or the last person, while the module is still
+                    // private locks EVERYONE out - including you - and the only control
+                    // that could undo it lives on this page, which you can no longer reach.
+                    // RLS would allow recovery from an empty allowlist, but only from a SQL
+                    // editor. So the button simply is not offered for those two cases.
+                    const isSelf = id === user?.id;
+                    const isLast = allowlist.length === 1;
+                    const locked = !visibleToAll && (isSelf || isLast);
+                    return (
+                      <Badge key={id} variant="secondary" className="gap-1.5 py-1">
+                        {nameById[id] ?? id.slice(0, 8)}
+                        {locked ? (
+                          <span
+                            className="text-[10px] uppercase tracking-wide text-muted-foreground"
+                            title={
+                              isSelf
+                                ? "You cannot remove yourself while the module is private — you would lose access to this page."
+                                : "You cannot remove the last person while the module is private."
+                            }
+                          >
+                            {isSelf ? "you" : "only"}
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            aria-label={`Remove ${nameById[id] ?? "user"}`}
+                            className="hover:text-destructive"
+                            onClick={() => handleSetAllowlist(allowlist.filter((x) => x !== id))}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </Badge>
+                    );
+                  })}
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Select value={addViewerId} onValueChange={setAddViewerId}>

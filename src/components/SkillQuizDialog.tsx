@@ -206,10 +206,13 @@ export const SkillQuizDialog = ({
       _skill_id: skill.id,
       _answers: payload,
     });
+    // Clear the spinner FIRST. Returning before this left `submitting` stuck true when the
+    // dialog was closed mid-flight and reopened - the component never unmounts, so nothing
+    // reset it and Submit stayed dead until a full page reload.
+    setSubmitting(false);
     // Stale response: the dialog has since been closed, reopened, or pointed at another
     // skill. The attempt is still correctly recorded server-side; we just must not render it.
     if (ticket !== submitTicket.current || skill?.id !== forSkillId) return;
-    setSubmitting(false);
 
     if (error) {
       toast.error(error.message);
@@ -254,7 +257,7 @@ export const SkillQuizDialog = ({
             {result
               ? result.passed
                 ? "Passed. The correct answers and explanations are below — worth reading before you go."
-                : "Not passed this time. The questions you got wrong are marked; go back over those parts of the instructions and try again."
+                : "Not passed this time. Go back over the instructions and try again — there is no limit on attempts."
               : `Every question must be answered. You need ${skill.quizPassPct ?? 80}% overall to pass. You can retake this as many times as you need.`}
           </DialogDescription>
         </DialogHeader>
@@ -309,11 +312,12 @@ export const SkillQuizDialog = ({
                 </div>
               </div>
 
-              {!result.passed && wrongOnes.length > 0 && (
+              {!result.passed && (
                 <p className="text-sm text-muted-foreground">
-                  Answers are not shown on a failed attempt. Go back to the instructions for
-                  {wrongOnes.length === 1 ? " this one" : ` these ${wrongOnes.length}`} and
-                  work out why.
+                  Which questions you got wrong is deliberately not shown. Otherwise a few
+                  deliberate failures would map out the whole answer key, and the quiz would
+                  stop meaning anything. Re-read the instructions above and come back — there
+                  is no limit on attempts and nothing is held against you.
                 </p>
               )}
 
