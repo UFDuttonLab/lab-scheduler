@@ -8,7 +8,7 @@ Every question below is flagged `is_critical` in the training system.
 80% — regardless of critical questions. The earlier rule required 100% of critical questions
 as well, and that turned out to be far sharper than it sounded: with only 5–7 questions per
 skill, 80% already tolerates just one wrong answer, so the critical veto mostly served to
-fail someone at 86% for a single slip, and it made every one of these 167 keys capable of
+fail someone at 86% for a single slip, and it made every one of these 174 keys capable of
 locking a skill for the whole lab with no way through except a per-person waiver. That risk
 is gone. A wrong key here now costs a trainee one question, not the skill.
 
@@ -25,9 +25,17 @@ in one reviewed batch instead of drifting in one edit at a time. Prompts, option
 below are reproduced verbatim from the database; the only thing added is the `✓` marking which
 option the key currently treats as correct.
 
-There are **167 critical questions across 51 skills** — the two without any are HPG-30
+**Twelve questions were added on 9 August 2026**, covering material newly written into SAF-01
+(emergency equipment and eye-flushing), SAF-29 (glove doffing and disinfectant contact time) and
+SAF-39 (dewar transport). Seven of the twelve are critical and so appear here, each tagged
+*(new, 9 Aug)* after its number so you can find them quickly. They are the newest and
+least-reviewed content in the set — written today, and nobody has sat them yet — so they are worth
+a closer look than the rest, even though they sit at the end of their skills where the eye tends
+to skim.
+
+There are **174 critical questions across 51 skills** — the two without any are HPG-30
 (writing a SLURM job script) and HPG-40 (right-sizing jobs with `seff`), where nothing in the
-skill can hurt a person or destroy hardware. The 17 with the worst failure mode are listed
+skill can hurt a person or destroy hardware. The 21 with the worst failure mode are listed
 first.
 
 ---
@@ -39,8 +47,10 @@ hardware. Everything else can wait for the second sitting.
 
 | Skill | Question | Why it matters most |
 | --- | --- | --- |
+| [SAF-01 Q70](#saf-01) *(new, 9 Aug)* | You get a splash of chemical in your eye. How long do you hold your eyelids open and flush? | A short flush key stops the irrigation minutes before the eye is safe. |
 | [SAF-25 Q10](#saf-25) | A tube of animal sample splashes into your eye. What is the first thing you do? | Wrong key here teaches a delay before flushing a splashed eye. |
 | [SAF-29 Q10](#saf-29) | Your protocol calls for bead beating rhino midden samples. Where must that step happen? | Bead beating outside the BSC aerosolises BSL-2 material across the room. |
+| [SAF-29 Q80](#saf-29) *(new, 9 Aug)* | Guanidinium lysis buffer has spilled on the bench. Do you reach for the bleach? | Bleach on a guanidinium spill generates cyanide gas at the bench. |
 | [SAF-31 Q10](#saf-31) | The BSC's certification sticker expired three months ago. What do you do? | An uncertified cabinet gives no containment; this key is the stop rule. |
 | [SAF-34 Q10](#saf-34) | You need to autoclave two litres of media in a bottle. Which cycle do you select? | The wrong autoclave cycle flash-boils two litres of media into your face. |
 | [SAF-34 Q30](#saf-34) | A labmate adds a tightly sealed bottle to your load. What do you do? | A sealed bottle in an autoclave is a pressure vessel. |
@@ -48,6 +58,8 @@ hardware. Everything else can wait for the second sitting.
 | [SAF-39 Q10](#saf-39) | You need to move an open LN2 dewar to another floor. A colleague suggests you both ride up with it. What do you do? | Riding a lift with an open dewar is the classic cryogen asphyxiation death. |
 | [SAF-39 Q20](#saf-39) | What PPE do you put on before opening a dewar? | Safety glasses instead of a face shield is a permanent eye injury. |
 | [SAF-39 Q40](#saf-39) | You need to get dry ice to another building. A labmate suggests a sealed cooler in your car. What is wrong? | Dry ice sealed in a car cabin asphyxiates the driver. |
+| [SAF-39 Q80](#saf-39) *(new, 9 Aug)* | You need to move a full dewar to another room on the same floor. How? | A carried or tipped dewar is a cryogen spill onto the person holding it. |
+| [SAF-39 Q100](#saf-39) *(new, 9 Aug)* | The freight lift is free and you have a dewar to get upstairs. What is the safe arrangement? | "Freight lifts are ventilated" is the excuse that kills people; this key must close it. |
 | [SAF-43 Q30](#saf-43) | You are shipping on dry ice. What must be true of the package and the paperwork? | Undeclared or unvented dry ice is a DOT/IATA violation and a burst package. |
 | [SAF-43 Q40](#saf-43) | You need to get a Category B package to the airport. Can you drive it in your own car? | Dangerous goods in a personal vehicle is a personal regulatory liability. |
 | [FLX-02 Q10](#flx-02) | Where should the E-stop pendant be before you start a run? | If the key says the pendant can live in a drawer, the E-stop is useless. |
@@ -61,7 +73,7 @@ hardware. Everything else can wait for the second sitting.
 
 ## Safety & Compliance
 
-*38 critical questions across 11 skills.*
+*45 critical questions across 11 skills.*
 
 <a id="saf-01"></a>
 
@@ -80,6 +92,20 @@ hardware. Everything else can wait for the second sitting.
   - **✓ c.** **Roster entry in Gator TRACS, plus reading the lab CHP**
   - d. You must be issued a respirator and fit-tested for it
   - *Why: Two things follow the course before bench work: roster entry in Gator TRACS / LATCH with two emergency contacts, and reading the lab-specific CHP and the SOPs for the hazards you will handle.*
+
+- [ ] **Q70** *(new, 9 Aug)* You get a splash of chemical in your eye. How long do you hold your eyelids open and flush?
+  - a. Until the stinging eases off
+  - b. One minute, then go to the clinic
+  - **✓ c.** **A full 15 minutes**
+  - d. Five minutes
+  - *Why: Fifteen minutes is the standard irrigation period and it is far longer than instinct suggests. Set a timer, and have someone else call for help while you stay at the station.*
+
+- [ ] **Q80** *(new, 9 Aug)* Boxes have been stacked in front of the safety shower. What is that?
+  - a. Fine, as long as they can be moved quickly
+  - **✓ b.** **A finding - clear it or report it**
+  - c. Acceptable while the eyewash is still clear
+  - d. Only a problem during an inspection
+  - *Why: The path to emergency equipment has to be free of obstructions. A blocked shower is the same as no shower.*
 
 <a id="saf-02"></a>
 
@@ -101,7 +127,7 @@ hardware. Everything else can wait for the second sitting.
 
 - [ ] **Q60** Which lab reagents are the guanidinium thiocyanate source that makes bleach contact dangerous?
   - **✓ a.** **The Zymo MagBead lysis and binding buffers**
-  - b. The `70% ethanol` wash bottles
+  - b. The 70% ethanol wash bottles
   - c. The agarose gel running buffer
   - d. The nuclease-free water stocks
   - *Why: Guanidinium thiocyanate is in the Zymo MagBead lysis and binding buffers. Knowing which reagents carry the hazard is what keeps bleach out of that waste stream.*
@@ -238,6 +264,27 @@ hardware. Everything else can wait for the second sitting.
   - d. In your gloved hands, one tube at a time
   - *Why: BSL-2 requires leak-proof secondary containers for both storage and transport.*
 
+- [ ] **Q80** *(new, 9 Aug)* Guanidinium lysis buffer has spilled on the bench. Do you reach for the bleach?
+  - a. Yes, bleach is the default for any spill
+  - b. Yes, once it is diluted to 10%
+  - **✓ c.** **No - hypochlorite and guanidinium release cyanide gas**
+  - d. No, but only because bleach corrodes steel
+  - *Why: Hypochlorite plus guanidinium thiocyanate releases cyanide gas (see SAF-02), and guanidinium is the chemistry most of our extractions run on. Absorb the spill and dispose of it per the SDS, keeping bleach away from it and its waste.*
+
+- [ ] **Q90** *(new, 9 Aug)* You have finished at the bench and are about to leave. When do the gloves come off?
+  - **✓ a.** **Before touching a door handle, keyboard or phone**
+  - b. At the door of the lab
+  - c. Once you are out in the corridor
+  - d. After carrying your samples to the next room
+  - *Why: Handles, keyboards and phones are the surfaces that carry contamination out of the lab and onto people who never opted into it. Ask someone to open the door, or use your elbow.*
+
+- [ ] **Q100** *(new, 9 Aug)* What is the correct way to take gloves off?
+  - a. Pull both off by the fingertips
+  - **✓ b.** **Glove-to-glove, then skin-to-skin, ending inside-out**
+  - c. Peel from the wrist down with your bare hand
+  - d. Snap them off, then wash your hands
+  - *Why: Pinch the outside of the first glove at the wrist and peel it inside-out into your gloved hand, then slide a bare finger under the cuff of the second and peel it over the first. Most self-contamination happens on the way out of PPE, not the way in.*
+
 <a id="saf-31"></a>
 
 ### SAF-31 — Biosafety cabinet operation  `high risk`
@@ -340,6 +387,20 @@ hardware. Everything else can wait for the second sitting.
   - **✓ c.** **Flush with lukewarm water and get medical attention**
   - d. Apply ice to numb the area first
   - *Why: Cold burns look like thermal burns. Flush with lukewarm water, not hot, and get medical attention.*
+
+- [ ] **Q80** *(new, 9 Aug)* You need to move a full dewar to another room on the same floor. How?
+  - a. Carry it, with a second person helping
+  - **✓ b.** **On a wheeled cart made for cryogenic dewars**
+  - c. Walk it along on the edge of its base
+  - d. On any flatbed trolley, laid on its side
+  - *Why: A full dewar is heavy and top-heavy. Never carry one, never lay one down, and never walk it on its base edge - use a cart with a cradle or a retaining strap.*
+
+- [ ] **Q100** *(new, 9 Aug)* The freight lift is free and you have a dewar to get upstairs. What is the safe arrangement?
+  - a. Ride with it; freight lifts are ventilated
+  - b. Ride with it if the trip is short
+  - **✓ c.** **Send it up alone and meet it there**
+  - d. Ride with it and hold the door open
+  - *Why: A lift car is a small sealed space with doors you cannot force. If the dewar vents while you are shut in with it, nitrogen displaces the air. Send it alone, and sign it if you can.*
 
 <a id="saf-43"></a>
 
@@ -501,7 +562,7 @@ hardware. Everything else can wait for the second sitting.
 
 ### BEN-12 — Fresh 80% ethanol for bead work  `high risk`
 
-- [ ] **Q10** Why must the `80% ethanol` be made on the day you use it?
+- [ ] **Q10** Why must the 80% ethanol be made on the day you use it?
   - **✓ a.** **Ethanol absorbs water from the air and drifts weaker**
   - b. Diluted ethanol grows bacteria in the bottle overnight
   - c. Ethanol evaporates and the bottle runs low
@@ -526,9 +587,9 @@ hardware. Everything else can wait for the second sitting.
 
 ### BEN-13 — Aseptic technique at the bench  `high risk`
 
-- [ ] **Q10** You spray the bench with `10% bleach` and immediately wipe it off with ethanol. What went wrong?
+- [ ] **Q10** You spray the bench with 10% bleach and immediately wipe it off with ethanol. What went wrong?
   - a. Bleach is only used after a run, not before
-  - b. `70% ethanol` alone is required for biological decontamination
+  - b. 70% ethanol alone is required for biological decontamination
   - **✓ c.** **Bleach needs minutes of contact time to work**
   - d. Bleach must never be followed by ethanol
   - *Why: Contact time has to be honoured: bleach needs minutes, not a wipe, before the ethanol step.*
@@ -785,9 +846,9 @@ hardware. Everything else can wait for the second sitting.
 
 ### FLX-27 — Magnetic Block  `standard risk`
 
-- [ ] **Q40** You are converting an OT-2 bead protocol to the Flex. What becomes of `magdeck.engage()` and `disengage()`?
+- [ ] **Q40** You are converting an OT-2 bead protocol to the Flex. What becomes of magdeck.engage() and disengage()?
   - a. They still work, mapped onto the block
-  - **✓ b.** **They are rewritten as `move_labware()` gripper moves**
+  - **✓ b.** **They are rewritten as move_labware() gripper moves**
   - c. They are replaced by a delay
   - d. They only need a new slot number
   - *Why: There is no engage command on the Flex, so those calls become gripper moves of the plate on and off the block.*
@@ -874,7 +935,7 @@ hardware. Everything else can wait for the second sitting.
   - d. Flush the internal channel with ethanol
   - *Why: Clean pipette exterior body, ejector and nozzles only, and the gripper body, jaws and paddles; never disassemble and never autoclave.*
 
-- [ ] **Q60** You cleaned the deck with `70% ethanol` after a 16S run. Is the deck ready for the next amplicon batch?
+- [ ] **Q60** You cleaned the deck with 70% ethanol after a 16S run. Is the deck ready for the next amplicon batch?
   - a. Yes; ethanol destroys residual DNA
   - b. Yes, if the windows were wiped too
   - c. Yes, provided the paddles are clean
@@ -896,7 +957,7 @@ hardware. Everything else can wait for the second sitting.
   - a. A quick swipe across every slot
   - b. Undiluted bleach, wiped straight off
   - c. Bleach followed immediately by ethanol
-  - **✓ d.** **`10% bleach` left for the full contact time**
+  - **✓ d.** **10% bleach left for the full contact time**
   - *Why: Bleach needs minutes of contact to destroy DNA, not a swipe, so the full contact time is honoured on all deck surfaces and slots.*
 
 - [ ] **Q30** Your Flex has a HEPA/UV module fitted. How is the UV cycle run?
@@ -1042,7 +1103,7 @@ hardware. Everything else can wait for the second sitting.
   - **✓ d.** **After every reading including the blank, with a dry wipe**
   - *Why: Both surfaces get a dry lab wipe after every single reading, blanks included. Skipping this is the top cause of bad data on this instrument.*
 
-- [ ] **Q30** A labmate offers you `70% ethanol` to clean the pedestal. What do you do?
+- [ ] **Q30** A labmate offers you 70% ethanol to clean the pedestal. What do you do?
   - **✓ a.** **Decline; routine cleaning uses dH2O only**
   - b. Use it, since it is standard for optics
   - c. Use it on the upper surface only
@@ -1135,12 +1196,12 @@ hardware. Everything else can wait for the second sitting.
   - d. 50 µL
   - *Why: Bead volume = ratio x sample volume = 0.8 x 50 µL = 40 µL. Dividing instead of multiplying gives 62.5 µL and the wrong size cutoff.*
 
-- [ ] **Q40** How are the two `80% ethanol` washes performed?
+- [ ] **Q40** How are the two 80% ethanol washes performed?
   - a. Off the magnet, resuspending the beads each time
   - **✓ b.** **On the magnet, added down the opposite wall, no resuspension**
   - c. On the magnet, using ethanol made up last month
   - d. Off the magnet, with a brief vortex between washes
-  - *Why: The plate stays on the magnet, fresh `80% ethanol` is added down the opposite wall, and the pellet is not resuspended.*
+  - *Why: The plate stays on the magnet, fresh 80% ethanol is added down the opposite wall, and the pellet is not resuspended.*
 
 - [ ] **Q50** When do you stop air-drying the bead pellet?
   - a. As soon as the last ethanol is aspirated
@@ -1327,10 +1388,10 @@ hardware. Everything else can wait for the second sitting.
 
 - [ ] **Q20** What goes into the priming mix?
   - a. Flow Cell Flush plus Storage Buffer
-  - **✓ b.** **Flow Cell Flush, BSA to `0.2 mg/mL`, and Flow Cell Tether**
+  - **✓ b.** **Flow Cell Flush, BSA to 0.2 mg/mL, and Flow Cell Tether**
   - c. Flow Cell Flush, Wash Diluent, and Flow Cell Tether
-  - d. Sequencing Buffer plus BSA to `2 mg/mL`
-  - *Why: Priming mix is Flow Cell Flush plus BSA to `0.2 mg/mL` plus Flow Cell Tether, mixed gently and never vortexed.*
+  - d. Sequencing Buffer plus BSA to 2 mg/mL
+  - *Why: Priming mix is Flow Cell Flush plus BSA to 0.2 mg/mL plus Flow Cell Tether, mixed gently and never vortexed.*
 
 - [ ] **Q30** You have opened the priming port. What must happen before any priming mix goes in?
   - a. Flush 200 µL of buffer through to clear the channel
@@ -1412,7 +1473,7 @@ hardware. Everything else can wait for the second sitting.
 - [ ] **Q50** A collaborator wants to bring a human-subject project involving PHI onto HiPerGator. What is your first move?
   - **✓ a.** **Contact UFIT Research Computing before any data moves**
   - b. Refuse, since UF never permits PHI on HiPerGator
-  - c. Put it on `/blue` with tightened directory permissions
+  - c. Put it on /blue with tightened directory permissions
   - d. Decide with your PI whether it really counts as regulated
   - *Why: Regulated data is never your call alone. UF supports categories such as PHI/HIPAA under its compliance posture, but only once UFIT Research Computing has placed you in the right environment, so you contact them first.*
 
@@ -1420,7 +1481,7 @@ hardware. Everything else can wait for the second sitting.
   - a. Standard HiPerGator, with the data encrypted at rest
   - **✓ b.** **HiPerGator-RV**
   - c. ResShield
-  - d. `/orange`, because it is archival storage
+  - d. /orange, because it is archival storage
   - *Why: UF policy requires export-controlled work to run on HiPerGator-RV. ResShield is for CMS IS2P2 data, not export-controlled work.*
 
 <a id="hpg-14"></a>
@@ -1436,10 +1497,10 @@ hardware. Everything else can wait for the second sitting.
 
 - [ ] **Q20** You SSH in and are about to launch Dorado basecalling in that shell. What should you do instead?
   - a. Run it under nice so it yields to other users
-  - b. Start it inside `tmux` so it survives disconnection
-  - **✓ c.** **Submit it as a batch job with `sbatch`**
+  - b. Start it inside tmux so it survives disconnection
+  - **✓ c.** **Submit it as a batch job with sbatch**
   - d. Break it into several short login-node runs
-  - *Why: Basecalling is named as something never to run on a login node. The node is shared by everyone at UF, Research Computing will kill the process, and batch work belongs in `sbatch`.*
+  - *Why: Basecalling is named as something never to run on a login node. The node is shared by everyone at UF, Research Computing will kill the process, and batch work belongs in sbatch.*
 
 - [ ] **Q30** You want to use VS Code against HiPerGator. What is the trap, and what is the fix?
   - a. Remote-SSH cannot handle MFA, so use a terminal editor
@@ -1453,17 +1514,17 @@ hardware. Everything else can wait for the second sitting.
 ### HPG-22 — Filesystems: /home vs /blue vs /orange  `critical risk`
 
 - [ ] **Q20** Which statement about backups on HiPerGator is correct?
-  - a. `/orange` holds the backup copy of `/blue`
-  - b. `/blue` is snapshotted nightly by Research Computing
-  - c. The `~/.snapshot/` directory covers everything under `/blue`
-  - **✓ d.** **`/blue` is not backed up unless backup was purchased**
-  - *Why: This is the single most important sentence on the page: `/blue` is not backed up unless backup was separately purchased. `/orange` is not backed up by default either, and the `~/.snapshot/` snapshots belong to `/home`.*
+  - a. /orange holds the backup copy of /blue
+  - b. /blue is snapshotted nightly by Research Computing
+  - c. The ~/.snapshot/ directory covers everything under /blue
+  - **✓ d.** **/blue is not backed up unless backup was purchased**
+  - *Why: This is the single most important sentence on the page: /blue is not backed up unless backup was separately purchased. /orange is not backed up by default either, and the ~/.snapshot/ snapshots belong to /home.*
 
-- [ ] **Q60** The only copy of a raw nanopore run is in `/blue`. What does the lab's backup rule require?
-  - a. Nothing more, since `/blue` is redundant by design
+- [ ] **Q60** The only copy of a raw nanopore run is in /blue. What does the lab's backup rule require?
+  - a. Nothing more, since /blue is redundant by design
   - **✓ b.** **At least one more independent copy, off HiPerGator**
-  - c. A second copy in `/home`, which has snapshots
-  - d. A restore point saved under `~/.snapshot/`
+  - c. A second copy in /home, which has snapshots
+  - d. A restore point saved under ~/.snapshot/
   - *Why: Every dataset needs at least two independent copies, and raw sequencing data needs an off-HiPerGator copy plus, eventually, an archive submission.*
 
 <a id="hpg-56"></a>
@@ -1471,37 +1532,40 @@ hardware. Everything else can wait for the second sitting.
 ### HPG-56 — Data transfer: rsync and Globus  `high risk`
 
 - [ ] **Q50** The transfer has finished and the sequencing laptop is nearly full. When may you delete the local copy?
-  - a. As soon as `rsync` exits without an error
+  - a. As soon as rsync exits without an error
   - b. Once the first analysis job has run successfully
   - c. After a week, if nobody has reported a problem
   - **✓ d.** **Once checksums verify and the data is filed and logged**
-  - *Why: "It looked like it copied" is not verification. Run `md5sum` or compare checksums generated at source, file and protect the data, and only then delete the local copy.*
+  - *Why: "It looked like it copied" is not verification. Run md5sum or compare checksums generated at source, file and protect the data, and only then delete the local copy.*
 
-- [ ] **Q60** The run has arrived on `/blue` and the `md5sum`s match. What do you do next?
+- [ ] **Q60** The run has arrived on /blue and the md5sums match. What do you do next?
   - a. Start basecalling straight away and tidy the files up later
-  - **✓ b.** **File it into `00_raw/`, set it read-only, log it in the manifest**
-  - c. Move it to `/orange` and clear it off `/blue`
-  - d. Compress it and keep a second copy in `/home`
-  - *Why: On arrival you verify, then protect: file it into `/blue/<group>/.../00_raw/`, set it read-only, and log it against the sample manifest.*
+  - **✓ b.** **File it into 00_raw/, set it read-only, log it in the manifest**
+  - c. Move it to /orange and clear it off /blue
+  - d. Compress it and keep a second copy in /home
+  - *Why: On arrival you verify, then protect: file it into /blue/<group>/.../00_raw/, set it read-only, and log it against the sample manifest.*
 
 ---
 
-## Known content gaps — these need the READING fixed, not the questions
+## Recently closed content gaps — worth confirming the new text reads right to you
 
-In these three cases the answer key looks right to me and the underlying practice is right, but the
-skill's `instructions_md` never teaches it. A trainee can read the page carefully, understand it
-fully, and still fail — which reads to them as an unfair quiz rather than a gap in the reading.
-The fix belongs in the instructions, not in the question.
+These three used to be the awkward cases: the answer key was right and the underlying practice was
+right, but the skill's `instructions_md` never taught it, so a trainee could read the page
+carefully, understand it fully, and still fail. All three were rewritten on 9 August 2026 and now
+carry quiz questions on the material, so the gap itself is closed. What is left is your judgement
+on the wording — this text is a few hours old and nobody has taught from it yet, so it is worth
+reading once as if you were the trainee.
 
-- **[SAF-01](#saf-01) — Chemical Hygiene Plan (EHS869).** The critical checklist item on locating
-  the eyewash, safety shower, spill kit and fire extinguisher before starting work is never
-  mentioned in the instructions. A trainee can pass the reading and then fail the practical for not
-  knowing where the eyewash is — the one thing SAF-25 assumes they can reach in seconds.
+- **[SAF-01](#saf-01) — Chemical Hygiene Plan (EHS869).** The instructions now cover locating the
+  eyewash, safety shower, spill kit and fire extinguisher before starting work, the full 15-minute
+  flush, and keeping the path to that equipment clear. Q70 and Q80 assess it. The thing to check is
+  whether the flush duration and the obstruction rule read the way you would say them out loud —
+  this is the material SAF-25 has always assumed a trainee already had.
 - **[SAF-29](#saf-29) — BSL-2 practices.** Glove doffing technique and disinfectant surface contact
-  time are assessed but not taught. Someone who has read the page still has no idea how long the
-  bleach has to sit, and will fail the practical on a step the reading never named.
-- **[SAF-39](#saf-39) — Liquid nitrogen and cryogens (EHS866).** The requirement to move dewars on a
-  proper transport cart is not in the reading. The instructions cover the lift rule and the PPE but
-  stop short of how the dewar physically gets down the corridor, so the trainee is marked down for
-  something they were never told.
-
+  time are now taught rather than merely assessed, along with the rule that bleach never goes near
+  a guanidinium spill. Q80, Q90 and Q100 assess it. Contact time is the one to look at closely: the
+  reading needs to name a duration precise enough that someone can actually hold themselves to it.
+- **[SAF-39](#saf-39) — Liquid nitrogen and cryogens (EHS866).** Moving a dewar on a proper
+  cryogenic transport cart is now in the reading, and so is the freight-lift case that the old text
+  stopped just short of. Q80 and Q100 assess it. Confirm the cart described matches the one the lab
+  actually owns, so nobody is being taught against equipment we do not have.
