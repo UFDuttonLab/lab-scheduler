@@ -4,7 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 
 interface ProtectedRouteProps {
   children: ReactNode;
-  requirePermission?: 'canManageUsers' | 'canManageProjects' | 'canManageEquipment' | 'canViewAnalytics';
+  requirePermission?: 'canManageUsers' | 'canManageProjects' | 'canManageEquipment' | 'canViewAnalytics'
+    | 'canManageRecruitingPositions' | 'canReviewApplications';
 }
 
 export const ProtectedRoute = ({ children, requirePermission }: ProtectedRouteProps) => {

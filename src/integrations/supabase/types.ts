@@ -410,6 +410,359 @@ export type Database = {
         }
         Relationships: []
       }
+      recruiting_application_positions: {
+        Row: {
+          application_id: string
+          created_at: string
+          position_id: string
+          rank: number
+        }
+        Insert: {
+          application_id: string
+          created_at?: string
+          position_id: string
+          rank: number
+        }
+        Update: {
+          application_id?: string
+          created_at?: string
+          position_id?: string
+          rank?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recruiting_application_positions_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "recruiting_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recruiting_application_positions_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "recruiting_positions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recruiting_applications: {
+        Row: {
+          animal_samples_ok: boolean
+          availability: Json
+          conflicts: string | null
+          coursework: string[]
+          created_at: string
+          credit_type: string
+          cycle: string
+          email: string
+          expected_graduation: string
+          field_intl_interest: boolean
+          field_local_ok: boolean
+          full_name: string
+          has_transportation: boolean
+          hours_available: number
+          id: string
+          longest_block_hours: number
+          major: string
+          policy_check_score: number
+          prior_contact: string | null
+          prior_lab_experience: string | null
+          r_experience: string
+          semesters_available: number
+          statement: string
+          status: string
+          updated_at: string
+          year: string
+        }
+        Insert: {
+          animal_samples_ok: boolean
+          availability: Json
+          conflicts?: string | null
+          coursework: string[]
+          created_at?: string
+          credit_type: string
+          cycle: string
+          email: string
+          expected_graduation: string
+          field_intl_interest: boolean
+          field_local_ok: boolean
+          full_name: string
+          has_transportation: boolean
+          hours_available: number
+          id?: string
+          longest_block_hours: number
+          major: string
+          policy_check_score: number
+          prior_contact?: string | null
+          prior_lab_experience?: string | null
+          r_experience: string
+          semesters_available: number
+          statement: string
+          status?: string
+          updated_at?: string
+          year: string
+        }
+        Update: {
+          animal_samples_ok?: boolean
+          availability?: Json
+          conflicts?: string | null
+          coursework?: string[]
+          created_at?: string
+          credit_type?: string
+          cycle?: string
+          email?: string
+          expected_graduation?: string
+          field_intl_interest?: boolean
+          field_local_ok?: boolean
+          full_name?: string
+          has_transportation?: boolean
+          hours_available?: number
+          id?: string
+          longest_block_hours?: number
+          major?: string
+          policy_check_score?: number
+          prior_contact?: string | null
+          prior_lab_experience?: string | null
+          r_experience?: string
+          semesters_available?: number
+          statement?: string
+          status?: string
+          updated_at?: string
+          year?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recruiting_applications_cycle_fkey"
+            columns: ["cycle"]
+            isOneToOne: false
+            referencedRelation: "recruiting_cycles"
+            referencedColumns: ["cycle"]
+          },
+        ]
+      }
+      recruiting_cycles: {
+        Row: {
+          active: boolean
+          closes_at: string
+          created_at: string
+          cycle: string
+          intro_md: string | null
+          label: string
+          min_hours_per_week: number
+          min_semesters: number
+          max_submissions_per_hour: number
+          next_cycle_note: string | null
+          opens_at: string
+          pi_contact_email: string
+          require_turnstile: boolean
+          trial_weeks: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          closes_at: string
+          created_at?: string
+          cycle: string
+          intro_md?: string | null
+          label: string
+          min_hours_per_week?: number
+          min_semesters?: number
+          max_submissions_per_hour?: number
+          next_cycle_note?: string | null
+          opens_at: string
+          pi_contact_email: string
+          require_turnstile?: boolean
+          trial_weeks?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          closes_at?: string
+          created_at?: string
+          cycle?: string
+          intro_md?: string | null
+          label?: string
+          min_hours_per_week?: number
+          min_semesters?: number
+          max_submissions_per_hour?: number
+          next_cycle_note?: string | null
+          opens_at?: string
+          pi_contact_email?: string
+          require_turnstile?: boolean
+          trial_weeks?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      recruiting_positions: {
+        Row: {
+          created_at: string
+          cycle: string
+          description: string
+          hours_per_week: number
+          id: string
+          max_mentees: number
+          mentor_id: string
+          min_block_hours: number
+          outcome: string
+          project_id: string
+          requirements: string[]
+          semesters_needed: number
+          status: string
+          tasks: string[]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          cycle: string
+          description: string
+          hours_per_week: number
+          id?: string
+          max_mentees?: number
+          mentor_id: string
+          min_block_hours?: number
+          outcome: string
+          project_id: string
+          requirements: string[]
+          semesters_needed?: number
+          status?: string
+          tasks: string[]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          cycle?: string
+          description?: string
+          hours_per_week?: number
+          id?: string
+          max_mentees?: number
+          mentor_id?: string
+          min_block_hours?: number
+          outcome?: string
+          project_id?: string
+          requirements?: string[]
+          semesters_needed?: number
+          status?: string
+          tasks?: string[]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recruiting_positions_cycle_fkey"
+            columns: ["cycle"]
+            isOneToOne: false
+            referencedRelation: "recruiting_cycles"
+            referencedColumns: ["cycle"]
+          },
+          {
+            foreignKeyName: "recruiting_positions_mentor_id_fkey"
+            columns: ["mentor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recruiting_positions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "recruiting_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recruiting_projects: {
+        Row: {
+          active: boolean
+          blurb: string
+          created_at: string
+          id: string
+          name: string
+          scheduler_project_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          blurb: string
+          created_at?: string
+          id?: string
+          name: string
+          scheduler_project_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          blurb?: string
+          created_at?: string
+          id?: string
+          name?: string
+          scheduler_project_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recruiting_projects_scheduler_project_id_fkey"
+            columns: ["scheduler_project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recruiting_reviews: {
+        Row: {
+          application_id: string
+          created_at: string
+          decision: string | null
+          id: string
+          interview_at: string | null
+          notes: string | null
+          reviewer_id: string
+          score: number | null
+          updated_at: string
+        }
+        Insert: {
+          application_id: string
+          created_at?: string
+          decision?: string | null
+          id?: string
+          interview_at?: string | null
+          notes?: string | null
+          reviewer_id: string
+          score?: number | null
+          updated_at?: string
+        }
+        Update: {
+          application_id?: string
+          created_at?: string
+          decision?: string | null
+          id?: string
+          interview_at?: string | null
+          notes?: string | null
+          reviewer_id?: string
+          score?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recruiting_reviews_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "recruiting_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recruiting_reviews_reviewer_id_fkey"
+            columns: ["reviewer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       skill_categories: {
         Row: {
           active: boolean
@@ -1073,6 +1426,15 @@ export type Database = {
         Returns: Json
       }
       get_quiz_attempt_detail: { Args: { _attempt_id: string }; Returns: Json }
+      recruiting_open_cycle: { Args: never; Returns: string }
+      recruiting_can_review: {
+        Args: { _application_id: string; _user_id: string }
+        Returns: boolean
+      }
+      recruiting_submit_application_public: {
+        Args: { _payload: Json }
+        Returns: Json
+      }
     }
     Enums: {
       action_type: "create" | "update" | "delete" | "login" | "logout"

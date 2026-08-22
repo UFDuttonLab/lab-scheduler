@@ -16,3 +16,15 @@ project_id = "ypaobygipbnkvnismhyy"
 #
 # manage-users is NOT listed here on purpose: without an entry it inherits verify_jwt = true,
 # so the gateway validates the caller's JWT signature before the function runs.
+
+# submit-application IS listed here, and must be, because it is the one public endpoint in
+# this project: an applicant has no account and therefore no JWT, so the gateway must not
+# demand one. Everything the gateway would normally establish is re-established inside the
+# function instead - a Cloudflare Turnstile check, full field validation, and a database
+# function that revalidates the same rules in SQL before inserting.
+#
+# The note above about manage-users still holds and is the counterpart to this: adding a
+# verify_jwt = false line to a function that assumes an authenticated caller is how a
+# privileged endpoint becomes a public one. This function was written to be public.
+[functions.submit-application]
+verify_jwt = false

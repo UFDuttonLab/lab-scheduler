@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Calendar, Settings, History, Wrench, BarChart3, Clock, FileText, HelpCircle, GraduationCap } from "lucide-react";
+import { Home, Calendar, Settings, History, Wrench, BarChart3, Clock, FileText, HelpCircle, GraduationCap, ClipboardList, Inbox } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSkillsModule } from "@/hooks/useSkillsModule";
@@ -20,6 +20,8 @@ export const MobileNavigation = () => {
     { path: "/history", label: "History", icon: History },
     { path: "/activity-log", label: "Activity", icon: FileText },
     ...(canSeeSkills ? [{ path: "/skills", label: "Skills", icon: GraduationCap }] : []),
+    { path: "/positions", label: "Positions", icon: ClipboardList, requirePermission: 'canManageRecruitingPositions' },
+    { path: "/review", label: "Applicants", icon: Inbox, requirePermission: 'canReviewApplications' },
     { path: "/settings", label: "Settings", icon: Settings, requirePermission: 'canManageUsers' },
     { path: "/help", label: "Help", icon: HelpCircle },
   ];

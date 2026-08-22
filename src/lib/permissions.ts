@@ -72,6 +72,43 @@ export interface RolePermissions {
    * has_any_role(pi, manager).
    */
   canAdminSkillsModule: boolean;
+  /**
+   * Can create and own an undergraduate position listing. Mirrors the
+   * recruiting_positions INSERT policy:
+   *   WITH CHECK (mentor_id = auth.uid()
+   *               AND has_any_role(pi, postdoc, grad_student, manager, pi_external))
+   * This is the canonical 5-role elevated set. undergrad_student is deliberately absent -
+   * setting a listing to 'open' publishes it on the public internet under the lab's name,
+   * and an undergraduate being mentored should not be able to do that.
+   */
+  canManageRecruitingPositions: boolean;
+  /**
+   * Purely a UI affordance: whether to offer the #/review queue at all. The real authority
+   * is PER APPLICATION and lives in recruiting_can_review(auth.uid(), application_id) - a
+   * mentor sees exactly the applications that ranked one of their own listings. This flag
+   * must NOT be read as "can see all applications"; the page shows whatever RLS returns,
+   * which for someone who owns no listing is an empty queue.
+   *
+   * It tracks canManageRecruitingPositions because owning a listing is what puts
+   * applications in front of you. The one gap: if a PI reassigns a listing's mentor_id to
+   * an undergrad_student, the database would let that person review it but this flag hides
+   * the page. Widen this and the position INSERT policy together if that ever happens.
+   */
+  canReviewApplications: boolean;
+  /**
+   * Can open and close recruiting cycles, edit the recruiting project list, edit ANY
+   * mentor's listing, and archive-and-delete a closed cycle's applications.
+   * Mirrors has_role(auth.uid(), 'pi') in the recruiting_cycles / recruiting_projects
+   * "PI can manage" policies and in the applications DELETE policy.
+   *
+   * NOTE this is PI ONLY, where the rest of this file pairs pi with manager. That is
+   * deliberate and is the one place this module departs from the repo's convention:
+   * applications hold applicants' personal statements and contact details, `manager` is
+   * described in ROLE_DESCRIPTIONS as a legacy full-access role, and no account currently
+   * holds it. If a manager is ever appointed and needs this, change the policies and this
+   * flag in the same commit.
+   */
+  canAdminRecruiting: boolean;
 }
 
 export const ROLE_LABELS: Record<AppRole, string> = {
@@ -109,6 +146,9 @@ export const getRolePermissions = (role: AppRole | null): RolePermissions => {
         canManageSkillCatalog: true,
         canSignOffSomeSkills: true,
         canAdminSkillsModule: true,
+        canManageRecruitingPositions: true,
+        canReviewApplications: true,
+        canAdminRecruiting: true,
       };
     case 'manager':
       return {
@@ -124,6 +164,11 @@ export const getRolePermissions = (role: AppRole | null): RolePermissions => {
         canManageSkillCatalog: true,
         canSignOffSomeSkills: true,
         canAdminSkillsModule: true,
+        canManageRecruitingPositions: true,
+        canReviewApplications: true,
+        // Not the PI. `manager` is in the recruiting_positions INSERT policy but not in
+        // the PI-only policies on cycles, projects and the archive delete.
+        canAdminRecruiting: false,
       };
     case 'pi_external':
       return {
@@ -140,6 +185,9 @@ export const getRolePermissions = (role: AppRole | null): RolePermissions => {
         canSignOffSomeSkills: true,
         // Only pi and manager appear in can_grant_trainer().
         canAdminSkillsModule: false,
+        canManageRecruitingPositions: true,
+        canReviewApplications: true,
+        canAdminRecruiting: false,
       };
     case 'postdoc':
     case 'grad_student':
@@ -155,6 +203,9 @@ export const getRolePermissions = (role: AppRole | null): RolePermissions => {
         canManageSkillCatalog: true,
         canSignOffSomeSkills: true,
         canAdminSkillsModule: false,
+        canManageRecruitingPositions: true,
+        canReviewApplications: true,
+        canAdminRecruiting: false,
       };
     case 'undergrad_student':
       return {
@@ -176,6 +227,10 @@ export const getRolePermissions = (role: AppRole | null): RolePermissions => {
         // true only means "show the button"; it is empty unless they hold a trainer row.
         canSignOffSomeSkills: true,
         canAdminSkillsModule: false,
+        // Absent from the recruiting_positions INSERT policy - see the flag's comment.
+        canManageRecruitingPositions: false,
+        canReviewApplications: false,
+        canAdminRecruiting: false,
       };
     case 'user':
     default:
@@ -191,6 +246,9 @@ export const getRolePermissions = (role: AppRole | null): RolePermissions => {
         canManageSkillCatalog: false,
         canSignOffSomeSkills: false,
         canAdminSkillsModule: false,
+        canManageRecruitingPositions: false,
+        canReviewApplications: false,
+        canAdminRecruiting: false,
       };
   }
 };

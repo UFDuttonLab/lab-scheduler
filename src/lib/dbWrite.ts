@@ -71,3 +71,37 @@ export const readFunctionError = async (
   if (message && !message.includes("non-2xx status code")) return message;
   return fallback;
 };
+
+/**
+ * Like readFunctionError, but hands back the whole parsed body.
+ *
+ * The recruiting form needs more than a sentence: submit-application answers a bad
+ * submission with `{ ok: false, error, fields: { email: "...", choices: "..." } }` so the
+ * form can put each message next to the input it belongs to. readFunctionError throws the
+ * field map away, which is right for a toast and wrong for a form.
+ *
+ * Returns null when the response body was not JSON - callers should fall back to
+ * readFunctionError for a human-readable message in that case.
+ */
+export const readFunctionBody = async (
+  error: unknown
+): Promise<Record<string, unknown> | null> => {
+  const context = (error as { context?: Response })?.context;
+  if (context && typeof context.json === "function") {
+    try {
+      return await context.clone().json();
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
+/**
+ * The HTTP status behind a failed functions.invoke, or null if it cannot be read.
+ * The recruiting form distinguishes 409 (already applied) from 400 (fix a field).
+ */
+export const readFunctionStatus = (error: unknown): number | null => {
+  const context = (error as { context?: Response })?.context;
+  return typeof context?.status === "number" ? context.status : null;
+};

@@ -20,6 +20,9 @@ import Auth from "./pages/Auth";
 import ResetPasswordVerify from "./pages/ResetPasswordVerify";
 import Help from "./pages/Help";
 import Skills from "./pages/Skills";
+import Join from "./pages/Join";
+import Positions from "./pages/Positions";
+import Review from "./pages/Review";
 import NotFound from "./pages/NotFound";
 import MicrobeBlaster from "./pages/MicrobeBlaster";
 import ZombieLunch from "./pages/ZombieLunch";
@@ -65,6 +68,10 @@ const App = () => (
           <RecoveryRedirect />
           <Routes>
             <Route path="/auth" element={<Auth />} />
+            {/* #/join is the only PUBLIC route in the app - no ProtectedRoute, and the page
+                renders its own header rather than <Navigation>, which reads useAuth() and
+                would show a visitor the signed-in user's email. */}
+            <Route path="/join" element={<Join />} />
             <Route path="/reset-password" element={<ResetPasswordVerify />} />
             <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
             <Route path="/schedule" element={<ProtectedRoute><Schedule /></ProtectedRoute>} />
@@ -77,6 +84,8 @@ const App = () => (
             {/* Skills gates itself on skill_module_settings.visible_to_all - while that is
                 false only pi/manager get past it, so no ProtectedRoute permission is needed. */}
             <Route path="/skills" element={<ProtectedRoute><Skills /></ProtectedRoute>} />
+            <Route path="/positions" element={<ProtectedRoute requirePermission="canManageRecruitingPositions"><Positions /></ProtectedRoute>} />
+            <Route path="/review" element={<ProtectedRoute requirePermission="canReviewApplications"><Review /></ProtectedRoute>} />
             <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
             <Route path="/microbe-blaster" element={<ProtectedRoute><MicrobeBlaster /></ProtectedRoute>} />
             <Route path="/zombie-lunch" element={<ProtectedRoute><ZombieLunch /></ProtectedRoute>} />
