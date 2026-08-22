@@ -12,6 +12,11 @@
 --     unqualified UPDATE/DELETE arriving through PostgREST - including inside a SECURITY
 --     DEFINER function. No test here can exercise it. Checked separately by grep.
 --   * PostgreSQL version: production is 17.6, this is 16.13.
+--
+-- ADDED 2026-08-22 after it caused a false failure that turned out to be a REAL bug:
+-- pgcrypto is installed in the `extensions` schema on this project, not `public`. A
+-- SECURITY DEFINER function with `SET search_path = public` cannot see an unqualified
+-- digest(). Mirror the schema, not just the extension.
 
 -- Roles are cluster-wide, so a DROP DATABASE does not remove them.
 DO $$ BEGIN CREATE ROLE anon NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -33,6 +38,10 @@ LANGUAGE sql STABLE AS $$
 $$;
 GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
+
+CREATE SCHEMA IF NOT EXISTS extensions;
+GRANT USAGE ON SCHEMA extensions TO anon, authenticated, service_role;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 CREATE TYPE public.app_role AS ENUM
   ('pi','postdoc','grad_student','undergrad_student','manager','user','pi_external');
@@ -84,3 +93,40 @@ CREATE OR REPLACE FUNCTION public.is_active_user(_user_id uuid)
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public' AS $function$
   SELECT EXISTS (SELECT 1 FROM public.profiles WHERE id = _user_id AND active = true)
 $function$;
+
+
+-- RLS as production has it. Added 2026-08-22: without this, `projects`, `profiles` and
+-- `user_roles` were wide open in scratch and a probe asserting "anon cannot read
+-- public.projects" passed against a table that had no RLS to enforce it. The policies below
+-- are copied from production, not invented.
+ALTER TABLE public.projects   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Everyone can view projects"
+  ON public.projects FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Only PI, Post-Docs, Grad Students, and External PIs can manage "
+  ON public.projects FOR ALL TO authenticated
+  USING (public.has_any_role(auth.uid(), ARRAY['pi','postdoc','grad_student','manager','pi_external']::public.app_role[]));
+
+CREATE POLICY "Users can view active profiles"
+  ON public.profiles FOR SELECT TO authenticated USING (active = true);
+CREATE POLICY "Users can view own profile"
+  ON public.profiles FOR SELECT TO authenticated USING (auth.uid() = id);
+CREATE POLICY "PI and managers can view all profiles"
+  ON public.profiles FOR SELECT TO authenticated
+  USING (public.has_any_role(auth.uid(), ARRAY['pi','manager']::public.app_role[]));
+CREATE POLICY "Users can update own profile"
+  ON public.profiles FOR UPDATE TO authenticated USING (auth.uid() = id);
+CREATE POLICY "PI and managers can update any profile"
+  ON public.profiles FOR UPDATE TO authenticated
+  USING (public.has_any_role(auth.uid(), ARRAY['pi','manager']::public.app_role[]))
+  WITH CHECK (public.has_any_role(auth.uid(), ARRAY['pi','manager']::public.app_role[]));
+
+CREATE POLICY "Users can view own roles; PI and managers can view all"
+  ON public.user_roles FOR SELECT TO authenticated
+  USING (user_id = auth.uid() OR public.has_any_role(auth.uid(), ARRAY['pi','manager']::public.app_role[]));
+CREATE POLICY "Only PI can manage roles"
+  ON public.user_roles FOR ALL
+  USING (public.has_role(auth.uid(), 'pi'::public.app_role));
+

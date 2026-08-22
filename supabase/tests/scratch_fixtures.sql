@@ -16,7 +16,9 @@ INSERT INTO public.recruiting_cycles (cycle,label,opens_at,closes_at,active,pi_c
  ('fall-2026','Fall 2026', now()-interval '2 days', now()+interval '20 days', true, 'duttonc@ufl.edu'),
  ('spring-2026','Spring 2026', now()-interval '300 days', now()-interval '200 days', false, 'duttonc@ufl.edu');
 
-INSERT INTO public.recruiting_projects (id,name,blurb) VALUES
+-- Scheduler projects. Since 20260822140000 the recruiting module points straight at
+-- public.projects and public.projects.description is the public blurb.
+INSERT INTO public.projects (id,name,description) VALUES
  ('11111111-2222-3333-4444-555555555555','Proj A','A blurb about project A that is long enough.'),
  ('11111111-2222-3333-4444-555555555556','Proj B','A blurb about project B that is long enough.');
 

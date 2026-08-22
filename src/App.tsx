@@ -84,7 +84,7 @@ const App = () => (
             {/* Skills gates itself on skill_module_settings.visible_to_all - while that is
                 false only pi/manager get past it, so no ProtectedRoute permission is needed. */}
             <Route path="/skills" element={<ProtectedRoute><Skills /></ProtectedRoute>} />
-            <Route path="/positions" element={<ProtectedRoute requirePermission="canManageRecruitingPositions"><Positions /></ProtectedRoute>} />
+            <Route path="/positions" element={<ProtectedRoute requirePermission="canReviewApplications"><Positions /></ProtectedRoute>} />
             <Route path="/review" element={<ProtectedRoute requirePermission="canReviewApplications"><Review /></ProtectedRoute>} />
             <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
             <Route path="/microbe-blaster" element={<ProtectedRoute><MicrobeBlaster /></ProtectedRoute>} />

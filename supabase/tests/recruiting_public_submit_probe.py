@@ -1,4 +1,4 @@
-import subprocess, json, sys
+import subprocess, json, sys, hashlib
 PSQL=["/usr/lib/postgresql/16/bin/psql","-h","/tmp/pgrun","-p","5433","-U","postgres","-d","scratch","-X","-q","-A","-t"]
 def run(sql, role=None, commit=False):
     pre = f"SET ROLE {role};\n" if role else ""
@@ -16,8 +16,33 @@ BASE = {
  "elapsed_ms":95000,"website":"",
  "choices":[{"position_id":"aaaa1111-0000-0000-0000-00000000000a","rank":1}],
 }
+def fresh_pow():
+    """Issue a challenge and solve it, exactly as the browser does.
+
+    Added 2026-08-22 with the proof-of-work gate. Without this every case that expects a
+    successful submission fails with 'The check that you are a real browser did not
+    complete' - which is the gate working, not the probe finding a bug."""
+    # NOT run(): that wraps every statement in BEGIN/ROLLBACK, so the issued challenge
+    # would be rolled back before the submission in the next transaction could spend it.
+    p = subprocess.run(
+        PSQL + ["-c", "SET ROLE anon; SELECT public.recruiting_issue_pow_challenge();"],
+        capture_output=True, text=True)
+    rc, out, err = p.returncode, (p.stdout or "").strip(), (p.stderr or "").strip()
+    ch = json.loads(out.splitlines()[-1])
+    if not ch.get("ok"):
+        return {"pow_challenge_id": None, "pow_nonce": None}
+    cid, bits = ch["challenge_id"], ch["difficulty_bits"]
+    if bits == 0:
+        return {"pow_challenge_id": cid, "pow_nonce": "0"}
+    n = 0
+    while True:
+        h = hashlib.sha256(f"{cid}:{n}".encode()).digest()
+        if int.from_bytes(h[:4], "big") >> (32 - bits) == 0:
+            return {"pow_challenge_id": cid, "pow_nonce": str(n)}
+        n += 1
+
 def call(**over):
-    p = dict(BASE); p.update(over)
+    p = dict(BASE); p.update(fresh_pow()); p.update(over)
     lit = json.dumps(p).replace("'", "''")
     return f"SELECT public.recruiting_submit_application_public('{lit}'::jsonb);"
 

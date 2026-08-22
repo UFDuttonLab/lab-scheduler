@@ -22,22 +22,71 @@ the site is deployed.
 | Cycle | `fall-2026`, open **22 Aug 2026 → 19 Sep 2026** |
 | Listings | 5, all `open`, owned by Ava Gabrys (×2), Tavis Goldwire, Suzanna Mickey, Lee Nonnamaker |
 | Submission path | direct to the database — `recruiting_submit_application_public()` |
-| Bot protection | honeypot + minimum time-on-form + hourly cap + one-per-address. **No CAPTCHA yet.** |
+| Bot protection | **proof of work** + honeypot + minimum time-on-form + hourly cap + one-per-address |
+| Projects | the scheduler's own list. There is no second project table. |
+| Mentors | assigned by the PI on `#/positions`, per listing |
 | Emails | none, by design. `#/review` is the notification. |
 
-### The one thing still worth doing: turn on Turnstile
+## Adding a project
 
-There is currently **no CAPTCHA** on a public write endpoint. `anon` can call
-`recruiting_submit_application_public()` with the publishable key that ships in every
-visitor's bundle. What stands in for a CAPTCHA today:
+**In Settings → Projects, the same place you always have.** There is no separate
+recruiting project list any more — a listing points at the scheduler's project, which is
+what makes "who did we recruit onto Hippo, and what have they booked since" a single join.
 
-- one application per ufl.edu address per cycle (a unique index, not a check-then-insert);
-- a honeypot field that only a form-filling bot fills in;
-- a 20-second minimum time-on-form;
-- a per-cycle cap of 40 applications an hour (`recruiting_cycles.max_submissions_per_hour`).
+Two fields matter for recruiting:
 
-That stops drive-by bots and bounds the damage to something you can spot and delete. It
-does not stop someone who is trying. To close it properly:
+- **Name** — appears as the small label above the role title on the public page.
+- **Description** — becomes the public blurb. One sentence a second-year could follow. It
+  is only ever shown for a project that has an open listing.
+
+The **icon** shows up on the public listing card too.
+
+## Assigning a mentor
+
+On `#/positions`, in the listing dialog. As PI you get a **Mentor** picker listing every
+active person with their role; whoever is named there is the only person besides you who
+can edit that listing, and the only one who sees its applications. Anyone else creating a
+listing owns it automatically and cannot reassign it — that is enforced by RLS, not just
+by the UI.
+
+Reassigning is how you hand a project over when someone leaves: change the mentor and the
+applications follow.
+
+## Bot protection
+
+### What is running now
+
+A **proof of work**. The database issues a single-use challenge; the applicant's browser
+must find a nonce whose SHA-256 begins with 18 zero bits, which is about a quarter of a
+million hashes. It runs in the background from the moment they reach the last step, so in
+practice they never wait for it — measured at ~300 ms in headless Chromium, and a second
+or two on a slow phone.
+
+It is not a human check. What it does is make every submission cost measurable CPU: ten
+thousand fake applications is hours of a core, on top of needing ten thousand distinct
+ufl.edu addresses and beating the hourly cap.
+
+Alongside it: one application per address per cycle (a unique index, not a
+check-then-insert), a honeypot field, a 20-second minimum time-on-form, and a cap of 40
+applications an hour.
+
+Two dials, both on the cycle row, both effective immediately with no rebuild:
+
+```sql
+-- Under attack: 22 bits is about 15 seconds of work per submission.
+UPDATE public.recruiting_cycles SET pow_difficulty_bits = 22 WHERE cycle = 'fall-2026';
+
+-- Locking real applicants out on slow devices? 0 disables the gate entirely.
+UPDATE public.recruiting_cycles SET pow_difficulty_bits = 0  WHERE cycle = 'fall-2026';
+
+-- Expecting a rush after an announcement email:
+UPDATE public.recruiting_cycles SET max_submissions_per_hour = 120 WHERE cycle = 'fall-2026';
+```
+
+### Turnstile is still the better answer
+
+Proof of work costs an attacker CPU; Turnstile actually tells a person from a script. It is
+written and wired on both sides. To turn it on:
 
 1. Cloudflare dashboard → Turnstile → **Add site**, hostname `ufduttonlab.github.io`.
 2. Put the **site key** in `.env` as `VITE_TURNSTILE_SITE_KEY`, and rebuild.
@@ -56,7 +105,33 @@ one exists — and so turning it on takes effect for everyone immediately, with 
 
 To back out, set the flag to `false` again.
 
-### Two doors, one insert
+## Turning an accepted applicant into a lab member
+
+On `#/review`, open an application and use **Create lab account** (PI only). It calls the
+same `manage-users` function Settings uses — so accounts still come into existence exactly
+one way, and it writes its own `activity_logs` entry — creates the profile with role
+Undergraduate Student, hands you the one-time password to pass on, and records the link.
+
+If an account already uses that address it offers **Link to the existing account** instead
+of creating a duplicate.
+
+Once linked, the application is joined to everything else the scheduler knows:
+
+```sql
+SELECT a.full_name, a.cycle,
+       count(DISTINCT b.id)  AS bookings,
+       count(DISTINCT s.id)  AS skill_signoffs
+  FROM public.recruiting_applications a
+  LEFT JOIN public.bookings b       ON b.user_id = a.profile_id
+  LEFT JOIN public.skill_signoffs s ON s.user_id = a.profile_id
+ WHERE a.profile_id IS NOT NULL
+ GROUP BY 1, 2;
+```
+
+Only a PI can set that link — enforced by a trigger, because a row policy cannot see which
+column an UPDATE touched.
+
+## Two doors, one insert
 
 ```
 #/join
@@ -64,6 +139,7 @@ To back out, set the flag to `false` again.
   ├── require_turnstile = false  ──▶  recruiting_submit_application_public()   [anon may call]
   │                                     honeypot · time-on-form · hourly cap
   │                                     full field validation → { ok, error, fields }
+  │                                     proof of work (last, so a typo does not spend it)
   │                                                │
   └── require_turnstile = true   ──▶  submit-application (edge fn)             [Turnstile]
                                         full field validation → { ok, error, fields }
@@ -252,7 +328,7 @@ and `recruiting_submit_application` appear zero times.
 
 ## How this was tested, and what is still untested
 
-### Done — 49 automated checks against a scratch PostgreSQL
+### Done — 84 automated checks against a scratch PostgreSQL
 
 `supabase/tests/` holds a reproducible probe. `scratch_base.sql` builds a minimal mirror of
 production — the roles, the `app_role` enum, `profiles`, `user_roles`, `projects`,
@@ -261,8 +337,15 @@ PRIVILEGES` entries that grant `anon` full access to every new table in `public`
 mirroring those, every privilege assertion passes on the absence of a grant that production
 would have supplied.
 
-`recruiting_rls_probe.py` then runs 49 hostile and permissive cases as `anon` and as five
-different signed-in users. All 49 pass. They cover, among others:
+Three probes run against it, 84 cases in total, all passing:
+
+- `recruiting_rls_probe.py` — 49 cases on the policies and grants;
+- `recruiting_public_submit_probe.py` — 18 cases on the public submission door;
+- `recruiting_pow_probe.py` — 17 cases on the proof of work, the public view, and the
+  application-to-account link.
+
+The RLS probe runs as `anon` and as five different signed-in users. It covers, among
+others:
 
 - `anon` cannot select, insert or update `recruiting_applications`,
   `recruiting_application_positions` or `recruiting_reviews`, and cannot execute the submit
@@ -278,17 +361,35 @@ different signed-in users. All 49 pass. They cover, among others:
 - the PI cannot delete applications in the open cycle, and can in a closed one;
 - the submit RPC rejects four ranked positions, duplicate ranks, a draft position, a
   non-`ufl.edu` address, a 1501-character statement, malformed availability, an unknown
-  coursework value, and a second submission from the same address in the same cycle.
+  coursework value, and a second submission from the same address in the same cycle;
+- a solved proof of work is accepted; the same challenge cannot be spent twice; a wrong
+  nonce, no nonce at all, a nonce solved for a *different* challenge, and an hour-old
+  challenge are all rejected; difficulty 0 skips the gate; `anon` can neither call the
+  verifier directly nor read the challenge table;
+- `anon` reads open listings through the view but still **cannot read `public.projects`**,
+  and the view hides drafts;
+- a mentor cannot link an application to a lab account, but can still set its status; the
+  PI can do both.
 
-To re-run:
+To re-run — migrations in order, fixtures last, then each probe against a fresh database
+(they commit rows, so running two against the same database inflates the counts):
 
 ```bash
 psql -d scratch -f supabase/tests/scratch_base.sql
-psql -d scratch -f supabase/migrations/20260822100000_recruiting_schema.sql
-psql -d scratch -f supabase/migrations/20260822110000_recruiting_rls.sql
+for m in supabase/migrations/202608221*.sql supabase/migrations/2026082210*.sql; do
+  psql -d scratch -f "$m"
+done
 psql -d scratch -f supabase/tests/scratch_fixtures.sql
 python3 supabase/tests/recruiting_rls_probe.py
 ```
+
+`scratch_base.sql` is not decoration and two of its lines were written in blood:
+**pgcrypto is installed in the `extensions` schema, not `public`**, and `projects`,
+`profiles` and `user_roles` carry RLS. Getting the first wrong produced a false failure
+that turned out to be a real bug — `digest()` unqualified inside a `search_path = public`
+function does not resolve, and the live form would have broken. Getting the second wrong
+produced a false pass: an assertion that "anon cannot read public.projects" against a table
+that had no RLS to enforce it.
 
 ### Done — the form, driven end to end in a real browser
 

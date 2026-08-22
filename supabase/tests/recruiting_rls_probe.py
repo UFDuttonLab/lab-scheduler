@@ -61,7 +61,7 @@ check("anon INSERT application is denied",
 check("anon INSERT position is denied",
       """INSERT INTO public.recruiting_positions (project_id,mentor_id,title,description,tasks,requirements,hours_per_week,outcome,cycle)
          SELECT id,'aaaaaaaa-0000-0000-0000-000000000001','Fake role','Description over twenty characters ok.',
-                ARRAY['a','b','c'],ARRAY['r'],8,'An outcome long enough.','fall-2026' FROM public.recruiting_projects LIMIT 1;""",
+                ARRAY['a','b','c'],ARRAY['r'],8,'An outcome long enough.','fall-2026' FROM public.projects LIMIT 1;""",
       "anon", None, 'deny')
 check("anon UPDATE position status is denied",
       "UPDATE public.recruiting_positions SET status='closed' WHERE status='open';", "anon", None, 'deny')
@@ -114,17 +114,17 @@ check("Mentor A can open and close their own position",
 check("An undergrad cannot create a position",
       """INSERT INTO public.recruiting_positions (project_id,mentor_id,title,description,tasks,requirements,hours_per_week,outcome,cycle)
          SELECT id,'dddddddd-0000-0000-0000-000000000004','UG role','Description over twenty characters ok.',
-                ARRAY['a','b','c'],ARRAY['r'],8,'An outcome long enough.','fall-2026' FROM public.recruiting_projects LIMIT 1;""",
+                ARRAY['a','b','c'],ARRAY['r'],8,'An outcome long enough.','fall-2026' FROM public.projects LIMIT 1;""",
       "authenticated", UG, 'deny')
 check("A grad student can create a position for themselves",
       """INSERT INTO public.recruiting_positions (project_id,mentor_id,title,description,tasks,requirements,hours_per_week,outcome,cycle)
          SELECT id,'aaaaaaaa-0000-0000-0000-000000000001','New A role','Description over twenty characters ok.',
-                ARRAY['a','b','c'],ARRAY['r'],8,'An outcome long enough.','fall-2026' FROM public.recruiting_projects LIMIT 1;""",
+                ARRAY['a','b','c'],ARRAY['r'],8,'An outcome long enough.','fall-2026' FROM public.projects LIMIT 1;""",
       "authenticated", A, 'allow')
 check("A grad student cannot create a position owned by someone else",
       """INSERT INTO public.recruiting_positions (project_id,mentor_id,title,description,tasks,requirements,hours_per_week,outcome,cycle)
          SELECT id,'bbbbbbbb-0000-0000-0000-000000000002','Impostor role','Description over twenty characters ok.',
-                ARRAY['a','b','c'],ARRAY['r'],8,'An outcome long enough.','fall-2026' FROM public.recruiting_projects LIMIT 1;""",
+                ARRAY['a','b','c'],ARRAY['r'],8,'An outcome long enough.','fall-2026' FROM public.projects LIMIT 1;""",
       "authenticated", A, 'deny')
 
 # ---- reviews -------------------------------------------------------------------------
@@ -203,12 +203,12 @@ check("RPC rejects an unknown coursework value",
 check("A position with 2 tasks is rejected",
       """INSERT INTO public.recruiting_positions (project_id,mentor_id,title,description,tasks,requirements,hours_per_week,outcome,cycle)
          SELECT id,'aaaaaaaa-0000-0000-0000-000000000001','Two task role','Description over twenty characters ok.',
-                ARRAY['a','b'],ARRAY['r'],8,'An outcome long enough.','fall-2026' FROM public.recruiting_projects LIMIT 1;""",
+                ARRAY['a','b'],ARRAY['r'],8,'An outcome long enough.','fall-2026' FROM public.projects LIMIT 1;""",
       None, None, 'deny')
 check("A position with an empty task string is rejected",
       """INSERT INTO public.recruiting_positions (project_id,mentor_id,title,description,tasks,requirements,hours_per_week,outcome,cycle)
          SELECT id,'aaaaaaaa-0000-0000-0000-000000000001','Blank task role','Description over twenty characters ok.',
-                ARRAY['a','  ','c'],ARRAY['r'],8,'An outcome long enough.','fall-2026' FROM public.recruiting_projects LIMIT 1;""",
+                ARRAY['a','  ','c'],ARRAY['r'],8,'An outcome long enough.','fall-2026' FROM public.projects LIMIT 1;""",
       None, None, 'deny')
 check("A second active cycle is rejected",
       "INSERT INTO public.recruiting_cycles (cycle,label,opens_at,closes_at,active,pi_contact_email) VALUES ('x','X',now(),now()+interval '1 day',true,'a@ufl.edu');",

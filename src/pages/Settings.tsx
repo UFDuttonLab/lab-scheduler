@@ -973,6 +973,10 @@ const Settings = () => {
 
                   <div className="space-y-2">
                     <Label>Description (Optional)</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Shown publicly on the undergraduate application page for any project
+                      with an open listing. One sentence a second-year could follow.
+                    </p>
                     <Textarea 
                       placeholder="Brief description of the project" 
                       rows={3}

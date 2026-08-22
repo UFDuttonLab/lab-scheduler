@@ -467,6 +467,7 @@ export type Database = {
           major: string
           policy_check_score: number
           prior_contact: string | null
+          profile_id: string | null
           prior_lab_experience: string | null
           r_experience: string
           semesters_available: number
@@ -495,6 +496,7 @@ export type Database = {
           major: string
           policy_check_score: number
           prior_contact?: string | null
+          profile_id?: string | null
           prior_lab_experience?: string | null
           r_experience: string
           semesters_available: number
@@ -523,6 +525,7 @@ export type Database = {
           major?: string
           policy_check_score?: number
           prior_contact?: string | null
+          profile_id?: string | null
           prior_lab_experience?: string | null
           r_experience?: string
           semesters_available?: number
@@ -538,6 +541,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "recruiting_cycles"
             referencedColumns: ["cycle"]
+          },
+          {
+            foreignKeyName: "recruiting_applications_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -555,6 +565,7 @@ export type Database = {
           next_cycle_note: string | null
           opens_at: string
           pi_contact_email: string
+          pow_difficulty_bits: number
           require_turnstile: boolean
           trial_weeks: number
           updated_at: string
@@ -572,6 +583,7 @@ export type Database = {
           next_cycle_note?: string | null
           opens_at: string
           pi_contact_email: string
+          pow_difficulty_bits?: number
           require_turnstile?: boolean
           trial_weeks?: number
           updated_at?: string
@@ -589,6 +601,7 @@ export type Database = {
           next_cycle_note?: string | null
           opens_at?: string
           pi_contact_email?: string
+          pow_difficulty_bits?: number
           require_turnstile?: boolean
           trial_weeks?: number
           updated_at?: string
@@ -668,44 +681,6 @@ export type Database = {
           {
             foreignKeyName: "recruiting_positions_project_id_fkey"
             columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "recruiting_projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      recruiting_projects: {
-        Row: {
-          active: boolean
-          blurb: string
-          created_at: string
-          id: string
-          name: string
-          scheduler_project_id: string | null
-          updated_at: string
-        }
-        Insert: {
-          active?: boolean
-          blurb: string
-          created_at?: string
-          id?: string
-          name: string
-          scheduler_project_id?: string | null
-          updated_at?: string
-        }
-        Update: {
-          active?: boolean
-          blurb?: string
-          created_at?: string
-          id?: string
-          name?: string
-          scheduler_project_id?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "recruiting_projects_scheduler_project_id_fkey"
-            columns: ["scheduler_project_id"]
             isOneToOne: false
             referencedRelation: "projects"
             referencedColumns: ["id"]
@@ -1368,6 +1343,24 @@ export type Database = {
       }
     }
     Views: {
+      recruiting_open_positions: {
+        Row: {
+          cycle: string | null
+          description: string | null
+          hours_per_week: number | null
+          id: string | null
+          min_block_hours: number | null
+          outcome: string | null
+          project_blurb: string | null
+          project_icon: string | null
+          project_name: string | null
+          requirements: string[] | null
+          semesters_needed: number | null
+          tasks: string[] | null
+          title: string | null
+        }
+        Relationships: []
+      }
       skill_quiz_status: {
         Row: {
           attempts: number | null
@@ -1435,6 +1428,7 @@ export type Database = {
         Args: { _payload: Json }
         Returns: Json
       }
+      recruiting_issue_pow_challenge: { Args: never; Returns: Json }
     }
     Enums: {
       action_type: "create" | "update" | "delete" | "login" | "logout"

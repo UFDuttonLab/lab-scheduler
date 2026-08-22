@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { PositionCard, PublicPosition } from "@/components/recruiting/PositionCard";
 import { AvailabilityGrid } from "@/components/recruiting/AvailabilityGrid";
 import { TurnstileWidget } from "@/components/recruiting/TurnstileWidget";
+import { PowChallenge, PowSolution, solvePow } from "@/lib/recruitingPow";
 import {
   Availability,
   COURSEWORK_OPTIONS,
@@ -85,6 +86,8 @@ interface CycleRow {
    * takes effect for everyone immediately, and so the client cannot choose the weaker door.
    */
   require_turnstile: boolean;
+  /** 0 disables the proof-of-work gate. See recruitingPow.ts. */
+  pow_difficulty_bits: number;
 }
 
 interface FormState {
@@ -242,6 +245,18 @@ const Join = () => {
    */
   const [honeypot, setHoneypot] = useState("");
 
+  /**
+   * Proof of work. A challenge is requested and solved as soon as the applicant reaches
+   * the last step, so the second or so of hashing happens while they are writing their
+   * statement and they never wait for it.
+   *
+   * Held in a ref as well as state: the solver is async and the submit handler needs the
+   * answer that exists at the moment it runs, not the one captured when it was created.
+   */
+  const [powState, setPowState] = useState<"idle" | "working" | "ready" | "failed">("idle");
+  const powRef = useRef<PowSolution | null>(null);
+  const powCancelRef = useRef<{ cancelled: boolean }>({ cancelled: false });
+
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
@@ -269,17 +284,19 @@ const Join = () => {
         supabase
           .from("recruiting_cycles")
           .select(
-            "cycle, label, opens_at, closes_at, min_hours_per_week, min_semesters, trial_weeks, pi_contact_email, intro_md, next_cycle_note, require_turnstile",
+            "cycle, label, opens_at, closes_at, min_hours_per_week, min_semesters, trial_weeks, pi_contact_email, intro_md, next_cycle_note, require_turnstile, pow_difficulty_bits",
           )
           .eq("cycle", openCycle)
           .maybeSingle(),
+        // recruiting_open_positions is a view owned by postgres: it joins positions to the
+        // SCHEDULER's project list and already filters to open listings in the open cycle.
+        // Reading it rather than the tables is what keeps public.projects itself closed to
+        // anon - see the migration for why that matters.
         supabase
-          .from("recruiting_positions")
+          .from("recruiting_open_positions")
           .select(
-            "id, title, description, tasks, requirements, hours_per_week, min_block_hours, semesters_needed, outcome, recruiting_projects(name, blurb)",
+            "id, title, description, tasks, requirements, hours_per_week, min_block_hours, semesters_needed, outcome, project_name, project_blurb, project_icon",
           )
-          // Explicit, even though RLS says the same for anon. See the note at the top.
-          .eq("status", "open")
           .eq("cycle", openCycle)
           .order("title"),
       ]);
@@ -287,24 +304,22 @@ const Join = () => {
 
       setCycle((cycleRow as CycleRow) ?? null);
       setPositions(
-        (positionRows ?? []).map((row) => {
-          const project = row.recruiting_projects as unknown as
-            | { name: string; blurb: string }
-            | null;
-          return {
-            id: row.id,
-            title: row.title,
-            description: row.description,
-            tasks: row.tasks ?? [],
-            requirements: row.requirements ?? [],
-            hours_per_week: row.hours_per_week,
-            min_block_hours: row.min_block_hours,
-            semesters_needed: row.semesters_needed,
-            outcome: row.outcome,
-            projectName: project?.name ?? null,
-            projectBlurb: project?.blurb ?? null,
-          };
-        }),
+        // Every column on a view is nullable as far as the generated types are concerned,
+        // so each one is defaulted rather than asserted.
+        (positionRows ?? []).map((row) => ({
+          id: row.id ?? "",
+          title: row.title ?? "",
+          description: row.description ?? "",
+          tasks: row.tasks ?? [],
+          requirements: row.requirements ?? [],
+          hours_per_week: row.hours_per_week ?? 0,
+          min_block_hours: row.min_block_hours ?? 0,
+          semesters_needed: row.semesters_needed ?? 0,
+          outcome: row.outcome ?? "",
+          projectName: row.project_name ?? null,
+          projectBlurb: row.project_blurb ?? null,
+          projectIcon: row.project_icon ?? null,
+        })),
       );
       setLoading(false);
     };
@@ -322,6 +337,45 @@ const Join = () => {
   useEffect(() => {
     if (submitted) confirmationRef.current?.focus();
   }, [submitted]);
+
+  /**
+   * Ask for a challenge and solve it. Called when step 4 opens and again after any failed
+   * submission, because verifying spends the challenge - a second attempt with the same
+   * one is rejected by design.
+   */
+  const startPow = useCallback(async () => {
+    if (!cycle || cycle.require_turnstile || cycle.pow_difficulty_bits <= 0) {
+      setPowState("ready");
+      return;
+    }
+    powCancelRef.current.cancelled = true;          // stop any solve already running
+    const signal = { cancelled: false };
+    powCancelRef.current = signal;
+    powRef.current = null;
+    setPowState("working");
+
+    const { data, error } = await supabase.rpc("recruiting_issue_pow_challenge");
+    const issued = (data ?? {}) as { ok?: boolean } & Partial<PowChallenge>;
+    if (error || !issued.ok || !issued.challenge_id) {
+      setPowState("failed");
+      return;
+    }
+
+    const solution = await solvePow(
+      { challenge_id: issued.challenge_id, difficulty_bits: issued.difficulty_bits ?? 18 },
+      undefined,
+      signal,
+    );
+    if (signal.cancelled) return;
+    powRef.current = solution;
+    setPowState(solution ? "ready" : "failed");
+  }, [cycle]);
+
+  useEffect(() => {
+    if (step === 3 && powState === "idle") startPow();
+  }, [step, powState, startPow]);
+
+  useEffect(() => () => { powCancelRef.current.cancelled = true; }, []);
 
   const positionsById = useMemo(
     () => Object.fromEntries(positions.map((p) => [p.id, p])),
@@ -433,6 +487,8 @@ const Join = () => {
         turnstile_token: turnstileToken ?? "",
         website: honeypot,
         elapsed_ms: Date.now() - openedAtRef.current,
+        pow_challenge_id: powRef.current?.pow_challenge_id ?? null,
+        pow_nonce: powRef.current?.pow_nonce ?? null,
         full_name: form.full_name.trim(),
         email: form.email.trim().toLowerCase(),
         year: form.year,
@@ -482,8 +538,14 @@ const Join = () => {
         return;
       }
 
-      const body = (result ?? {}) as { ok?: boolean; error?: string; fields?: Errors };
+      const body = (result ?? {}) as
+        { ok?: boolean; error?: string; fields?: Errors; retry_pow?: boolean };
       if (body.ok) { setSubmitted(true); return; }
+
+      // Verifying spends the challenge, so anything that got past validation has burnt it.
+      // Start a fresh one immediately rather than making the applicant discover that their
+      // second attempt fails too.
+      if (body.retry_pow) { setPowState("idle"); powRef.current = null; }
 
       if (body.fields && Object.keys(body.fields).length > 0) {
         setErrors(body.fields);
@@ -1281,6 +1343,43 @@ const Join = () => {
                     />
                   </div>
 
+                  {/* Proof of work. Not a puzzle the applicant has to solve - their browser
+                      does it in the background while they write. Shown only when it is
+                      still running or has failed, so the normal case is silent. */}
+                  {!cycle.require_turnstile && cycle.pow_difficulty_bits > 0 && powState !== "ready" && (
+                    <div
+                      className="rounded-lg border border-border bg-muted/40 p-3 flex items-center gap-2.5"
+                      aria-live="polite"
+                    >
+                      {powState === "failed" ? (
+                        <>
+                          <AlertTriangle className="w-4 h-4 text-warning shrink-0" aria-hidden="true" />
+                          <p className="text-sm flex-1">
+                            The browser check did not finish.{" "}
+                            <button
+                              type="button"
+                              onClick={() => setPowState("idle")}
+                              className="text-primary underline underline-offset-4"
+                            >
+                              Try it again
+                            </button>
+                            .
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <Loader2
+                            className="w-4 h-4 animate-spin motion-reduce:animate-none text-muted-foreground shrink-0"
+                            aria-hidden="true"
+                          />
+                          <p className="text-sm text-muted-foreground">
+                            Checking your browser. Carry on writing - this finishes on its own.
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   {cycle.require_turnstile && (
                     <div className="space-y-1.5">
                       {TURNSTILE_SITE_KEY ? (
@@ -1342,7 +1441,11 @@ const Join = () => {
                 ) : (
                   <Button
                     type="submit"
-                    disabled={submitting || (cycle.require_turnstile && !TURNSTILE_SITE_KEY)}
+                    disabled={
+                      submitting
+                      || (cycle.require_turnstile && !TURNSTILE_SITE_KEY)
+                      || (!cycle.require_turnstile && powState === "working")
+                    }
                   >
                     {submitting ? (
                       <>
@@ -1351,6 +1454,14 @@ const Join = () => {
                           aria-hidden="true"
                         />
                         Sending
+                      </>
+                    ) : powState === "working" && !cycle.require_turnstile ? (
+                      <>
+                        <Loader2
+                          className="w-4 h-4 mr-1.5 animate-spin motion-reduce:animate-none"
+                          aria-hidden="true"
+                        />
+                        Checking your browser
                       </>
                     ) : (
                       <>

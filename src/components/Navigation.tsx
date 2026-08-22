@@ -36,7 +36,7 @@ export const Navigation = () => {
     { path: "/history", label: "History", icon: History },
     { path: "/activity-log", label: "Activity Log", icon: FileText },
     ...(canSeeSkills ? [{ path: "/skills", label: "Skills", icon: GraduationCap }] : []),
-    { path: "/positions", label: "Positions", icon: ClipboardList, requirePermission: 'canManageRecruitingPositions' },
+    { path: "/positions", label: "Positions", icon: ClipboardList, requirePermission: 'canReviewApplications' },
     { path: "/review", label: "Applications", icon: Inbox, requirePermission: 'canReviewApplications' },
     { path: "/settings", label: "Settings", icon: Settings, requirePermission: 'canManageUsers' },
     { path: "/help", label: "Help", icon: HelpCircle },

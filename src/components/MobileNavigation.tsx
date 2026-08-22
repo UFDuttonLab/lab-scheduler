@@ -20,7 +20,7 @@ export const MobileNavigation = () => {
     { path: "/history", label: "History", icon: History },
     { path: "/activity-log", label: "Activity", icon: FileText },
     ...(canSeeSkills ? [{ path: "/skills", label: "Skills", icon: GraduationCap }] : []),
-    { path: "/positions", label: "Positions", icon: ClipboardList, requirePermission: 'canManageRecruitingPositions' },
+    { path: "/positions", label: "Positions", icon: ClipboardList, requirePermission: 'canReviewApplications' },
     { path: "/review", label: "Applicants", icon: Inbox, requirePermission: 'canReviewApplications' },
     { path: "/settings", label: "Settings", icon: Settings, requirePermission: 'canManageUsers' },
     { path: "/help", label: "Help", icon: HelpCircle },

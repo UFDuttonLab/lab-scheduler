@@ -35,6 +35,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { settleWrite } from "@/lib/dbWrite";
+import { AppRole, ROLE_LABELS } from "@/lib/permissions";
 import {
   POSITION_STATUSES,
   POSITION_STATUS_CLASSES,
@@ -78,15 +79,26 @@ interface PositionRow {
   cycle: string;
   mentorName: string | null;
   projectName: string | null;
+  projectIcon: string | null;
   applicantCount: number;
 }
 
-interface ProjectRow { id: string; name: string; active: boolean }
+/**
+ * The SCHEDULER's project list. Since 20260822140000 there is no separate recruiting
+ * project table - a listing points at the same project a booking does, which is what makes
+ * "who did we recruit onto Hippo" answerable. Its `description` is the public blurb shown
+ * on #/join, and it is edited in Settings -> Projects like any other project field.
+ */
+interface ProjectRow { id: string; name: string; icon: string | null }
+
+/** Someone who can own a listing. Roles are only readable by a PI, hence the nullable. */
+interface MentorRow { id: string; fullName: string; email: string; role: string | null }
 interface CycleRow { cycle: string; label: string; active: boolean }
 
 interface Draft {
   id: string | null;
   project_id: string;
+  mentor_id: string;
   title: string;
   description: string;
   tasks: string;
@@ -100,8 +112,8 @@ interface Draft {
   cycle: string;
 }
 
-const emptyDraft = (cycle: string): Draft => ({
-  id: null, project_id: "", title: "", description: "",
+const emptyDraft = (cycle: string, mentorId: string): Draft => ({
+  id: null, project_id: "", mentor_id: mentorId, title: "", description: "",
   tasks: "", requirements: "",
   hours_per_week: "8", min_block_hours: "3", semesters_needed: "2",
   outcome: "", max_mentees: "2", status: "draft", cycle,
@@ -115,6 +127,7 @@ const Positions = () => {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<PositionRow[]>([]);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [mentors, setMentors] = useState<MentorRow[]>([]);
   const [cycles, setCycles] = useState<CycleRow[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -129,11 +142,11 @@ const Positions = () => {
       supabase
         .from("recruiting_positions")
         .select(
-          "id, project_id, mentor_id, title, description, tasks, requirements, hours_per_week, min_block_hours, semesters_needed, outcome, max_mentees, status, cycle, profiles!recruiting_positions_mentor_id_fkey(full_name), recruiting_projects(name), recruiting_application_positions(count)",
+          "id, project_id, mentor_id, title, description, tasks, requirements, hours_per_week, min_block_hours, semesters_needed, outcome, max_mentees, status, cycle, profiles!recruiting_positions_mentor_id_fkey(full_name), projects(name, icon), recruiting_application_positions(count)",
         )
         .order("cycle", { ascending: false })
         .order("title"),
-      supabase.from("recruiting_projects").select("id, name, active").order("name"),
+      supabase.from("projects").select("id, name, icon").order("name"),
       supabase.from("recruiting_cycles").select("cycle, label, active").order("opens_at", { ascending: false }),
     ]);
 
@@ -145,7 +158,7 @@ const Positions = () => {
 
     const mapped: PositionRow[] = (positionsResult.data ?? []).map((row) => {
       const mentor = row.profiles as unknown as { full_name: string | null } | null;
-      const project = row.recruiting_projects as unknown as { name: string } | null;
+      const project = row.projects as unknown as { name: string; icon: string | null } | null;
       const counts = row.recruiting_application_positions as unknown as { count: number }[] | null;
       return {
         id: row.id,
@@ -164,6 +177,7 @@ const Positions = () => {
         cycle: row.cycle,
         mentorName: mentor?.full_name ?? null,
         projectName: project?.name ?? null,
+        projectIcon: project?.icon ?? null,
         applicantCount: counts?.[0]?.count ?? 0,
       };
     });
@@ -175,8 +189,31 @@ const Positions = () => {
     setRows(isPI ? mapped : mapped.filter((r) => r.mentor_id === user?.id));
     setProjects(projectsResult.data ?? []);
     setCycles(cyclesResult.data ?? []);
+
+    // Who may be named as mentor. Only a PI can reassign a listing (the RLS UPDATE policy
+    // pins mentor_id = auth.uid() for everyone else), so only a PI needs the full list -
+    // and only a PI can read user_roles anyway, which is where the role labels come from.
+    if (isPI) {
+      const [{ data: profileRows }, { data: roleRows }] = await Promise.all([
+        supabase.from("profiles").select("id, full_name, email").eq("active", true).order("full_name"),
+        supabase.from("user_roles").select("user_id, role"),
+      ]);
+      const roleFor = new Map<string, string>();
+      for (const r of roleRows ?? []) roleFor.set(r.user_id, r.role as string);
+      setMentors(
+        (profileRows ?? []).map((r) => ({
+          id: r.id,
+          fullName: r.full_name ?? r.email,
+          email: r.email,
+          role: roleFor.get(r.id) ?? null,
+        })),
+      );
+    } else if (user) {
+      setMentors([{ id: user.id, fullName: user.email ?? "You", email: user.email ?? "", role: null }]);
+    }
+
     setLoading(false);
-  }, [isPI, user?.id]);
+  }, [isPI, user]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -185,12 +222,13 @@ const Positions = () => {
     [cycles],
   );
 
-  const openCreate = () => setDraft(emptyDraft(defaultCycle));
+  const openCreate = () => setDraft(emptyDraft(defaultCycle, user?.id ?? ""));
 
   const openEdit = (row: PositionRow) =>
     setDraft({
       id: row.id,
       project_id: row.project_id,
+      mentor_id: row.mentor_id,
       title: row.title,
       description: row.description,
       tasks: row.tasks.join("\n"),
@@ -206,6 +244,7 @@ const Positions = () => {
 
   const draftProblem = (d: Draft): string | null => {
     if (!d.project_id) return "Choose a project.";
+    if (!d.mentor_id) return "Choose the mentor who will own this listing.";
     if (!d.cycle) return "Choose a cycle.";
     if (d.title.trim().length < 4) return "Give the role a title of at least 4 characters.";
     if (d.description.trim().length < 20) return "The description needs at least 20 characters.";
@@ -235,6 +274,12 @@ const Positions = () => {
     setSaving(true);
     const payload = {
       project_id: draft.project_id,
+      // Only a PI can name someone else: the "Mentors can create their own positions"
+      // policy pins mentor_id = auth.uid(), and it is the separate "PI can manage any
+      // position" policy that lets a PI past it. Sending someone else's id as a grad
+      // student would be filtered to zero rows, which settleWrite reports rather than
+      // letting it look like a save.
+      mentor_id: isPI ? draft.mentor_id : user.id,
       title: draft.title.trim(),
       description: draft.description.trim(),
       tasks: linesOf(draft.tasks),
@@ -257,11 +302,9 @@ const Positions = () => {
       if (!result.ok) { toast.error(result.message); return; }
       toast.success("Listing updated.");
     } else {
-      // mentor_id is set here, not chosen: the INSERT policy requires it to equal
-      // auth.uid(), so anything else is rejected outright.
       const { error } = await supabase
         .from("recruiting_positions")
-        .insert({ ...payload, mentor_id: user.id });
+        .insert(payload);
       setSaving(false);
       if (error) {
         toast.error(
@@ -312,7 +355,10 @@ const Positions = () => {
     load();
   };
 
-  if (!permissions.canManageRecruitingPositions) {
+  // Gated on canReviewApplications, not canManageRecruitingPositions: a PI can hand a
+  // listing to anyone, including an undergraduate, and that person has to be able to edit
+  // the listing they now own. Creating one is still restricted - see the New listing button.
+  if (!permissions.canReviewApplications) {
     return (
       <div className="min-h-screen bg-background">
         <Navigation />
@@ -350,10 +396,12 @@ const Positions = () => {
                 View public page
               </a>
             </Button>
-            <Button onClick={openCreate}>
-              <Plus className="w-4 h-4 mr-1.5" aria-hidden="true" />
-              New listing
-            </Button>
+            {permissions.canManageRecruitingPositions && (
+              <Button onClick={openCreate}>
+                <Plus className="w-4 h-4 mr-1.5" aria-hidden="true" />
+                New listing
+              </Button>
+            )}
           </div>
         </div>
 
@@ -365,8 +413,9 @@ const Positions = () => {
         ) : rows.length === 0 ? (
           <Card className="p-8 text-center">
             <p className="text-sm text-muted-foreground">
-              No listings yet. Create one and it will start as a draft that only you and the
-              PI can see.
+              {permissions.canManageRecruitingPositions
+                ? "No listings yet. Create one and it will start as a draft that only you and the PI can see."
+                : "No listings are assigned to you. The PI assigns a mentor when they create a listing."}
             </p>
           </Card>
         ) : (
@@ -504,11 +553,15 @@ const Positions = () => {
                     <SelectContent>
                       {projects.map((p) => (
                         <SelectItem key={p.id} value={p.id}>
-                          {p.name}{p.active ? "" : " (inactive)"}
+                          {p.icon ? `${p.icon} ${p.name}` : p.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    The same project list the scheduler books against. Its description in
+                    Settings is what applicants read on the public page.
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">
@@ -529,6 +582,41 @@ const Positions = () => {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="pos-mentor">Mentor</Label>
+                {isPI ? (
+                  <>
+                    <Select
+                      value={draft.mentor_id}
+                      onValueChange={(v) => setDraft({ ...draft, mentor_id: v })}
+                    >
+                      <SelectTrigger id="pos-mentor">
+                        <SelectValue placeholder="Choose the mentor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {mentors.map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.fullName}
+                            {m.role ? ` · ${ROLE_LABELS[m.role as AppRole] ?? m.role}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Whoever is named here reads the applications sent to this listing, and
+                      is the only person besides you who can edit it.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Input id="pos-mentor" value={user?.email ?? ""} disabled />
+                    <p className="text-xs text-muted-foreground">
+                      A listing is owned by whoever creates it. Ask the PI to reassign it.
+                    </p>
+                  </>
+                )}
               </div>
 
               <div className="space-y-1.5">

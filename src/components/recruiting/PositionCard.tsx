@@ -16,6 +16,8 @@ export interface PublicPosition {
   outcome: string;
   projectName: string | null;
   projectBlurb: string | null;
+  /** The scheduler project's emoji, so a listing looks like the project it belongs to. */
+  projectIcon: string | null;
 }
 
 /**
@@ -50,7 +52,10 @@ export const PositionCard = ({
       >
         <div className="flex-1 min-w-0">
           {position.projectName && (
-            <div className="text-xs font-medium text-primary mb-1">{position.projectName}</div>
+            <div className="text-xs font-medium text-primary mb-1 flex items-center gap-1.5">
+              {position.projectIcon && <span aria-hidden="true">{position.projectIcon}</span>}
+              {position.projectName}
+            </div>
           )}
           <h3 className="font-semibold text-base leading-snug">{position.title}</h3>
           <p className="text-sm text-muted-foreground mt-1">{position.description}</p>

@@ -8,7 +8,10 @@ import {
   Loader2,
   Mail,
   Star,
+  UserPlus,
   X,
+  Copy,
+  Link2,
 } from "lucide-react";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
@@ -35,7 +38,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { settleWrite } from "@/lib/dbWrite";
+import { readFunctionError, settleWrite } from "@/lib/dbWrite";
 import { AvailabilityView } from "@/components/recruiting/AvailabilityGrid";
 import {
   APPLICATION_STATUSES,
@@ -113,6 +116,10 @@ interface ApplicationRow {
   policy_check_score: number;
   status: ApplicationStatus;
   created_at: string;
+  /** The lab account created for this person, once the PI has made one. */
+  profileId: string | null;
+  profileName: string | null;
+  profileEmail: string | null;
   choices: ChoiceRow[];
   reviews: ReviewRow[];
   /** Best (lowest) rank this applicant gave to a position the viewer owns. */
@@ -156,6 +163,13 @@ const Review = () => {
   const [archiving, setArchiving] = useState(false);
   const [openCycle, setOpenCycle] = useState<string | null>(null);
 
+  // Turning an accepted applicant into a lab account. Kept deliberately explicit rather
+  // than firing on a status change: creating an account is not something to do by accident.
+  const [accountFor, setAccountFor] = useState<ApplicationRow | null>(null);
+  const [creatingAccount, setCreatingAccount] = useState(false);
+  const [newPassword, setNewPassword] = useState<string | null>(null);
+  const [existingProfileId, setExistingProfileId] = useState<string | null>(null);
+
   // Draft of the viewer's own review for the open application.
   const [score, setScore] = useState<string>("");
   const [decision, setDecision] = useState<string>("");
@@ -172,7 +186,7 @@ const Review = () => {
       supabase
         .from("recruiting_applications")
         .select(
-          "*, recruiting_application_positions(rank, position_id, recruiting_positions(id, title, mentor_id, profiles!recruiting_positions_mentor_id_fkey(full_name))), recruiting_reviews(id, reviewer_id, score, notes, decision, interview_at)",
+          "*, recruiting_application_positions(rank, position_id, recruiting_positions(id, title, mentor_id, profiles!recruiting_positions_mentor_id_fkey(full_name))), recruiting_reviews(id, reviewer_id, score, notes, decision, interview_at), profiles!recruiting_applications_profile_id_fkey(id, full_name, email)",
         )
         .order("created_at", { ascending: true }),
     ]);
@@ -233,6 +247,9 @@ const Review = () => {
         policy_check_score: row.policy_check_score,
         status: row.status as ApplicationStatus,
         created_at: row.created_at,
+        profileId: row.profile_id ?? null,
+        profileName: (row.profiles as unknown as { full_name: string | null } | null)?.full_name ?? null,
+        profileEmail: (row.profiles as unknown as { email: string } | null)?.email ?? null,
         choices,
         reviews: (row.recruiting_reviews ?? []) as unknown as ReviewRow[],
         // A PI sees applications that rank nobody's position they own. Sorting those to
@@ -334,6 +351,83 @@ const Review = () => {
     );
     if (!result.ok) { toast.error(result.message); return; }
     toast.success(`Moved to ${APPLICATION_STATUS_LABELS[status].toLowerCase()}.`);
+    load();
+  };
+
+  /**
+   * Look for a profile that already uses this address before offering to create one.
+   * manage-users would refuse a duplicate anyway, but with a raw auth error; better to
+   * offer to link the existing person instead.
+   */
+  const openAccountDialog = async (row: ApplicationRow) => {
+    setNewPassword(null);
+    setExistingProfileId(null);
+    setAccountFor(row);
+    const { data } = await supabase
+      .from("profiles").select("id").eq("email", row.email).maybeSingle();
+    if (data?.id) setExistingProfileId(data.id);
+  };
+
+  /** Attach an application to a profile that already exists. PI only, by trigger. */
+  const linkExisting = async () => {
+    if (!accountFor || !existingProfileId) return;
+    const result = await settleWrite(
+      supabase.from("recruiting_applications")
+        .update({ profile_id: existingProfileId }).eq("id", accountFor.id).select("id"),
+      "Only the PI can link an application to a lab account.",
+    );
+    if (!result.ok) { toast.error(result.message); return; }
+    toast.success("Linked to the existing account.");
+    setAccountFor(null);
+    load();
+  };
+
+  /**
+   * Create the lab account through the SAME manage-users function Settings uses, so there
+   * is one way accounts come into existence and it stays audited - manage-users writes its
+   * own activity_logs row. Then record the link, which is the whole point: from here on,
+   * this person's bookings, usage records and skill sign-offs are reachable from the
+   * application they arrived on.
+   */
+  const createAccount = async () => {
+    if (!accountFor) return;
+    setCreatingAccount(true);
+
+    const { data, error } = await supabase.functions.invoke("manage-users", {
+      body: {
+        action: "create",
+        email: accountFor.email,
+        fullName: accountFor.full_name,
+        role: "undergrad_student",
+      },
+    });
+
+    if (error) {
+      setCreatingAccount(false);
+      toast.error(await readFunctionError(error, "Could not create the account."));
+      return;
+    }
+
+    const created = data as { user?: { id: string }; password?: string };
+    if (!created?.user?.id) {
+      setCreatingAccount(false);
+      toast.error("The account was not created.");
+      return;
+    }
+
+    const result = await settleWrite(
+      supabase.from("recruiting_applications")
+        .update({ profile_id: created.user.id }).eq("id", accountFor.id).select("id"),
+      "The account was created, but linking it to this application failed.",
+    );
+    setCreatingAccount(false);
+
+    if (!result.ok) {
+      // Be precise: the account DOES exist now. Saying "failed" would send the PI off to
+      // create a second one.
+      toast.error(`${result.message} The account exists - link it from Settings.`);
+    }
+    setNewPassword(created.password ?? null);
     load();
   };
 
@@ -554,6 +648,15 @@ const Review = () => {
                         {!mine && (
                           <Badge className="bg-primary text-primary-foreground font-normal">
                             New to you
+                          </Badge>
+                        )}
+                        {row.profileId && (
+                          <Badge
+                            variant="outline"
+                            className="font-normal bg-success/10 text-success border-success/20 gap-1"
+                          >
+                            <Link2 className="w-3 h-3" aria-hidden="true" />
+                            Has an account
                           </Badge>
                         )}
                       </div>
@@ -816,6 +919,38 @@ const Review = () => {
                   )}
                 </section>
 
+                {/* Lab account. This is the join between recruiting and the rest of the
+                    scheduler: once profile_id is set, this person's bookings, usage records
+                    and skill sign-offs all hang off the same id. */}
+                <section className="rounded-lg border border-border p-4 space-y-2">
+                  <h4 className="text-sm font-semibold">Lab account</h4>
+                  {open.profileId ? (
+                    <p className="text-sm text-muted-foreground">
+                      Linked to{" "}
+                      <span className="font-medium text-foreground">
+                        {open.profileName ?? open.profileEmail}
+                      </span>
+                      . Their bookings, equipment usage and skill sign-offs are tracked
+                      against this application.
+                    </p>
+                  ) : isPI ? (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        No lab account yet. Creating one lets them book equipment and start
+                        collecting skill sign-offs.
+                      </p>
+                      <Button size="sm" variant="outline" onClick={() => openAccountDialog(open)}>
+                        <UserPlus className="w-4 h-4 mr-1.5" aria-hidden="true" />
+                        Create lab account
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No lab account yet. The PI creates these.
+                    </p>
+                  )}
+                </section>
+
                 <section className="space-y-1.5">
                   <Label htmlFor="app-status">Application status</Label>
                   <Select
@@ -840,6 +975,90 @@ const Review = () => {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Create or link a lab account ---------------------------------------------------- */}
+      <Dialog
+        open={accountFor !== null}
+        onOpenChange={(isOpen) => { if (!isOpen) { setAccountFor(null); setNewPassword(null); } }}
+      >
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {newPassword ? "Account created" : "Create a lab account"}
+            </DialogTitle>
+            <DialogDescription>
+              {newPassword
+                ? "Pass these details on. The password is shown once and is not stored anywhere you can read it again."
+                : `This uses the same account creation as Settings, with the role set to Undergraduate Student.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          {accountFor && !newPassword && (
+            <div className="space-y-3 py-1 text-sm">
+              <div className="rounded-lg bg-muted/50 p-3 space-y-1">
+                <p><span className="text-muted-foreground">Name:</span> {accountFor.full_name}</p>
+                <p><span className="text-muted-foreground">Email:</span> {accountFor.email}</p>
+                <p><span className="text-muted-foreground">Role:</span> Undergraduate Student</p>
+              </div>
+              {existingProfileId && (
+                <div className="rounded-lg border border-warning/40 bg-warning/5 p-3">
+                  <p>
+                    An account already uses this address. Link this application to it instead
+                    of creating a second one.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {newPassword && (
+            <div className="space-y-2 py-1">
+              <Label htmlFor="new-account-password">Temporary password</Label>
+              <div className="flex gap-2">
+                <Input id="new-account-password" readOnly value={newPassword} className="font-mono text-xs" />
+                <Button
+                  variant="outline" size="icon" aria-label="Copy password"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(newPassword)
+                      .then(() => toast.success("Copied."))
+                      .catch(() => toast.error("Could not copy - select it by hand."));
+                  }}
+                >
+                  <Copy className="w-4 h-4" aria-hidden="true" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Ask them to change it once they have signed in.
+              </p>
+            </div>
+          )}
+
+          <DialogFooter>
+            {newPassword ? (
+              <Button onClick={() => { setAccountFor(null); setNewPassword(null); }}>Done</Button>
+            ) : (
+              <>
+                <Button variant="ghost" onClick={() => setAccountFor(null)} disabled={creatingAccount}>
+                  Cancel
+                </Button>
+                {existingProfileId ? (
+                  <Button onClick={linkExisting}>
+                    <Link2 className="w-4 h-4 mr-1.5" aria-hidden="true" />
+                    Link to the existing account
+                  </Button>
+                ) : (
+                  <Button onClick={createAccount} disabled={creatingAccount}>
+                    {creatingAccount && (
+                      <Loader2 className="w-4 h-4 mr-1.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                    )}
+                    Create account
+                  </Button>
+                )}
+              </>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -89,10 +89,14 @@ export interface RolePermissions {
    * must NOT be read as "can see all applications"; the page shows whatever RLS returns,
    * which for someone who owns no listing is an empty queue.
    *
-   * It tracks canManageRecruitingPositions because owning a listing is what puts
-   * applications in front of you. The one gap: if a PI reassigns a listing's mentor_id to
-   * an undergrad_student, the database would let that person review it but this flag hides
-   * the page. Widen this and the position INSERT policy together if that ever happens.
+   * It is deliberately WIDER than canManageRecruitingPositions, and includes
+   * undergrad_student. A PI can hand a listing to anyone - that is the point of the mentor
+   * picker on #/positions - and the person holding it has to be able to read the
+   * applications sent to it. Creating and publishing a listing stays with the elevated set.
+   *
+   * This started as the narrower flag and was widened on 2026-08-22, the first time a PI
+   * assigned a listing to an undergraduate: the database allowed the review, the UI hid the
+   * page, and the mismatch was invisible from either side.
    */
   canReviewApplications: boolean;
   /**
@@ -229,7 +233,10 @@ export const getRolePermissions = (role: AppRole | null): RolePermissions => {
         canAdminSkillsModule: false,
         // Absent from the recruiting_positions INSERT policy - see the flag's comment.
         canManageRecruitingPositions: false,
-        canReviewApplications: false,
+        // But an undergraduate CAN be named as the mentor on a listing, and then has to be
+        // able to read its applications. recruiting_can_review() is the real gate; someone
+        // who owns no listing simply sees an empty queue.
+        canReviewApplications: true,
         canAdminRecruiting: false,
       };
     case 'user':
