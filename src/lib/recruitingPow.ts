@@ -15,11 +15,33 @@
  * most of the per-hash overhead. `solve` refuses to run if that assumption is ever broken
  * rather than quietly computing the wrong digest.
  *
- * WHY NOT A WEB WORKER: a worker would need either a separate chunk (which Vite would emit
- * as another file to remember to copy into docs/) or a blob URL (which a future
- * Content-Security-Policy would block). Yielding to the event loop between batches keeps
- * the page responsive without either.
+ * WHY NOT A WEB WORKER: a worker would need either a separate chunk or a blob URL (which a
+ * future Content-Security-Policy would block). Yielding to the event loop between batches
+ * keeps the page responsive without either.
+ *
+ * WHY MessageChannel AND NOT setTimeout FOR THAT YIELD: this cost a live bug on
+ * 2026-08-22. The first version yielded with setTimeout(0). Chrome clamps timers in a
+ * BACKGROUND tab - measured at 133 ms per yield on the deployed site, against roughly zero
+ * when the tab is in front, and it clamps harder the longer the tab stays hidden. With 32
+ * yields that turned a 300 ms check into four seconds and then into a timeout, and the
+ * applicant saw "Checking your browser" apparently forever. Any student who tabs away to
+ * look up their expected graduation term would have hit it.
+ *
+ * A MessageChannel postMessage schedules a macrotask that browsers do NOT throttle in
+ * background tabs, so the solve runs at full speed whether or not the page is in front.
  */
+
+/**
+ * Hand the thread back to the browser without being throttled. See the note above - this
+ * is deliberately not setTimeout, and not requestIdleCallback either, which can be starved
+ * indefinitely on a busy page.
+ */
+const yieldToBrowser = (): Promise<void> =>
+  new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => { channel.port1.close(); resolve(); };
+    channel.port2.postMessage(null);
+  });
 
 const K = new Uint32Array([
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -107,8 +129,15 @@ export interface PowSolution {
   pow_nonce: string;
 }
 
-/** How many nonces to try before handing the thread back to the browser. */
-const BATCH = 8192;
+/**
+ * How many nonces to try before handing the thread back to the browser.
+ *
+ * At roughly a million hashes a second this is about 20 ms of work - under the 50 ms that
+ * counts as a "long task", so the page keeps repainting and typing stays responsive. Larger
+ * than the original 8192 so that even if a yield is somehow delayed, fewer of them are
+ * needed: an 18-bit solve now takes about 13 yields rather than 32.
+ */
+const BATCH = 20000;
 
 /**
  * Solve a challenge, yielding to the event loop between batches so the page keeps
@@ -156,8 +185,6 @@ export const solvePow = async (
     }
 
     onProgress?.(nonce);
-    // Hand the thread back. setTimeout(0) rather than requestIdleCallback: idle callbacks
-    // can be starved indefinitely on a busy page, and this work must actually finish.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await yieldToBrowser();
   }
 };

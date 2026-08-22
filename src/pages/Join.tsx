@@ -1082,7 +1082,9 @@ const Join = () => {
                     </p>
                     <AvailabilityGrid
                       value={form.availability}
-                      onChange={(next) => set("availability", next)}
+                      onChange={(update) =>
+                        setForm((f) => ({ ...f, availability: update(f.availability) }))
+                      }
                       describedBy={
                         errors.availability ? "availability-hint availability-error" : "availability-hint"
                       }
@@ -1444,7 +1446,11 @@ const Join = () => {
                     disabled={
                       submitting
                       || (cycle.require_turnstile && !TURNSTILE_SITE_KEY)
-                      || (!cycle.require_turnstile && powState === "working")
+                      // "failed" as well as "working": before this, a failed check left the
+                      // button reading "Submit application" and enabled, identical to a
+                      // ready one, and pressing it produced a validation error with no clue
+                      // that the browser check was the problem.
+                      || (!cycle.require_turnstile && (powState === "working" || powState === "failed"))
                     }
                   >
                     {submitting ? (

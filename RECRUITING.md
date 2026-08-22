@@ -421,6 +421,39 @@ The payload the browser produced was then fed verbatim into the real
 `recruiting_submit_application()` and accepted — so the TypeScript validation and the SQL
 validation agree on the same input rather than being merely similar.
 
+### Done — the full workflow, driven through the live site
+
+On 2026-08-22, in a real browser against the deployed site and the production database:
+
+- **The acceptance-criterion-2 `curl` finally ran.** With the public anon key:
+  `recruiting_applications`, `recruiting_application_positions`, `recruiting_reviews` and
+  `rpc/recruiting_submit_application` all returned **401 permission denied**; `profiles` and
+  `projects` returned 200 with an empty array (RLS, no rows); the `recruiting_open_positions`
+  view and `rpc/recruiting_issue_pow_challenge` returned data. That is the guarantee the
+  whole module rests on, verified end to end rather than argued from grants.
+- Two applications filed through the public form, one accepted and one declined: proof of
+  work solved in the browser, insert, review queue, score, decision, notes, status change.
+  Availability round-tripped as `{"mon":[[9,13]]}`; the policy questions graded 4/4 and 2/4
+  server-side from deliberately different answers. Queue went to "0 waiting on you" with the
+  "New to you" badges cleared. No console errors anywhere in the run.
+
+**It found two real bugs, both now fixed:**
+
+1. **The proof of work stalled in a backgrounded tab.** It yielded with `setTimeout(0)`,
+   which Chrome clamps in a hidden tab — measured on the live site at **5 yields a second,
+   224 ms each**, against 13,007 a second for a `MessageChannel` yield. A student who tabbed
+   away mid-form would have watched "Checking your browser" for minutes and then hit the
+   60-second timeout. `recruitingPow.ts` now yields via `MessageChannel`, which browsers do
+   not throttle, and uses larger batches so it needs ~10 yields instead of 32.
+2. **The availability grid lost clicks made in the same tick.** `toggle` computed its result
+   from the `value` prop captured at render, so four cells clicked before React re-rendered
+   all started from the same snapshot and only the last survived — four hours became one.
+   The grid now takes an updater, `onChange(prev => next)`, so each toggle builds on the
+   real previous state. A fast clicker or a click-drag would have hit this.
+
+Also fixed: a failed browser check left the submit button reading "Submit application" and
+enabled, identical to a ready one. It is now disabled, with the retry link beside it.
+
 ### Done — live, against production
 
 - All four migrations applied, then **verified after the fact rather than assumed**:

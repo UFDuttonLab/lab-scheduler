@@ -26,7 +26,13 @@ const hourLabel = (h: number) => {
 
 interface EditableProps {
   value: Availability;
-  onChange: (next: Availability) => void;
+  /**
+   * Takes an UPDATER, not a value. That matters: two cells clicked in the same tick - a
+   * fast click, a drag, an automated fill - would otherwise both compute their result from
+   * the same pre-render snapshot of `value`, and the second would overwrite the first.
+   * Found on 2026-08-22 when three grid cells were clicked in one tick and only one stuck.
+   */
+  onChange: (update: (prev: Availability) => Availability) => void;
   /** Wired to aria-describedby / aria-invalid by the step that owns the error text. */
   describedBy?: string;
   invalid?: boolean;
@@ -52,26 +58,30 @@ export const AvailabilityGrid = ({ value, onChange, describedBy, invalid }: Edit
 
   const toggle = useCallback(
     (day: DayKey, hour: number) => {
-      const hours = new Set(selected[day]);
-      if (hours.has(hour)) hours.delete(hour);
-      else hours.add(hour);
-      const ranges = hoursToRanges([...hours]);
-      const next: Availability = { ...value };
-      if (ranges.length) next[day] = ranges;
-      else delete next[day];
-      onChange(next);
+      onChange((prev) => {
+        const hours = rangesToHours(prev[day]);
+        if (hours.has(hour)) hours.delete(hour);
+        else hours.add(hour);
+        const ranges = hoursToRanges([...hours]);
+        const next: Availability = { ...prev };
+        if (ranges.length) next[day] = ranges;
+        else delete next[day];
+        return next;
+      });
     },
-    [selected, value, onChange],
+    [onChange],
   );
 
   const toggleDay = useCallback(
     (day: DayKey) => {
-      const next: Availability = { ...value };
-      if ((value[day] ?? []).length) delete next[day];
-      else next[day] = [[GRID_START_HOUR, GRID_END_HOUR]];
-      onChange(next);
+      onChange((prev) => {
+        const next: Availability = { ...prev };
+        if ((prev[day] ?? []).length) delete next[day];
+        else next[day] = [[GRID_START_HOUR, GRID_END_HOUR]];
+        return next;
+      });
     },
-    [value, onChange],
+    [onChange],
   );
 
   return (
