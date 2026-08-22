@@ -1,45 +1,44 @@
-name: Build docs/
+name: Deploy to GitHub Pages
 
-# Why this exists
-# ---------------
-# GitHub Pages serves this repo from the committed docs/ folder, not from a build step.
-# That means pushing source does NOT deploy: until 2026-08-22 somebody had to run
-# `npm run build` and copy four files into docs/ by hand, and on 2026-08-09 that was
-# forgotten - the Skills module was live in source and absent from the site for days,
-# while the user hunted for a menu item that had never been deployed.
+# This replaced a workflow that built the site and COMMITTED it back to main as docs/.
+# That version worked, and it was the wrong design: it made main have two authors. On
+# 2026-08-22 it pushed "Rebuild docs/ from b72e819" 42 seconds after a human push, which
+# moved origin/main underneath the work in progress and forced a merge commit
+# (41b2ccf) on the next push. Worse, a build produced by hand elsewhere and a build
+# produced here never hash the same - different Node versions - so docs/ changed on every
+# single run and the churn was guaranteed rather than occasional.
 #
-# This workflow does that copy on every push to main.
+# One artifact, one producer. This workflow publishes the build straight to Pages and
+# commits nothing, so the only thing that ever writes to main is a person.
 #
-# Deliberately NOT actions/deploy-pages
-# -------------------------------------
-# The official Pages action needs Settings -> Pages -> Source set to "GitHub Actions".
-# This repo is set to "Deploy from a branch", and until that is changed every run of a
-# deploy-pages workflow would fail and put a red X on the commit. Committing docs/ back to
-# the branch works with the Pages settings exactly as they are, so nothing needs changing
-# for this to start working.
+# ────────────────────────────────────────────────────────────────────────────────────
+# THIS REQUIRES A ONE-TIME SETTING: Settings → Pages → Source must be "GitHub Actions".
+# While it is still "Deploy from a branch", the deploy step below fails - that is the
+# expected single red X on the run that introduces this file. Flip the setting, then
+# re-run from Actions → Deploy to GitHub Pages → Run workflow.
+# ────────────────────────────────────────────────────────────────────────────────────
 #
-# If you ever do switch Pages to "GitHub Actions", replace this file rather than adding a
-# second workflow - two things writing the same output is worse than either alone.
+# docs/ is now dead weight. It can be deleted from the repo whenever convenient; nothing
+# reads it once the Pages source has changed. Leaving it does no harm beyond noise in
+# diffs.
 
 on:
   push:
     branches: [main]
-    # Without this the workflow's own commit to docs/ would trigger another run, which
-    # would build the same output, find nothing to commit, and stop - harmless but noisy.
-    # Ignoring the path stops the second run from ever starting.
     paths-ignore:
-      - 'docs/**'
       - '**.md'
+      - 'docs/**'        # only relevant until docs/ is deleted
   workflow_dispatch:
 
-# The default GITHUB_TOKEN is read-only in many orgs; this asks for the write it needs to
-# push the rebuilt docs/ back to main.
 permissions:
-  contents: write
+  contents: read         # no write: this workflow must never push
+  pages: write
+  id-token: write
 
+# Let a run in progress finish rather than cancelling it - a half-cancelled deploy can
+# leave Pages serving the previous build with no clear signal why.
 concurrency:
-  # One build at a time. Two runs racing to commit docs/ would conflict on push.
-  group: build-docs
+  group: pages
   cancel-in-progress: false
 
 jobs:
@@ -53,48 +52,40 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      # `npm ci` rather than `npm install`, so the build uses exactly the versions in
-      # package-lock.json and a dependency cannot drift underneath a deploy.
+      # npm ci, not npm install, so a deploy uses exactly the versions in
+      # package-lock.json and a transitive dependency cannot drift under it.
       - name: Install
         run: npm ci
 
-      # .env is tracked in this repo and holds only the public Supabase URL, the
-      # publishable key and the Turnstile SITE key - all three are compiled into the
-      # bundle every visitor downloads anyway. Nothing secret is read here, and nothing
-      # secret must ever be added to a VITE_ variable.
+      # .env is tracked and holds only the public Supabase URL, the publishable key and
+      # the Turnstile SITE key - all three are compiled into the bundle every visitor
+      # downloads anyway. Nothing secret is read here, and nothing secret may ever be
+      # given a VITE_ prefix.
       - name: Build
         run: npm run build
 
-      # vite.config.ts sets base: "/lab-scheduler/" but does not override outDir, so the
-      # build lands in dist/. The copy into docs/ is what this workflow exists to do.
+      # vite.config.ts sets base: "/lab-scheduler/", which is still correct: a project
+      # repo is served from that path whether Pages reads a branch or an artifact.
       #
-      # Old hashed assets are NOT pruned. That matches the existing practice in this repo
-      # and it is deliberate: a visitor holding a half-loaded page still resolves the
-      # bundle it asked for.
-      - name: Copy the build into docs/
+      # 404.html must be a byte-identical copy of index.html. It is the SPA fallback Pages
+      # serves for any path it does not recognise, and the app uses HashRouter, so a deep
+      # link that arrives without the hash still has to boot the app.
+      - name: Add the SPA fallback
         run: |
-          mkdir -p docs/assets
-          cp dist/index.html docs/index.html
-          cp -r dist/assets/. docs/assets/
-          if [ -d dist ]; then
-            find dist -maxdepth 1 -type f ! -name index.html -exec cp {} docs/ \;
-          fi
-          # docs/404.html must be a byte-identical copy of index.html. It is the SPA
-          # fallback Pages serves for any path it does not recognise; if it is stale, a
-          # deep link quietly serves the previous build.
-          cp docs/index.html docs/404.html
-          # Without .nojekyll, Pages runs the output through Jekyll, which ignores files
-          # and folders beginning with an underscore.
-          touch docs/.nojekyll
+          cp dist/index.html dist/404.html
+          touch dist/.nojekyll
 
-      - name: Commit docs/ if it changed
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs
-          if git diff --cached --quiet; then
-            echo "docs/ is already up to date with this commit - nothing to do."
-            exit 0
-          fi
-          git commit -m "Rebuild docs/ from ${GITHUB_SHA::7} [skip ci]"
-          git push
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -156,12 +156,29 @@ Both doors end at the same insert, so every constraint applies either way. The p
 function is `SECURITY DEFINER` and calls the service-role one from inside that context;
 `anon` and `authenticated` cannot call the inner function directly.
 
-### Deployment is automatic now
+### Deployment
 
-`.github/workflows/build-docs.yml` rebuilds `docs/` on every push to `main` and commits it
-back. Pages serves `docs/` from the branch, exactly as before — the workflow just removes
-the manual step that was forgotten on 2026-08-09. `docs/` in this commit is already current,
-so the site is correct the moment you push; the first workflow run will find nothing to do.
+`.github/workflows/build-docs.yml` builds the site and publishes it straight to GitHub
+Pages. It commits nothing — `permissions: contents: read`, so it *cannot* push even if
+someone later edits it carelessly.
+
+**It needs Settings → Pages → Source set to "GitHub Actions".** Until that is flipped the
+deploy step fails, which is the one expected red X on the run that introduces it. Flip the
+setting, then Actions → Deploy to GitHub Pages → Run workflow.
+
+`docs/` is dead weight once that is done and can be deleted from the repo. Nothing reads it.
+
+#### Why it works this way
+
+The first version of this workflow rebuilt `docs/` and committed it back to `main`. It
+worked, and it was wrong: it gave `main` two authors. On 2026-08-22 it pushed
+`20d2cb0a "Rebuild docs/ from b72e819"` 42 seconds after a human push, moved `origin/main`
+under work in progress, and forced a merge commit on the next push. Compounding it, a
+`docs/` built by hand elsewhere and one built in CI never hash the same — different Node
+versions — so `docs/` changed on *every* run and the churn was guaranteed.
+
+**One artifact, one producer.** Do not reintroduce a workflow that commits build output,
+and do not hand-build `docs/` alongside one that does.
 
 ## Rebuilding the database from scratch
 
