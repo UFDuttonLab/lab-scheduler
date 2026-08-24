@@ -275,6 +275,41 @@ export type Database = {
           },
         ]
       }
+      password_reset_tokens: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          token: string
+          used: boolean
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          token: string
+          used?: boolean
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          token?: string
+          used?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "password_reset_tokens_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           active: boolean
@@ -332,84 +367,6 @@ export type Database = {
         }
         Relationships: []
       }
-      usage_records: {
-        Row: {
-          booking_group_id: string | null
-          collaborators: Json | null
-          created_at: string
-          end_time: string
-          equipment_id: string
-          id: string
-          notes: string | null
-          project_id: string | null
-          project_samples: Json | null
-          samples_processed: number | null
-          start_time: string
-          user_id: string
-        }
-        Insert: {
-          booking_group_id?: string | null
-          collaborators?: Json | null
-          created_at?: string
-          end_time: string
-          equipment_id: string
-          id?: string
-          notes?: string | null
-          project_id?: string | null
-          project_samples?: Json | null
-          samples_processed?: number | null
-          start_time: string
-          user_id: string
-        }
-        Update: {
-          booking_group_id?: string | null
-          collaborators?: Json | null
-          created_at?: string
-          end_time?: string
-          equipment_id?: string
-          id?: string
-          notes?: string | null
-          project_id?: string | null
-          project_samples?: Json | null
-          samples_processed?: number | null
-          start_time?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "usage_records_equipment_id_fkey"
-            columns: ["equipment_id"]
-            isOneToOne: false
-            referencedRelation: "equipment"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "usage_records_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      user_roles: {
-        Row: {
-          id: string
-          role: Database["public"]["Enums"]["app_role"]
-          user_id: string
-        }
-        Insert: {
-          id?: string
-          role?: Database["public"]["Enums"]["app_role"]
-          user_id: string
-        }
-        Update: {
-          id?: string
-          role?: Database["public"]["Enums"]["app_role"]
-          user_id?: string
-        }
-        Relationships: []
-      }
       recruiting_application_positions: {
         Row: {
           application_id: string
@@ -435,6 +392,13 @@ export type Database = {
             columns: ["application_id"]
             isOneToOne: false
             referencedRelation: "recruiting_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recruiting_application_positions_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "recruiting_open_positions"
             referencedColumns: ["id"]
           },
           {
@@ -467,8 +431,8 @@ export type Database = {
           major: string
           policy_check_score: number
           prior_contact: string | null
-          profile_id: string | null
           prior_lab_experience: string | null
+          profile_id: string | null
           r_experience: string
           semesters_available: number
           statement: string
@@ -496,8 +460,8 @@ export type Database = {
           major: string
           policy_check_score: number
           prior_contact?: string | null
-          profile_id?: string | null
           prior_lab_experience?: string | null
+          profile_id?: string | null
           r_experience: string
           semesters_available: number
           statement: string
@@ -525,8 +489,8 @@ export type Database = {
           major?: string
           policy_check_score?: number
           prior_contact?: string | null
-          profile_id?: string | null
           prior_lab_experience?: string | null
+          profile_id?: string | null
           r_experience?: string
           semesters_available?: number
           statement?: string
@@ -559,9 +523,9 @@ export type Database = {
           cycle: string
           intro_md: string | null
           label: string
+          max_submissions_per_hour: number
           min_hours_per_week: number
           min_semesters: number
-          max_submissions_per_hour: number
           next_cycle_note: string | null
           opens_at: string
           pi_contact_email: string
@@ -577,9 +541,9 @@ export type Database = {
           cycle: string
           intro_md?: string | null
           label: string
+          max_submissions_per_hour?: number
           min_hours_per_week?: number
           min_semesters?: number
-          max_submissions_per_hour?: number
           next_cycle_note?: string | null
           opens_at: string
           pi_contact_email: string
@@ -595,9 +559,9 @@ export type Database = {
           cycle?: string
           intro_md?: string | null
           label?: string
+          max_submissions_per_hour?: number
           min_hours_per_week?: number
           min_semesters?: number
-          max_submissions_per_hour?: number
           next_cycle_note?: string | null
           opens_at?: string
           pi_contact_email?: string
@@ -687,6 +651,27 @@ export type Database = {
           },
         ]
       }
+      recruiting_pow_challenges: {
+        Row: {
+          difficulty_bits: number
+          id: string
+          issued_at: string
+          used_at: string | null
+        }
+        Insert: {
+          difficulty_bits: number
+          id?: string
+          issued_at?: string
+          used_at?: string | null
+        }
+        Update: {
+          difficulty_bits?: number
+          id?: string
+          issued_at?: string
+          used_at?: string | null
+        }
+        Relationships: []
+      }
       recruiting_reviews: {
         Row: {
           application_id: string
@@ -772,8 +757,7 @@ export type Database = {
           sort_order?: number
           updated_at?: string
         }
-        Relationships: [
-        ]
+        Relationships: []
       }
       skill_checklist_items: {
         Row: {
@@ -787,7 +771,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
-          is_critical: boolean
+          is_critical?: boolean
           item_text: string
           skill_id: string
           sort_order?: number
@@ -1098,6 +1082,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "skill_signoffs_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "skill_signoffs_signed_by_fkey"
             columns: ["signed_by"]
             isOneToOne: false
@@ -1187,8 +1178,7 @@ export type Database = {
           sort_order?: number
           updated_at?: string
         }
-        Relationships: [
-        ]
+        Relationships: []
       }
       skills: {
         Row: {
@@ -1266,6 +1256,84 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      usage_records: {
+        Row: {
+          booking_group_id: string | null
+          collaborators: Json | null
+          created_at: string
+          end_time: string
+          equipment_id: string
+          id: string
+          notes: string | null
+          project_id: string | null
+          project_samples: Json | null
+          samples_processed: number | null
+          start_time: string
+          user_id: string
+        }
+        Insert: {
+          booking_group_id?: string | null
+          collaborators?: Json | null
+          created_at?: string
+          end_time: string
+          equipment_id: string
+          id?: string
+          notes?: string | null
+          project_id?: string | null
+          project_samples?: Json | null
+          samples_processed?: number | null
+          start_time: string
+          user_id: string
+        }
+        Update: {
+          booking_group_id?: string | null
+          collaborators?: Json | null
+          created_at?: string
+          end_time?: string
+          equipment_id?: string
+          id?: string
+          notes?: string | null
+          project_id?: string | null
+          project_samples?: Json | null
+          samples_processed?: number | null
+          start_time?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usage_records_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "usage_records_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
       }
       user_skills: {
         Row: {
@@ -1359,7 +1427,15 @@ export type Database = {
           tasks: string[] | null
           title: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "recruiting_positions_cycle_fkey"
+            columns: ["cycle"]
+            isOneToOne: false
+            referencedRelation: "recruiting_cycles"
+            referencedColumns: ["cycle"]
+          },
+        ]
       }
       skill_quiz_status: {
         Row: {
@@ -1369,14 +1445,40 @@ export type Database = {
           last_attempt_at: string | null
           passed: boolean | null
           passed_quiz_version: number | null
-          skill_id: string
-          user_id: string
+          skill_id: string | null
+          user_id: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "skill_quiz_attempts_skill_id_fkey"
+            columns: ["skill_id"]
+            isOneToOne: false
+            referencedRelation: "skills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "skill_quiz_attempts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {
+      can_grant_trainer: { Args: { _signer: string }; Returns: boolean }
+      can_see_skills_module: { Args: { _user: string }; Returns: boolean }
+      can_sign_off_skill: {
+        Args: { _signer: string; _skill_id: string }
+        Returns: boolean
+      }
       get_current_version: { Args: never; Returns: string }
+      get_quiz_attempt_detail: { Args: { _attempt_id: string }; Returns: Json }
+      grade_skill_quiz: {
+        Args: { _answers: Json; _skill_id: string }
+        Returns: Json
+      }
       has_any_role: {
         Args: {
           _roles: Database["public"]["Enums"]["app_role"][]
@@ -1392,15 +1494,28 @@ export type Database = {
         Returns: boolean
       }
       is_active_user: { Args: { _user_id: string }; Returns: boolean }
-      can_grant_trainer: { Args: { _signer: string }; Returns: boolean }
-      can_see_skills_module: { Args: { _user: string }; Returns: boolean }
-      can_sign_off_skill: {
-        Args: { _signer: string; _skill_id: string }
+      recruiting_availability_is_valid: { Args: { _a: Json }; Returns: boolean }
+      recruiting_can_review: {
+        Args: { _application_id: string; _user_id: string }
         Returns: boolean
       }
-      skill_stage_rank: {
-        Args: { _s: Database["public"]["Enums"]["skill_stage"] }
-        Returns: number
+      recruiting_issue_pow_challenge: { Args: never; Returns: Json }
+      recruiting_open_cycle: { Args: never; Returns: string }
+      recruiting_submit_application: {
+        Args: { _payload: Json }
+        Returns: string
+      }
+      recruiting_submit_application_public: {
+        Args: { _payload: Json }
+        Returns: Json
+      }
+      recruiting_text_array_ok: {
+        Args: { _a: string[]; _max: number; _min: number }
+        Returns: boolean
+      }
+      recruiting_verify_pow: {
+        Args: { _challenge_id: string; _nonce: string }
+        Returns: boolean
       }
       set_user_active: {
         Args: { _active: boolean; _actor: string; _target: string }
@@ -1414,21 +1529,11 @@ export type Database = {
         }
         Returns: undefined
       }
-      grade_skill_quiz: {
-        Args: { _answers: Json; _skill_id: string }
-        Returns: Json
+      skill_quiz_options_valid: { Args: { _o: Json }; Returns: boolean }
+      skill_stage_rank: {
+        Args: { _s: Database["public"]["Enums"]["skill_stage"] }
+        Returns: number
       }
-      get_quiz_attempt_detail: { Args: { _attempt_id: string }; Returns: Json }
-      recruiting_open_cycle: { Args: never; Returns: string }
-      recruiting_can_review: {
-        Args: { _application_id: string; _user_id: string }
-        Returns: boolean
-      }
-      recruiting_submit_application_public: {
-        Args: { _payload: Json }
-        Returns: Json
-      }
-      recruiting_issue_pow_challenge: { Args: never; Returns: Json }
     }
     Enums: {
       action_type: "create" | "update" | "delete" | "login" | "logout"
@@ -1440,12 +1545,6 @@ export type Database = {
         | "manager"
         | "user"
         | "pi_external"
-      skill_stage:
-        | "not_started"
-        | "reading_done"
-        | "trained"
-        | "competent"
-        | "trainer"
       entity_type:
         | "booking"
         | "equipment"
@@ -1453,6 +1552,12 @@ export type Database = {
         | "user"
         | "usage_record"
         | "profile"
+      skill_stage:
+        | "not_started"
+        | "reading_done"
+        | "trained"
+        | "competent"
+        | "trainer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1590,13 +1695,6 @@ export const Constants = {
         "user",
         "pi_external",
       ],
-      skill_stage: [
-        "not_started",
-        "reading_done",
-        "trained",
-        "competent",
-        "trainer",
-      ],
       entity_type: [
         "booking",
         "equipment",
@@ -1604,6 +1702,13 @@ export const Constants = {
         "user",
         "usage_record",
         "profile",
+      ],
+      skill_stage: [
+        "not_started",
+        "reading_done",
+        "trained",
+        "competent",
+        "trainer",
       ],
     },
   },
