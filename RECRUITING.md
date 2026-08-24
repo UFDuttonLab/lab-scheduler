@@ -83,20 +83,28 @@ UPDATE public.recruiting_cycles SET pow_difficulty_bits = 0  WHERE cycle = 'fall
 UPDATE public.recruiting_cycles SET max_submissions_per_hour = 120 WHERE cycle = 'fall-2026';
 ```
 
-### Turnstile is still the better answer
+### Turnstile is ON
 
-Proof of work costs an attacker CPU; Turnstile actually tells a person from a script. It is
-written and wired on both sides. To turn it on:
+**Live since 2026-08-24.** All five steps below are done; they are kept as the record of
+what was configured and as the recipe for a rebuilt environment.
 
 1. Cloudflare dashboard → Turnstile → **Add site**, hostname `ufduttonlab.github.io`.
-2. Put the **site key** in `.env` as `VITE_TURNSTILE_SITE_KEY`, and rebuild.
-3. Put the **secret** in Supabase → Edge Functions → Secrets as `TURNSTILE_SECRET`.
+2. Site key in `.env` as `VITE_TURNSTILE_SITE_KEY` (`0x4AAAAAAEaLNCt-dP3Y3WsJ`), and rebuild.
+3. Secret in Supabase → Edge Functions → Secrets as `TURNSTILE_SECRET`.
 4. Deploy the edge function: `supabase functions deploy submit-application`.
 5. Flip the switch:
 
    ```sql
    UPDATE public.recruiting_cycles SET require_turnstile = true WHERE cycle = 'fall-2026';
    ```
+
+Verified end to end on 2026-08-24: the widget renders and returns a token on the live page,
+a real submission reached the database through the edge function, and a direct anon call to
+`recruiting_submit_application_public` was refused by the `require_turnstile` guard — so the
+weaker proof-of-work door is genuinely closed, not merely unused.
+
+To turn Turnstile back OFF, set `require_turnstile = false`; proof of work resumes at once
+with no rebuild and no redeploy.
 
 Step 5 is what makes it real. From then on the database **refuses** every direct
 submission, and `#/join` posts to the edge function instead. The flag lives on the cycle
@@ -236,10 +244,10 @@ SELECT column_name FROM information_schema.column_privileges
 -- expect exactly one row: status.
 ```
 
-### Deploying the edge function — only when you turn Turnstile on
+### The edge function
 
-`supabase/functions/submit-application/index.ts` is **not deployed**, and does not need to
-be while `require_turnstile` is false. When you do deploy it, note the
+`supabase/functions/submit-application/index.ts` is **deployed** (2026-08-24) and is the
+only door while `require_turnstile` is true. Note the
 `[functions.submit-application] verify_jwt = false` entry in `supabase/config.toml`. That
 entry is not optional: without it the function inherits `verify_jwt = true`, an applicant
 has no JWT, and every submission returns 401 with nothing in the logs to explain it.
@@ -332,8 +340,8 @@ Two safeguards, both in the database rather than only in the button:
 | --- | --- | --- | --- |
 | `VITE_SUPABASE_URL` | `.env` | yes | already present |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | `.env` | yes | already present |
-| `VITE_TURNSTILE_SITE_KEY` | `.env` | **yes** | Turnstile widget on `#/join`. Currently empty — unused while `require_turnstile` is false |
-| `TURNSTILE_SECRET` | Supabase function secrets | **no** | server-side Turnstile verification. Currently unset |
+| `VITE_TURNSTILE_SITE_KEY` | `.env` | **yes** | Turnstile widget on `#/join`. Set to `0x4AAAAAAEaLNCt-dP3Y3WsJ` and live |
+| `TURNSTILE_SECRET` | Supabase function secrets | **no** | server-side Turnstile verification. Set 2026-08-24 |
 | `RECRUITING_PI_EMAIL` | Supabase function secrets | no | optional; address quoted in the duplicate-submission message. Defaults to `duttonc@ufl.edu` |
 | `SUPABASE_SERVICE_ROLE_KEY` | injected by Supabase | **no** | already available to every edge function |
 
@@ -497,7 +505,8 @@ enabled, identical to a ready one. It is now disabled, with the retry link besid
   PostgREST and not real JWTs. To repeat it for real, create two throwaway `grad_student`
   accounts, give each one open listing, submit an application ranking only the first, and
   confirm the second mentor's `#/review` is empty.
-- **The edge function has never run.** It is unused while `require_turnstile` is false.
+- ~~**The edge function has never run.**~~ Resolved 2026-08-24: deployed, and a real
+  application was submitted through it end to end.
 - **`safeupdate` cannot be simulated.** Supabase preloads it into the `authenticator` role,
   where it rejects an unqualified `UPDATE`/`DELETE` even inside a `SECURITY DEFINER`
   function — the 2026-08-09 quiz-grader outage. Nothing in this module contains an
