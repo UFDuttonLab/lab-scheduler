@@ -4,6 +4,9 @@
 -- STATUS: APPLIED LIVE 2026-09-05 via the Lovable connector. Verified: instructions_md md5
 -- matches this file byte for byte, 6 checklist items (3 critical), 7 questions with 7 keys
 -- each pointing at the intended option (keys b a b c b d a), LAB-01 first in track T1.
+-- 2026-09-05 later: "gas and water off" corrected to "fume hood off and sash closed, water
+-- off" (the lab has no gas); applied live with instructions_version bumped to 2, and this
+-- file updated to match.
 --
 -- Requested by the PI: a skill that covers shutting down equipment you ran, putting reagents
 -- and samples back where they live, cleaning up after yourself, waste, and telling someone
@@ -77,7 +80,7 @@ If you are unsure whether something should stay on, ask. Do not leave it on beca
 
 ## 6. Leaving the lab
 
-- Last person out: **gas and water off, equipment as above, lights off, door locked.**
+- Last person out: **fume hood off and sash closed, water off, equipment as above, lights off, door locked.**
 - If you have a run going overnight, **your name and phone number on a note on the instrument**, and the PI knows.
 
 ## 7. Mistakes

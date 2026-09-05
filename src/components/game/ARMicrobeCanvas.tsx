@@ -120,8 +120,11 @@ const projectToScreen = (
   const fov = 65 * Math.PI / 180;
   const scale = canvasWidth / (2 * Math.tan(fov / 2));
   
-  const screenX = (canvasWidth / 2) + (rotatedX / -finalZ) * scale;
-  const screenY = (canvasHeight / 2) - (rotatedY / -finalZ) * scale;
+  // finalZ is <= -0.1 here, but clamp the divisor anyway so a microbe converging on the
+  // camera can never blow the projection up to Infinity/NaN.
+  const depth = Math.max(0.05, -finalZ);
+  const screenX = (canvasWidth / 2) + (rotatedX / depth) * scale;
+  const screenY = (canvasHeight / 2) - (rotatedY / depth) * scale;
   
   const distance = Math.sqrt(worldX ** 2 + worldY ** 2 + worldZ ** 2);
   
@@ -180,8 +183,6 @@ export const ARMicrobeCanvas = ({
   const dprRef = useRef(1);
   // Timestamp of the last life lost, used for the damage flash.
   const damageFlashRef = useRef(0);
-  // Escapes counted inside the setMicrobes updater, drained on the next tick.
-  const pendingEscapesRef = useRef(0);
   // Active-clock deadline for the between-wave break (null when a wave is running).
   const waveBreakUntilRef = useRef<number | null>(null);
   // Ids already resolved by a tap this frame, so a second tap cannot double-score them.
@@ -540,22 +541,66 @@ export const ARMicrobeCanvas = ({
       activeTimeRef.current += deltaMs;
       const nowActive = activeTimeRef.current;
 
-      // Drain escapes recorded by a previous tick's updater.
+      // Advance every microbe RADIALLY toward the camera (the world origin).
       //
-      // These cannot be reported from inside the updater (that is a parent setState
-      // during React's render phase) and they cannot be read immediately after calling
-      // setMicrobes either - React defers updaters to the next render, so the count is
-      // still zero on the line after. Recording into a ref and draining it on the next
-      // tick sidesteps both.
-      if (pendingEscapesRef.current > 0) {
-        let n = pendingEscapesRef.current;
-        pendingEscapesRef.current = 0;
+      // Movement used to add to z and treat z >= 0 as an escape. Spawns are placed around the
+      // camera heading (x = sin(yaw)*d, z = -cos(yaw)*d), so whenever the player faced a
+      // heading with cos(yaw) <= 0 every fresh spawn already had z >= 0 and was removed on the
+      // very next tick - a life lost with nothing ever drawn. Shrinking the whole position
+      // vector toward the origin works for any heading, and the microbe stays on the line of
+      // sight it spawned on.
+      //
+      // The escape count is derived here, in the tick body, from the same list the new state
+      // is computed from - never inside the setMicrobes updater, which React may run during
+      // render (and re-run), where a parent setState is both illegal and double-counted.
+      const frozen = activePowerUpRef.current?.type === "freeze";
+      const advance = (list: Microbe[]): { next: Microbe[]; escapes: number } => {
+        const next: Microbe[] = [];
+        let escapes = 0;
+        for (const microbe of list) {
+          // Age in ACTIVE seconds, not wall-clock seconds.
+          const age = (nowActive - microbe.spawnActiveTime) / 1000;
+          const dist = Math.sqrt(microbe.x ** 2 + microbe.y ** 2 + microbe.z ** 2);
+          // speed is authored per 16ms tick, so scale by real elapsed time.
+          // freeze halts approach entirely; without this the toast promised an effect the
+          // game never applied. Only "double" was ever consulted for gameplay.
+          const newDist = frozen ? dist : dist - microbe.speed * (deltaMs / 16);
+
+          // Escaped once it reaches the player. The generous age cap is a safety net for
+          // anything that somehow never converges, not the normal removal path.
+          if (newDist < 0.5 || age > 30) {
+            escapes += 1;
+            continue;
+          }
+
+          const ratio = dist > 0 ? newDist / dist : 1;
+          next.push({
+            ...microbe,
+            x: microbe.x * ratio,
+            y: microbe.y * ratio,
+            z: microbe.z * ratio,
+            wobble: microbe.wobble + 0.05 * (deltaMs / 16),
+            opacity: (microbe.type === "tank" || microbe.type === "boss") && Math.floor(age) % 5 === 0 && age % 1 < 0.5 ? 0.5 : 1.0,
+          });
+        }
+        return { next, escapes };
+      };
+
+      const base = microbesRef.current;
+      const { next, escapes } = advance(base);
+      // microbesRef is synced from state by a passive effect, so in the rare case a spawn
+      // committed between that sync and this tick, re-derive from the real previous state
+      // instead of clobbering it. A microbe that fresh cannot have escaped, so the escape
+      // count taken from `base` still holds.
+      setMicrobes((prev) => (prev === base ? next : advance(prev).next));
+
+      if (escapes > 0) {
+        let n = escapes;
         // shield absorbs escapes while active, which is what its toast claims.
-        if (activePowerUpRef.current?.type === "shield" && n > 0) {
+        if (activePowerUpRef.current?.type === "shield") {
           n -= 1;
           toast.info("Shield absorbed a hit!");
         }
-        // No early return here: the movement/expiry updater below must still run this tick.
         // Flash and buzz only when a life is actually lost, not when the shield ate it.
         if (n > 0) {
           damageFlashRef.current = Date.now();
@@ -563,44 +608,6 @@ export const ARMicrobeCanvas = ({
         }
         for (let i = 0; i < n; i++) onLifeLost();
       }
-
-      setMicrobes((prev) => prev.map((microbe) => {
-        // Age in ACTIVE seconds, not wall-clock seconds.
-        const age = (nowActive - microbe.spawnActiveTime) / 1000;
-        const newWobble = microbe.wobble + 0.05 * (deltaMs / 16);
-        const distance = Math.sqrt(microbe.x ** 2 + microbe.y ** 2 + microbe.z ** 2);
-
-        // Escaped once it passes the camera plane. The generous age cap is a safety net
-        // for anything that somehow never converges, not the normal removal path.
-        if (microbe.z >= 0 || distance < 0.5 || age > 30) {
-          pendingEscapesRef.current += 1;
-          return null;
-        }
-
-        // speed is authored per 16ms tick, so scale by real elapsed time.
-        // freeze halts approach entirely; without this the toast promised an effect the
-        // game never applied. Only "double" was ever consulted for gameplay.
-        const frozen = activePowerUpRef.current?.type === "freeze";
-        const step = frozen ? 0 : microbe.speed * (deltaMs / 16);
-        const newZ = microbe.z + step;
-
-        // Converge on the camera instead of translating along a fixed world x.
-        // Projected screenX is x*scale/|z|, so holding x constant while |z| shrinks made
-        // microbes slide off the edge of the screen well before they reached the player -
-        // unkillable, and then charged as an escape.
-        const shrink = Math.abs(newZ) > 0.001 ? Math.abs(newZ) / Math.abs(microbe.z || newZ) : 1;
-        const newX = microbe.x * shrink;
-        const newY = microbe.y * shrink;
-
-        return {
-          ...microbe,
-          x: newX,
-          y: newY,
-          z: newZ,
-          wobble: newWobble,
-          opacity: (microbe.type === "tank" || microbe.type === "boss") && Math.floor(age) % 5 === 0 && age % 1 < 0.5 ? 0.5 : 1.0,
-        };
-      }).filter(Boolean) as Microbe[]);
     }, 16);
     return () => clearInterval(interval);
   }, [isPaused, onLifeLost]);

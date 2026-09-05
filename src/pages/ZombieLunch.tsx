@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,44 +26,90 @@ export default function ZombieLunch() {
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [combo, setCombo] = useState(0);
+  const [maxCombo, setMaxCombo] = useState(0);
   const [zombiesKilled, setZombiesKilled] = useState(0);
   const [totalClicks, setTotalClicks] = useState(0);
   const [startTime, setStartTime] = useState<number>(0);
+  const [finalScore, setFinalScore] = useState(0);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [ammo, setAmmo] = useState(10);
   const [isReloading, setIsReloading] = useState(false);
 
+  // Track the reload timer so it can be cancelled on pause/restart/game over/unmount
+  const reloadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Track time spent paused so it is excluded from the game duration
+  const pauseStartRef = useRef<number | null>(null);
+  const pausedTotalRef = useRef<number>(0);
+
+  const clearReloadTimer = useCallback(() => {
+    if (reloadTimeoutRef.current !== null) {
+      clearTimeout(reloadTimeoutRef.current);
+      reloadTimeoutRef.current = null;
+    }
+  }, []);
+
+  const scheduleReloadFinish = useCallback((delayMs: number) => {
+    clearReloadTimer();
+    reloadTimeoutRef.current = setTimeout(() => {
+      reloadTimeoutRef.current = null;
+      setAmmo(10);
+      setIsReloading(false);
+      toast.success("🔫 Reloaded! 10 bullets ready");
+    }, delayMs);
+  }, [clearReloadTimer]);
+
+  useEffect(() => {
+    return () => clearReloadTimer();
+  }, [clearReloadTimer]);
+
+  const handleComboUpdate = useCallback((c: number) => {
+    setCombo(c);
+    setMaxCombo((m) => Math.max(m, c));
+  }, []);
+
   const startGame = useCallback(() => {
+    clearReloadTimer();
     setGameState("playing");
     setScore(0);
     setLives(3);
     setCombo(0);
+    setMaxCombo(0);
     setZombiesKilled(0);
     setTotalClicks(0);
     setAmmo(10);
     setIsReloading(false);
+    setFinalScore(0);
     setStartTime(Date.now());
+    pauseStartRef.current = null;
+    pausedTotalRef.current = 0;
     setShowLeaderboard(false);
-  }, []);
+  }, [clearReloadTimer]);
 
   const pauseGame = useCallback(() => {
+    // Freeze the reload timer while paused; it is restarted on resume if still reloading.
+    clearReloadTimer();
+    pauseStartRef.current = Date.now();
     setGameState("paused");
-  }, []);
+  }, [clearReloadTimer]);
 
   const resumeGame = useCallback(() => {
+    if (pauseStartRef.current !== null) {
+      pausedTotalRef.current += Date.now() - pauseStartRef.current;
+      pauseStartRef.current = null;
+    }
+    if (isReloading) {
+      scheduleReloadFinish(2000);
+    }
     setGameState("playing");
-  }, []);
+  }, [isReloading, scheduleReloadFinish]);
 
   const handleReload = useCallback(() => {
     if (isReloading || ammo === 10) return;
-    
+
     setIsReloading(true);
-    setTimeout(() => {
-      setAmmo(10);
-      setIsReloading(false);
-      toast.success("🔫 Reloaded! 10 bullets ready");
-    }, 2000);
-  }, [isReloading, ammo]);
+    scheduleReloadFinish(2000);
+  }, [isReloading, ammo, scheduleReloadFinish]);
 
   // Keyboard shortcut for reload
   useEffect(() => {
@@ -78,9 +124,10 @@ export default function ZombieLunch() {
   }, [gameState, handleReload]);
 
   const endGame = useCallback(async () => {
+    clearReloadTimer();
     setGameState("gameover");
-    
-    const gameDuration = Math.floor((Date.now() - startTime) / 1000);
+
+    const gameDuration = Math.floor((Date.now() - startTime - pausedTotalRef.current) / 1000);
     const accuracy = totalClicks > 0 ? Math.min(100, (zombiesKilled / totalClicks) * 100) : 0;
     
     // Calculate final score with bonuses
@@ -89,6 +136,7 @@ export default function ZombieLunch() {
       finalScore = Math.floor(finalScore * 1.1); // 10% accuracy bonus
     }
     finalScore += Math.floor(gameDuration / 60) * 100; // Time bonus
+    setFinalScore(finalScore);
 
     if (user) {
       const { error } = await supabase.from("game_scores").insert({
@@ -96,7 +144,7 @@ export default function ZombieLunch() {
         score: finalScore,
         microbes_eliminated: zombiesKilled,
         accuracy_percentage: accuracy,
-        combo_max: combo,
+        combo_max: maxCombo,
         game_duration_seconds: gameDuration,
         game_type: 'zombie_lunch',
       });
@@ -106,10 +154,9 @@ export default function ZombieLunch() {
         toast.error("Failed to save score");
       } else {
         toast.success("Score saved!");
-        setShowLeaderboard(true);
       }
     }
-  }, [user, score, zombiesKilled, totalClicks, combo, startTime]);
+  }, [user, score, zombiesKilled, totalClicks, maxCombo, startTime, clearReloadTimer]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 py-8">
@@ -166,35 +213,24 @@ export default function ZombieLunch() {
                   </div>
                 )}
 
-                {gameState === "paused" && (
-                  <div className="flex flex-col items-center justify-center h-[600px] space-y-6">
-                    <h2 className="text-3xl font-bold">Game Paused</h2>
-                    <div className="flex gap-4">
-                      <Button onClick={resumeGame}>
-                        <Play className="w-5 h-5 mr-2" />
-                        Resume
-                      </Button>
-                      <Button variant="outline" onClick={startGame}>
-                        <RotateCcw className="w-5 h-5 mr-2" />
-                        Restart
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
                 {gameState === "gameover" && (
                   <div className="flex flex-col items-center justify-center h-[600px] space-y-6">
                     <div className="text-center space-y-4">
                       <h2 className="text-3xl font-bold">Game Over!</h2>
-                      <div className="text-5xl font-bold text-primary">{score}</div>
+                      <div className="text-5xl font-bold text-primary">{finalScore}</div>
                       <p className="text-muted-foreground">Final Score</p>
+                      {finalScore > score && (
+                        <p className="text-xs text-muted-foreground">
+                          Base score {score} + {finalScore - score} accuracy/time bonus
+                        </p>
+                      )}
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                           <div className="text-2xl font-bold">{zombiesKilled}</div>
                           <div className="text-muted-foreground">Zombies Killed</div>
                         </div>
                         <div>
-                          <div className="text-2xl font-bold">{combo}</div>
+                          <div className="text-2xl font-bold">{maxCombo}</div>
                           <div className="text-muted-foreground">Max Combo</div>
                         </div>
                       </div>
@@ -212,18 +248,36 @@ export default function ZombieLunch() {
                   </div>
                 )}
 
-                {gameState === "playing" && (
-                  <ZombieCanvas
-                    onScoreUpdate={setScore}
-                    onLivesUpdate={setLives}
-                    onComboUpdate={setCombo}
-                    onZombiesKilledUpdate={setZombiesKilled}
-                    onTotalClicksUpdate={setTotalClicks}
-                    onGameOver={endGame}
-                    ammo={ammo}
-                    onAmmoUpdate={setAmmo}
-                    isReloading={isReloading}
-                  />
+                {(gameState === "playing" || gameState === "paused") && (
+                  <div className="relative">
+                    <ZombieCanvas
+                      onScoreUpdate={setScore}
+                      onLivesUpdate={setLives}
+                      onComboUpdate={handleComboUpdate}
+                      onZombiesKilledUpdate={setZombiesKilled}
+                      onTotalClicksUpdate={setTotalClicks}
+                      onGameOver={endGame}
+                      ammo={ammo}
+                      onAmmoUpdate={setAmmo}
+                      isReloading={isReloading}
+                      paused={gameState === "paused"}
+                    />
+                    {gameState === "paused" && (
+                      <div className="absolute inset-0 z-20 flex flex-col items-center justify-center space-y-6 rounded-lg bg-background/80 backdrop-blur-sm">
+                        <h2 className="text-3xl font-bold">Game Paused</h2>
+                        <div className="flex gap-4">
+                          <Button onClick={resumeGame}>
+                            <Play className="w-5 h-5 mr-2" />
+                            Resume
+                          </Button>
+                          <Button variant="outline" onClick={startGame}>
+                            <RotateCcw className="w-5 h-5 mr-2" />
+                            Restart
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </Card>
             </div>

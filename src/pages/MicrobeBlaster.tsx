@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,34 +25,54 @@ export default function MicrobeBlaster() {
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [combo, setCombo] = useState(0);
+  const [maxCombo, setMaxCombo] = useState(0);
   const [microbesEliminated, setMicrobesEliminated] = useState(0);
   const [totalClicks, setTotalClicks] = useState(0);
   const [startTime, setStartTime] = useState<number>(0);
+  const [finalScore, setFinalScore] = useState(0);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+
+  // Track time spent paused so it is excluded from the game duration
+  const pauseStartRef = useRef<number | null>(null);
+  const pausedTotalRef = useRef<number>(0);
+
+  const handleComboUpdate = useCallback((c: number) => {
+    setCombo(c);
+    setMaxCombo((m) => Math.max(m, c));
+  }, []);
 
   const startGame = useCallback(() => {
     setGameState("playing");
     setScore(0);
     setLives(3);
     setCombo(0);
+    setMaxCombo(0);
     setMicrobesEliminated(0);
     setTotalClicks(0);
+    setFinalScore(0);
     setStartTime(Date.now());
+    pauseStartRef.current = null;
+    pausedTotalRef.current = 0;
     setShowLeaderboard(false);
   }, []);
 
   const pauseGame = useCallback(() => {
+    pauseStartRef.current = Date.now();
     setGameState("paused");
   }, []);
 
   const resumeGame = useCallback(() => {
+    if (pauseStartRef.current !== null) {
+      pausedTotalRef.current += Date.now() - pauseStartRef.current;
+      pauseStartRef.current = null;
+    }
     setGameState("playing");
   }, []);
 
   const endGame = useCallback(async () => {
     setGameState("gameover");
-    
-    const gameDuration = Math.floor((Date.now() - startTime) / 1000);
+
+    const gameDuration = Math.floor((Date.now() - startTime - pausedTotalRef.current) / 1000);
     const accuracy = totalClicks > 0 ? Math.min(100, (microbesEliminated / totalClicks) * 100) : 0;
     
     // Calculate final score with bonuses
@@ -61,6 +81,7 @@ export default function MicrobeBlaster() {
       finalScore = Math.floor(finalScore * 1.1); // 10% accuracy bonus
     }
     finalScore += Math.floor(gameDuration / 60) * 100; // Time bonus
+    setFinalScore(finalScore);
 
     if (user) {
       const { error } = await supabase.from("game_scores").insert({
@@ -68,7 +89,7 @@ export default function MicrobeBlaster() {
         score: finalScore,
         microbes_eliminated: microbesEliminated,
         accuracy_percentage: accuracy,
-        combo_max: combo,
+        combo_max: maxCombo,
         game_duration_seconds: gameDuration,
       });
 
@@ -77,10 +98,9 @@ export default function MicrobeBlaster() {
         toast.error("Failed to save score");
       } else {
         toast.success("Score saved!");
-        setShowLeaderboard(true);
       }
     }
-  }, [user, score, microbesEliminated, totalClicks, combo, startTime]);
+  }, [user, score, microbesEliminated, totalClicks, maxCombo, startTime]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 py-8">
@@ -137,35 +157,24 @@ export default function MicrobeBlaster() {
                   </div>
                 )}
 
-                {gameState === "paused" && (
-                  <div className="flex flex-col items-center justify-center h-[600px] space-y-6">
-                    <h2 className="text-3xl font-bold">Game Paused</h2>
-                    <div className="flex gap-4">
-                      <Button onClick={resumeGame}>
-                        <Play className="w-5 h-5 mr-2" />
-                        Resume
-                      </Button>
-                      <Button variant="outline" onClick={startGame}>
-                        <RotateCcw className="w-5 h-5 mr-2" />
-                        Restart
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
                 {gameState === "gameover" && (
                   <div className="flex flex-col items-center justify-center h-[600px] space-y-6">
                     <div className="text-center space-y-4">
                       <h2 className="text-3xl font-bold">Game Over!</h2>
-                      <div className="text-5xl font-bold text-primary">{score}</div>
+                      <div className="text-5xl font-bold text-primary">{finalScore}</div>
                       <p className="text-muted-foreground">Final Score</p>
+                      {finalScore > score && (
+                        <p className="text-xs text-muted-foreground">
+                          Base score {score} + {finalScore - score} accuracy/time bonus
+                        </p>
+                      )}
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                           <div className="text-2xl font-bold">{microbesEliminated}</div>
                           <div className="text-muted-foreground">Microbes Eliminated</div>
                         </div>
                         <div>
-                          <div className="text-2xl font-bold">{combo}</div>
+                          <div className="text-2xl font-bold">{maxCombo}</div>
                           <div className="text-muted-foreground">Max Combo</div>
                         </div>
                       </div>
@@ -183,15 +192,33 @@ export default function MicrobeBlaster() {
                   </div>
                 )}
 
-                {gameState === "playing" && (
-                  <GameCanvas
-                    onScoreUpdate={setScore}
-                    onLivesUpdate={setLives}
-                    onComboUpdate={setCombo}
-                    onMicrobesEliminatedUpdate={setMicrobesEliminated}
-                    onTotalClicksUpdate={setTotalClicks}
-                    onGameOver={endGame}
-                  />
+                {(gameState === "playing" || gameState === "paused") && (
+                  <div className="relative">
+                    <GameCanvas
+                      onScoreUpdate={setScore}
+                      onLivesUpdate={setLives}
+                      onComboUpdate={handleComboUpdate}
+                      onMicrobesEliminatedUpdate={setMicrobesEliminated}
+                      onTotalClicksUpdate={setTotalClicks}
+                      onGameOver={endGame}
+                      paused={gameState === "paused"}
+                    />
+                    {gameState === "paused" && (
+                      <div className="absolute inset-0 z-20 flex flex-col items-center justify-center space-y-6 rounded-lg bg-background/80 backdrop-blur-sm">
+                        <h2 className="text-3xl font-bold">Game Paused</h2>
+                        <div className="flex gap-4">
+                          <Button onClick={resumeGame}>
+                            <Play className="w-5 h-5 mr-2" />
+                            Resume
+                          </Button>
+                          <Button variant="outline" onClick={startGame}>
+                            <RotateCcw className="w-5 h-5 mr-2" />
+                            Restart
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </Card>
             </div>

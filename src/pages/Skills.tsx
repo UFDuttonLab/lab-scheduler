@@ -33,8 +33,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   Loader2,
-  EyeOff,
-  Eye,
   X,
   Search,
   CheckCircle2,
@@ -81,12 +79,8 @@ const Skills = () => {
   const { user, userRole, permissions } = useAuth();
   const navigate = useNavigate();
   const {
-    visibleToAll,
-    allowlist,
     canSeeModule,
-    canAdminModule,
     loading: flagLoading,
-    refresh,
   } = useSkillsModule();
 
   const [isLoading, setIsLoading] = useState(true);
@@ -106,7 +100,6 @@ const Skills = () => {
   const [detailSkill, setDetailSkill] = useState<Skill | null>(null);
   const [acknowledging, setAcknowledging] = useState(false);
   const [matrixCat, setMatrixCat] = useState<string>("");
-  const [addViewerId, setAddViewerId] = useState<string>("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
   const [manageCat, setManageCat] = useState<string>("all");
@@ -425,54 +418,6 @@ const Skills = () => {
     }
   };
 
-  /**
-   * Add or remove someone from the private-preview allowlist. Postgres is the authority:
-   * the UPDATE policy requires the caller to be an elevated role who is themselves
-   * allowlisted, so this cannot be used to let yourself in.
-   */
-  const handleSetAllowlist = async (next: string[]) => {
-    const result = await settleWrite(
-      supabase
-        .from("skill_module_settings")
-        .update({
-          allowlist_user_ids: next,
-          updated_at: new Date().toISOString(),
-          updated_by: user?.id,
-        })
-        .eq("id", true)
-        .select("id"),
-      "You don't have permission to change who can see the Skills module."
-    );
-    if (!result.ok) {
-      toast.error(result.message);
-      return;
-    }
-    toast.success("Updated who can see the Skills module.");
-    setAddViewerId("");
-    await refresh();
-  };
-
-  const handleToggleVisibility = async (next: boolean) => {
-    const result = await settleWrite(
-      supabase
-        .from("skill_module_settings")
-        .update({ visible_to_all: next, updated_at: new Date().toISOString(), updated_by: user?.id })
-        .eq("id", true)
-        .select("id"),
-      "Only a PI or manager can change who sees the Skills module."
-    );
-    if (!result.ok) {
-      toast.error(result.message);
-      return;
-    }
-    toast.success(
-      next
-        ? "Skills module is now visible to the whole lab."
-        : "Skills module hidden again — only PIs and managers can see it."
-    );
-    await refresh();
-  };
-
   const openSignOff = () => {
     setSoTrainee("");
     setSoSkillId("");
@@ -660,106 +605,9 @@ const Skills = () => {
           )}
         </div>
 
-        {/* Private preview panel. Only allowlisted users ever reach this page while
-            visible_to_all is false - RLS blocks everyone else at the data layer too. */}
-        {canAdminModule && (
-          <Card className={`p-4 mb-6 ${visibleToAll ? "" : "border-amber-500/40 bg-amber-500/5"}`}>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-              {visibleToAll ? (
-                <Eye className="w-5 h-5 text-muted-foreground shrink-0" />
-              ) : (
-                <EyeOff className="w-5 h-5 text-amber-600 shrink-0" />
-              )}
-              <div className="flex-1">
-                <p className="font-medium">
-                  {visibleToAll ? "Live for the whole lab" : "Private preview"}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {visibleToAll
-                    ? "Everyone in the lab can see this page."
-                    : "Only the people listed below can see this page — and the catalog is blocked at the database level for everyone else, not just hidden in the menu."}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Label htmlFor="vis" className="text-sm whitespace-nowrap">
-                  Release to everyone
-                </Label>
-                <Switch id="vis" checked={visibleToAll} onCheckedChange={handleToggleVisibility} />
-              </div>
-            </div>
-
-            {!visibleToAll && (
-              <div className="mt-4 pt-4 border-t space-y-3">
-                <Label className="text-sm">Who can see it</Label>
-                <div className="flex flex-wrap gap-2">
-                  {allowlist.length === 0 && (
-                    <span className="text-sm text-muted-foreground">Nobody — add someone below.</span>
-                  )}
-                  {allowlist.map((id) => {
-                    // Removing yourself, or the last person, while the module is still
-                    // private locks EVERYONE out - including you - and the only control
-                    // that could undo it lives on this page, which you can no longer reach.
-                    // RLS would allow recovery from an empty allowlist, but only from a SQL
-                    // editor. So the button simply is not offered for those two cases.
-                    const isSelf = id === user?.id;
-                    const isLast = allowlist.length === 1;
-                    const locked = !visibleToAll && (isSelf || isLast);
-                    return (
-                      <Badge key={id} variant="secondary" className="gap-1.5 py-1">
-                        {nameById[id] ?? id.slice(0, 8)}
-                        {locked ? (
-                          <span
-                            className="text-[10px] uppercase tracking-wide text-muted-foreground"
-                            title={
-                              isSelf
-                                ? "You cannot remove yourself while the module is private — you would lose access to this page."
-                                : "You cannot remove the last person while the module is private."
-                            }
-                          >
-                            {isSelf ? "you" : "only"}
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            aria-label={`Remove ${nameById[id] ?? "user"}`}
-                            className="hover:text-destructive"
-                            onClick={() => handleSetAllowlist(allowlist.filter((x) => x !== id))}
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        )}
-                      </Badge>
-                    );
-                  })}
-                </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Select value={addViewerId} onValueChange={setAddViewerId}>
-                    <SelectTrigger className="sm:w-[300px]">
-                      <SelectValue placeholder="Add someone to the preview..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {profiles
-                        .filter((p) => !allowlist.includes(p.id))
-                        .sort((a, b) => (a.fullName ?? a.email).localeCompare(b.fullName ?? b.email))
-                        .map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.fullName ?? p.email}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="outline"
-                    disabled={!addViewerId}
-                    onClick={() => handleSetAllowlist([...allowlist, addViewerId])}
-                  >
-                    Add
-                  </Button>
-                </div>
-              </div>
-            )}
-          </Card>
-        )}
+        {/* The private-preview / release panel that used to sit here was removed on 2026-09-05,
+            the day the module was released to the whole lab. visible_to_all stays true in
+            skill_module_settings; flip it back with SQL if a private preview is ever needed. */}
 
         <Tabs defaultValue="mine" className="space-y-6">
           <TabsList>

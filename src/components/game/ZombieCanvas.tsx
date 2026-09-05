@@ -43,6 +43,7 @@ interface ZombieCanvasProps {
   ammo: number;
   onAmmoUpdate: (ammo: number) => void;
   isReloading: boolean;
+  paused: boolean;
 }
 
 const CANVAS_WIDTH = 800;
@@ -61,6 +62,7 @@ export const ZombieCanvas = ({
   ammo,
   onAmmoUpdate,
   isReloading,
+  paused,
 }: ZombieCanvasProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [zombies, setZombies] = useState<Zombie[]>([]);
@@ -79,9 +81,58 @@ export const ZombieCanvas = ({
 
   const comboTimeoutRef = useRef<NodeJS.Timeout>();
   const animationFrameRef = useRef<number>();
-  const lastSpawnRef = useRef<number>(0);
-  const lastPowerUpSpawnRef = useRef<number>(0);
+  const lastSpawnRef = useRef<number>(Date.now());
+  const lastPowerUpSpawnRef = useRef<number>(Date.now());
   const startTimeRef = useRef<number>(Date.now());
+
+  // Pause handling: freeze all timers while paused and shift them forward on
+  // resume so time spent paused does not count toward elapsed/difficulty.
+  const pauseStartRef = useRef<number | null>(null);
+  const comboRemainingRef = useRef<number>(0);
+  const comboDeadlineRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (paused) {
+      pauseStartRef.current = Date.now();
+      if (comboTimeoutRef.current) {
+        clearTimeout(comboTimeoutRef.current);
+        comboTimeoutRef.current = undefined;
+        comboRemainingRef.current = Math.max(0, comboDeadlineRef.current - Date.now());
+      } else {
+        comboRemainingRef.current = 0;
+      }
+      return;
+    }
+
+    if (pauseStartRef.current !== null) {
+      const pausedFor = Date.now() - pauseStartRef.current;
+      pauseStartRef.current = null;
+      startTimeRef.current += pausedFor;
+      lastSpawnRef.current += pausedFor;
+      lastPowerUpSpawnRef.current += pausedFor;
+      setPowerUpEndTime((prev) => (prev > 0 ? prev + pausedFor : prev));
+
+      if (comboRemainingRef.current > 0) {
+        const remaining = comboRemainingRef.current;
+        comboRemainingRef.current = 0;
+        comboDeadlineRef.current = Date.now() + remaining;
+        comboTimeoutRef.current = setTimeout(() => {
+          setCombo(0);
+          onComboUpdate(0);
+        }, remaining);
+      }
+    }
+    // onComboUpdate intentionally omitted: only the pause transition should trigger this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paused]);
+
+  // Mount-only cleanup for the combo timeout (must NOT live in the per-frame rAF effect,
+  // otherwise the 2 s combo reset is cancelled on every frame).
+  useEffect(() => {
+    return () => {
+      if (comboTimeoutRef.current) clearTimeout(comboTimeoutRef.current);
+    };
+  }, []);
 
   const getZombieType = useCallback((time: number): Zombie["type"] => {
     const rand = Math.random();
@@ -182,8 +233,13 @@ export const ZombieCanvas = ({
 
   const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
     if (!canvasRef.current) return;
+    if (paused) return;
 
-    // Check ammo first
+    // Check ammo / reload state first
+    if (isReloading) {
+      toast.error("⏳ Reloading... hold on!");
+      return;
+    }
     if (ammo === 0) {
       toast.error("🔫 Out of ammo! Press R to reload!");
       return;
@@ -278,6 +334,7 @@ export const ZombieCanvas = ({
             onComboUpdate(newCombo);
 
             if (comboTimeoutRef.current) clearTimeout(comboTimeoutRef.current);
+            comboDeadlineRef.current = Date.now() + 2000;
             comboTimeoutRef.current = setTimeout(() => {
               setCombo(0);
               onComboUpdate(0);
@@ -307,7 +364,7 @@ export const ZombieCanvas = ({
       onComboUpdate(0);
       return prevZombies;
     });
-  }, [powerUps, activePowerUp, ammo, onAmmoUpdate, onScoreUpdate, onComboUpdate, onZombiesKilledUpdate, onTotalClicksUpdate, createParticles]);
+  }, [paused, isReloading, powerUps, activePowerUp, ammo, onAmmoUpdate, onScoreUpdate, onComboUpdate, onZombiesKilledUpdate, onTotalClicksUpdate, createParticles]);
 
   const gameLoop = useCallback(() => {
     const now = Date.now();
@@ -391,12 +448,12 @@ export const ZombieCanvas = ({
   }, [zombies, powerUps, activePowerUp, powerUpEndTime, spawnZombie, spawnPowerUp, onLivesUpdate, onGameOver]);
 
   useEffect(() => {
+    if (paused) return;
     animationFrameRef.current = requestAnimationFrame(gameLoop);
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      if (comboTimeoutRef.current) clearTimeout(comboTimeoutRef.current);
     };
-  }, [gameLoop]);
+  }, [gameLoop, paused]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

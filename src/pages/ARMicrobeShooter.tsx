@@ -12,14 +12,21 @@ import { supabase } from "@/integrations/supabase/client";
 import { useDeviceMotion } from "@/hooks/useDeviceMotion";
 import { useDeviceOrientation } from "@/hooks/useDeviceOrientation";
 import { useGyroscope } from "@/hooks/useGyroscope";
-import { useIsMobile } from "@/hooks/use-mobile";
 
 type GameState = "menu" | "playing" | "paused" | "gameover";
 
 const ARMicrobeShooter = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isMobile = useIsMobile();
+  // Decide device capability ONCE, at mount, from touch support rather than viewport width.
+  //
+  // This used to be useIsMobile() (innerWidth < 768, re-evaluated on resize). Rotating a phone
+  // to landscape or playing on an iPad pushed the width past 768 mid-game, which flipped the
+  // flag, unmounted the camera and navigated the player away to /schedule. A device does not
+  // grow or lose a touchscreen while the page is open, so the value is frozen for the session.
+  const [isMobile] = useState(
+    () => navigator.maxTouchPoints > 0 || window.matchMedia("(pointer: coarse)").matches
+  );
   const [gameState, setGameState] = useState<GameState>("menu");
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
@@ -31,6 +38,9 @@ const ARMicrobeShooter = () => {
   const [permissionStatus, setPermissionStatus] = useState<string>("");
   const [awaitingSensors, setAwaitingSensors] = useState(false);
   const [maxCombo, setMaxCombo] = useState(0);
+  // Score including the accuracy/survival bonuses computed in endGame. The game-over
+  // screen used to show the raw score while the leaderboard row saved this one.
+  const [finalScore, setFinalScore] = useState(0);
   const gameStartTimeRef = useRef<number>(0);
   // Guards against endGame() running twice and writing two leaderboard rows.
   const endedRef = useRef(false);
@@ -147,7 +157,10 @@ const ARMicrobeShooter = () => {
     }, 100); // Small delay to ensure sessionStorage is ready
 
     return () => clearTimeout(checkUnlock);
-  }, [navigate, isMobile]);
+    // isMobile is frozen at mount (see above) and deliberately left out: re-running this
+    // check on a resize is exactly the bug it fixes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate]);
 
   const startGame = async () => {
     // Initialize game state
@@ -159,6 +172,7 @@ const ARMicrobeShooter = () => {
     setMaxCombo(0);
     setMicrobesEliminated(0);
     setTotalTaps(0);
+    setFinalScore(0);
     gameStartTimeRef.current = Date.now();
   };
 
@@ -178,8 +192,6 @@ const ARMicrobeShooter = () => {
 
     setGameState("gameover");
 
-    if (!user) return;
-
     const gameDuration = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
     const accuracy = totalTaps > 0 ? (microbesEliminated / totalTaps) * 100 : 0;
 
@@ -195,6 +207,11 @@ const ARMicrobeShooter = () => {
 
     const survivalBonus = Math.floor(gameDuration / 60) * 100;
     finalScore += survivalBonus;
+
+    // Shown on the game-over screen whether or not the score can be saved.
+    setFinalScore(finalScore);
+
+    if (!user) return;
 
     try {
       const { error } = await supabase.from("game_scores").insert({
@@ -345,7 +362,12 @@ const ARMicrobeShooter = () => {
           <h2 className="text-4xl font-bold text-destructive">💀 Game Over</h2>
           
           <div className="space-y-3 text-lg">
-            <p className="text-3xl font-bold text-primary">{score} points</p>
+            <p className="text-3xl font-bold text-primary">{finalScore} points</p>
+            {finalScore > score && (
+              <p className="text-sm text-muted-foreground">
+                {score} base + {finalScore - score} bonus
+              </p>
+            )}
             <div className="space-y-1 text-muted-foreground">
               <p>🦠 Microbes Eliminated: {microbesEliminated}</p>
               <p>🎯 Accuracy: {accuracy}%</p>

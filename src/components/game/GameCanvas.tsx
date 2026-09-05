@@ -41,6 +41,7 @@ interface GameCanvasProps {
   onMicrobesEliminatedUpdate: (count: number) => void;
   onTotalClicksUpdate: (count: number) => void;
   onGameOver: () => void;
+  paused: boolean;
 }
 
 const CANVAS_WIDTH = 800;
@@ -54,6 +55,7 @@ export const GameCanvas = ({
   onMicrobesEliminatedUpdate,
   onTotalClicksUpdate,
   onGameOver,
+  paused,
 }: GameCanvasProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [microbes, setMicrobes] = useState<Microbe[]>([]);
@@ -72,9 +74,58 @@ export const GameCanvas = ({
 
   const comboTimeoutRef = useRef<NodeJS.Timeout>();
   const animationFrameRef = useRef<number>();
-  const lastSpawnRef = useRef<number>(0);
-  const lastPowerUpSpawnRef = useRef<number>(0);
+  const lastSpawnRef = useRef<number>(Date.now());
+  const lastPowerUpSpawnRef = useRef<number>(Date.now());
   const startTimeRef = useRef<number>(Date.now());
+
+  // Pause handling: freeze all timers while paused and shift them forward on
+  // resume so time spent paused does not count toward elapsed/difficulty.
+  const pauseStartRef = useRef<number | null>(null);
+  const comboRemainingRef = useRef<number>(0);
+  const comboDeadlineRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (paused) {
+      pauseStartRef.current = Date.now();
+      if (comboTimeoutRef.current) {
+        clearTimeout(comboTimeoutRef.current);
+        comboTimeoutRef.current = undefined;
+        comboRemainingRef.current = Math.max(0, comboDeadlineRef.current - Date.now());
+      } else {
+        comboRemainingRef.current = 0;
+      }
+      return;
+    }
+
+    if (pauseStartRef.current !== null) {
+      const pausedFor = Date.now() - pauseStartRef.current;
+      pauseStartRef.current = null;
+      startTimeRef.current += pausedFor;
+      lastSpawnRef.current += pausedFor;
+      lastPowerUpSpawnRef.current += pausedFor;
+      setPowerUpEndTime((prev) => (prev > 0 ? prev + pausedFor : prev));
+
+      if (comboRemainingRef.current > 0) {
+        const remaining = comboRemainingRef.current;
+        comboRemainingRef.current = 0;
+        comboDeadlineRef.current = Date.now() + remaining;
+        comboTimeoutRef.current = setTimeout(() => {
+          setCombo(0);
+          onComboUpdate(0);
+        }, remaining);
+      }
+    }
+    // onComboUpdate intentionally omitted: only the pause transition should trigger this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paused]);
+
+  // Mount-only cleanup for the combo timeout (must NOT live in the per-frame rAF effect,
+  // otherwise the 2 s combo reset is cancelled on every frame).
+  useEffect(() => {
+    return () => {
+      if (comboTimeoutRef.current) clearTimeout(comboTimeoutRef.current);
+    };
+  }, []);
 
   const getMicrobeType = useCallback((time: number): Microbe["type"] => {
     const rand = Math.random();
@@ -164,6 +215,7 @@ export const GameCanvas = ({
 
   const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
     if (!canvasRef.current) return;
+    if (paused) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
     const scaleX = CANVAS_WIDTH / rect.width;
@@ -235,6 +287,7 @@ export const GameCanvas = ({
             onComboUpdate(newCombo);
 
             if (comboTimeoutRef.current) clearTimeout(comboTimeoutRef.current);
+            comboDeadlineRef.current = Date.now() + 2000;
             comboTimeoutRef.current = setTimeout(() => {
               setCombo(0);
               onComboUpdate(0);
@@ -261,7 +314,7 @@ export const GameCanvas = ({
       onComboUpdate(0);
       return prevMicrobes;
     });
-  }, [powerUps, activePowerUp, onScoreUpdate, onComboUpdate, onMicrobesEliminatedUpdate, onTotalClicksUpdate, createParticles]);
+  }, [paused, powerUps, activePowerUp, onScoreUpdate, onComboUpdate, onMicrobesEliminatedUpdate, onTotalClicksUpdate, createParticles]);
 
   const gameLoop = useCallback(() => {
     const now = Date.now();
@@ -347,12 +400,12 @@ export const GameCanvas = ({
   }, [microbes, powerUps, activePowerUp, powerUpEndTime, spawnMicrobe, spawnPowerUp, onLivesUpdate, onGameOver]);
 
   useEffect(() => {
+    if (paused) return;
     animationFrameRef.current = requestAnimationFrame(gameLoop);
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      if (comboTimeoutRef.current) clearTimeout(comboTimeoutRef.current);
     };
-  }, [gameLoop]);
+  }, [gameLoop, paused]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -428,7 +481,7 @@ export const GameCanvas = ({
       ctx.save();
       ctx.translate(powerUp.x, powerUp.y);
 
-      ctx.fillStyle = "hsl(var(--primary))";
+      ctx.fillStyle = `hsl(${primaryColor})`;
       ctx.beginPath();
       ctx.arc(0, 0, 25, 0, Math.PI * 2);
       ctx.fill();

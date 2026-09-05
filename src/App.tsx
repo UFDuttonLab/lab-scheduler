@@ -17,6 +17,7 @@ import Settings from "./pages/Settings";
 import ActivityLog from "./pages/ActivityLog";
 import HelpWanted from "./pages/HelpWanted";
 import Break from "./pages/Break";
+import Cottontail from "./pages/Cottontail";
 import Auth from "./pages/Auth";
 import ResetPasswordVerify from "./pages/ResetPasswordVerify";
 import Help from "./pages/Help";
@@ -78,6 +79,7 @@ const App = () => (
             <Route path="/schedule" element={<ProtectedRoute><Schedule /></ProtectedRoute>} />
             <Route path="/equipment" element={<ProtectedRoute requirePermission="canManageEquipment"><Equipment /></ProtectedRoute>} />
             <Route path="/break" element={<ProtectedRoute><Break /></ProtectedRoute>} />
+            <Route path="/cottontail" element={<ProtectedRoute><Cottontail /></ProtectedRoute>} />
             <Route path="/help-wanted" element={<ProtectedRoute><HelpWanted /></ProtectedRoute>} />
             <Route path="/analytics" element={<ProtectedRoute requirePermission="canViewAnalytics"><Analytics /></ProtectedRoute>} />
             <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />

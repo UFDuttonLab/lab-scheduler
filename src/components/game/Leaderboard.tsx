@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -33,7 +33,14 @@ export const Leaderboard = ({ gameType = 'microbe_blaster' }: LeaderboardProps) 
   const [personalBest, setPersonalBest] = useState<Score | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchScores = async () => {
+  // Latest user / scores kept in refs so the realtime callback (created once per
+  // gameType) never reads stale closure values.
+  const userRef = useRef(user);
+  userRef.current = user;
+  const allTimeScoresRef = useRef<Score[]>([]);
+
+  const fetchScores = useCallback(async () => {
+    const currentUser = userRef.current;
     try {
       // Fetch all-time top scores
       const { data: allTime, error: allTimeError } = await supabase
@@ -44,6 +51,7 @@ export const Leaderboard = ({ gameType = 'microbe_blaster' }: LeaderboardProps) 
         .limit(10);
 
       if (allTimeError) throw allTimeError;
+      allTimeScoresRef.current = allTime || [];
       setAllTimeScores(allTime || []);
 
       // Fetch weekly top scores
@@ -62,11 +70,11 @@ export const Leaderboard = ({ gameType = 'microbe_blaster' }: LeaderboardProps) 
       setWeeklyScores(weekly || []);
 
       // Fetch personal best
-      if (user) {
+      if (currentUser) {
         const { data: personal, error: personalError } = await supabase
           .from("game_scores")
           .select("*, profiles(full_name, spirit_animal)")
-          .eq("user_id", user.id)
+          .eq("user_id", currentUser.id)
           .eq("game_type", gameType)
           .order("score", { ascending: false })
           .limit(1)
@@ -81,14 +89,21 @@ export const Leaderboard = ({ gameType = 'microbe_blaster' }: LeaderboardProps) 
     } finally {
       setLoading(false);
     }
-  };
+  }, [gameType]);
 
+  // Fetch on mount and whenever the user or game type changes (user flips from
+  // null to a value shortly after mount, which also loads the personal best).
   useEffect(() => {
     fetchScores();
+  }, [user, fetchScores]);
 
-    // Subscribe to realtime updates
+  // Realtime subscription: depends on gameType only, with a unique topic per
+  // instance, so it is never torn down and re-created with the same topic while
+  // the old channel is still asynchronously leaving.
+  useEffect(() => {
+    const topic = `game_scores_${gameType}_${Math.random().toString(36).slice(2)}`;
     const channel = supabase
-      .channel("game_scores_changes")
+      .channel(topic)
       .on(
         "postgres_changes",
         {
@@ -99,10 +114,15 @@ export const Leaderboard = ({ gameType = 'microbe_blaster' }: LeaderboardProps) 
         (payload) => {
           // Only refresh if the new score is for this game type
           if ((payload.new as Score).game_type === gameType) {
+            // Compare against the scores that were loaded before this insert
+            const previousScores = allTimeScoresRef.current;
+            const isHighScore =
+              previousScores.length < 10 || (payload.new as Score).score > previousScores[9].score;
+
             fetchScores();
-            
+
             // Show toast for high scores (top 10)
-            if (allTimeScores.length < 10 || (payload.new as Score).score > allTimeScores[9].score) {
+            if (isHighScore) {
               toast.success("🏆 New high score on the leaderboard!");
             }
           }
@@ -113,7 +133,7 @@ export const Leaderboard = ({ gameType = 'microbe_blaster' }: LeaderboardProps) 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, gameType]);
+  }, [gameType, fetchScores]);
 
   const getRankIcon = (rank: number) => {
     if (rank === 0) return <Trophy className="w-5 h-5 text-yellow-500" />;
@@ -154,9 +174,19 @@ export const Leaderboard = ({ gameType = 'microbe_blaster' }: LeaderboardProps) 
                   )}
                 </div>
                 <div className="flex gap-4 text-xs text-muted-foreground mt-1">
-                  <span>{gameType === 'zombie_lunch' ? '🧟' : '🦠'} {score.microbes_eliminated} eliminated</span>
-                  <span>🎯 {score.accuracy_percentage.toFixed(1)}% accuracy</span>
-                  <span>🔥 {score.combo_max}x combo</span>
+                  {gameType === 'cottontail' ? (
+                    <>
+                      <span>🐍 {score.microbes_eliminated} bagged</span>
+                      <span>📏 longest {score.accuracy_percentage.toFixed(1)} ft</span>
+                      <span>🌊 wave {score.combo_max}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>{gameType === 'zombie_lunch' ? '🧟' : '🦠'} {score.microbes_eliminated} eliminated</span>
+                      <span>🎯 {score.accuracy_percentage.toFixed(1)}% accuracy</span>
+                      <span>🔥 {score.combo_max}x combo</span>
+                    </>
+                  )}
                   <span>⏱️ {formatDuration(score.game_duration_seconds)}</span>
                 </div>
               </div>
@@ -226,17 +256,17 @@ export const Leaderboard = ({ gameType = 'microbe_blaster' }: LeaderboardProps) 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center p-4 bg-primary/5 rounded-lg">
                     <div className="text-2xl font-bold">{personalBest.microbes_eliminated}</div>
-                    <div className="text-sm text-muted-foreground">{gameType === 'zombie_lunch' ? 'Zombies' : 'Microbes'} Eliminated</div>
+                    <div className="text-sm text-muted-foreground">{gameType === 'cottontail' ? 'Pythons Bagged' : gameType === 'zombie_lunch' ? 'Zombies Eliminated' : 'Microbes Eliminated'}</div>
                   </div>
                   <div className="text-center p-4 bg-primary/5 rounded-lg">
                     <div className="text-2xl font-bold">{personalBest.combo_max}x</div>
-                    <div className="text-sm text-muted-foreground">Max Combo</div>
+                    <div className="text-sm text-muted-foreground">{gameType === 'cottontail' ? 'Wave Reached' : 'Max Combo'}</div>
                   </div>
                   <div className="text-center p-4 bg-primary/5 rounded-lg">
                     <div className="text-2xl font-bold">
-                      {personalBest.accuracy_percentage.toFixed(1)}%
+                      {personalBest.accuracy_percentage.toFixed(1)}{gameType === 'cottontail' ? ' ft' : '%'}
                     </div>
-                    <div className="text-sm text-muted-foreground">Accuracy</div>
+                    <div className="text-sm text-muted-foreground">{gameType === 'cottontail' ? 'Longest Python' : 'Accuracy'}</div>
                   </div>
                   <div className="text-center p-4 bg-primary/5 rounded-lg">
                     <div className="text-2xl font-bold">
