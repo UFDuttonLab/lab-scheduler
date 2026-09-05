@@ -3,10 +3,8 @@ import { StatsCard } from "@/components/StatsCard";
 import { BookingCard } from "@/components/BookingCard";
 import { EquipmentCard } from "@/components/EquipmentCard";
 import { Footer } from "@/components/Footer";
-import { DadJokeCard } from "@/components/DadJokeCard";
-import { LabFatePredictor } from "@/components/LabFatePredictor";
 import { Calendar, Clock, Settings, TrendingUp, Loader2 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Equipment, Booking } from "@/lib/types";
@@ -399,11 +397,12 @@ const Index = () => {
           </div>
         </div>
         
-        {/* The two fun cards share one row so the dashboard's working content sits higher. */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8 items-stretch">
-          <DadJokeCard className="h-full" />
-          <LabFatePredictor className="h-full" />
-        </div>
+        {/* The joke and the Lab Fate Predictor live on their own page now; this is the only link. */}
+        <p className="text-center text-sm text-muted-foreground mt-2 mb-6">
+          <Link to="/break" className="hover:text-foreground hover:underline underline-offset-4">
+            Need a break?
+          </Link>
+        </p>
       </main>
       <Footer />
     </div>

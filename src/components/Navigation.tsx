@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Calendar, Settings, History, Wrench, BarChart3, LogOut, FileText, HelpCircle, HandHelping, GraduationCap, ClipboardList, Inbox } from "lucide-react";
+import { Home, Calendar, Settings, History, Wrench, BarChart3, LogOut, FileText, HelpCircle, HandHelping, GraduationCap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -36,8 +36,9 @@ export const Navigation = () => {
     { path: "/help-wanted", label: "Help Wanted", icon: HandHelping },
     { path: "/activity-log", label: "Activity Log", icon: FileText },
     ...(canSeeSkills ? [{ path: "/skills", label: "Skills", icon: GraduationCap }] : []),
-    { path: "/positions", label: "Positions", icon: ClipboardList, requirePermission: 'canReviewApplications' },
-    { path: "/review", label: "Applications", icon: Inbox, requirePermission: 'canReviewApplications' },
+    // Recruiting (Positions / Applications) is parked for the 2026 fall semester at the PI's
+    // request; Help Wanted is the lab's coordination tool this term. The routes still exist
+    // (#/positions, #/review) so nothing is lost; only the menu entries are hidden.
     { path: "/settings", label: "Settings", icon: Settings, requirePermission: 'canManageUsers' },
     { path: "/help", label: "Help", icon: HelpCircle },
   ];
