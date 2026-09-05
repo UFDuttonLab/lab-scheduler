@@ -157,11 +157,11 @@ export const SkillTracker = ({
       skills: activeSkills.length,
       signoffs: live.length,
       quizPasses: quizStatus.filter((q) => q.passed).length,
-      noTrainer: bySkill.filter((r) => r.trainers.length === 0 && r.s.requiresPractical).length,
+      read: userSkills.filter((u) => !!u.readingAckAt).length,
       expiring: userSkills.filter((u) => STAGE_RANK[u.stage] >= STAGE_RANK.trained && !isLapsed(u) && expiringSoon(u.expiresAt)).length,
       lapsed: userSkills.filter((u) => isLapsed(u)).length,
     };
-  }, [profiles, activeSkills, signoffs, quizStatus, userSkills, bySkill]);
+  }, [profiles, activeSkills, signoffs, quizStatus, userSkills]);
 
   const ledger = useMemo(
     () =>
@@ -223,7 +223,7 @@ export const SkillTracker = ({
           ["Active skills", totals.skills],
           ["Sign-offs", totals.signoffs],
           ["Quiz passes", totals.quizPasses],
-          ["Skills with no trainer", totals.noTrainer],
+          ["Instructions read", totals.read],
           [`Expiring < ${EXPIRING_DAYS} d`, totals.expiring],
           ["Expired", totals.lapsed],
         ].map(([label, n]) => (
@@ -369,7 +369,7 @@ export const SkillTracker = ({
                   <th className="py-2 px-3 text-right" title="attempted / passed">Quiz</th>
                   <th className="py-2 px-3 text-right">Trained</th>
                   <th className="py-2 px-3 text-right">Competent</th>
-                  <th className="py-2 px-3">Trainers</th>
+                  <th className="py-2 px-3" title="Every grad student and postdoc can sign off any skill; this column lists people holding a per-skill trainer grant on top of that">Named trainers</th>
                   <th className="py-2 px-3 text-right">Expired</th>
                 </tr>
               </thead>
@@ -395,7 +395,7 @@ export const SkillTracker = ({
                         <td className="py-2 px-3 text-right tabular-nums">{r.competent}</td>
                         <td className="py-2 px-3">
                           {r.trainers.length === 0
-                            ? (r.s.requiresPractical ? <Badge variant="outline" className="text-destructive border-destructive">none</Badge> : <span className="text-muted-foreground">n/a</span>)
+                            ? <span className="text-muted-foreground">grad students and postdocs</span>
                             : r.trainers.map((t) => profileById.get(t.userId)).filter(Boolean).map((p) => name(p!)).join(", ")}
                         </td>
                         <td className="py-2 px-3 text-right tabular-nums">{r.lapsed > 0 ? <Badge variant="destructive">{r.lapsed}</Badge> : "0"}</td>

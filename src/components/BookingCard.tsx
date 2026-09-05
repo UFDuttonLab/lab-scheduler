@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { settleWrite } from "@/lib/dbWrite";
 import { HelperSignup } from "@/components/HelperSignup";
+import { AddToCalendar } from "@/components/AddToCalendar";
 import { toast } from "sonner";
 import { useState, useEffect, useMemo } from "react";
 import {
@@ -256,6 +257,7 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
         </div>
         <div className="flex items-center gap-2 self-start">
           <Badge className={status.className}>{status.label}</Badge>
+          {booking.status !== "cancelled" && !hasFinished && <AddToCalendar booking={booking} />}
           {canEdit && booking.status !== "cancelled" && onEdit && (
             <Button
               variant="ghost"

@@ -23,6 +23,14 @@ export const STAGE_RANK: Record<SkillStage, number> = {
   trainer: 4,
 };
 
+/**
+ * Roles that may sign off ANY skill without holding a per-skill `trainer` stage. Mirrors
+ * public.can_sign_off_skill() (migration 20260905120000). Keep the two in step.
+ */
+export const ROLE_TRAINER_ROLES = ['pi', 'manager', 'postdoc', 'grad_student'] as const;
+export const isRoleTrainer = (role: string | null | undefined): boolean =>
+  !!role && (ROLE_TRAINER_ROLES as readonly string[]).includes(role);
+
 export const STAGE_LABELS: Record<SkillStage, string> = {
   not_started: 'Not started',
   reading_done: 'Instructions read',

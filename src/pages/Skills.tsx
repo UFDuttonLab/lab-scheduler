@@ -50,6 +50,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSkillsModule } from "@/hooks/useSkillsModule";
 import { settleWrite } from "@/lib/dbWrite";
+import { isRoleTrainer } from "@/lib/skills";
 import {
   Skill,
   SkillCategory,
@@ -323,13 +324,14 @@ const Skills = () => {
   const activeSkills = useMemo(() => skills.filter((s) => s.active), [skills]);
 
   /**
-   * Which skills THIS user may sign off. Mirrors can_sign_off_skill(): pi/manager can sign
-   * anything, everyone else only the specific skills they hold an unexpired `trainer`
-   * stage on. This is a UI affordance - Postgres is the authority, and an attempt that
-   * gets past this list is rejected by the INSERT policy.
+   * Which skills THIS user may sign off. Mirrors can_sign_off_skill(): pi, manager, postdoc
+   * and grad_student can sign anything (PI's decision, 2026-09-05: every graduate student
+   * and postdoc is a trainer by role); everyone else only the specific skills they hold an
+   * unexpired `trainer` stage on. This is a UI affordance - Postgres is the authority, and
+   * an attempt that gets past this list is rejected by the INSERT policy.
    */
   const signableSkillIds = useMemo(() => {
-    if (userRole === "pi" || userRole === "manager") return new Set(activeSkills.map((s) => s.id));
+    if (isRoleTrainer(userRole)) return new Set(activeSkills.map((s) => s.id));
     return new Set(
       userSkills
         .filter(

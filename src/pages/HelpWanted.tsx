@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { HelperSignup } from "@/components/HelperSignup";
+import { AddToCalendar } from "@/components/AddToCalendar";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -210,9 +211,12 @@ const HelpWanted = () => {
                               <span className="opacity-60">({s.duration >= 60 ? `${Math.round(s.duration / 60 * 10) / 10} h` : `${s.duration} min`})</span>
                             </div>
                           </div>
-                          <Badge variant={helperCount > 0 ? "secondary" : "outline"} className="shrink-0">
-                            {helperCount} signed up
-                          </Badge>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Badge variant={helperCount > 0 ? "secondary" : "outline"}>
+                              {helperCount} signed up
+                            </Badge>
+                            <AddToCalendar booking={s} />
+                          </div>
                         </div>
                         <div className="text-sm space-y-1">
                           <div className="flex items-center gap-1.5">
