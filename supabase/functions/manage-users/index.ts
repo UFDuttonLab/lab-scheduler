@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
     // 'pi' outranks 'manager' wherever the two differ.
     const callerIsPi = roleRows.some((r: { role: string }) => r.role === 'pi')
 
-    const { action, email, fullName, role, spiritAnimal, userId } = await req.json()
+    const { action, email, fullName, role, spiritAnimal, userId, redirectTo } = await req.json()
 
     if (action === 'delete') {
       // Same lockout guard as updateRole.
@@ -208,10 +208,45 @@ Deno.serve(async (req) => {
         metadata: { email, role, action: 'create_user' }
       })
 
-      console.log('User created successfully:', newUser.user.id)
-      return new Response(JSON.stringify({ success: true, user: newUser.user, password: generatedPassword }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
+      // Email the new person a set-your-password link instead of handing the PI a random
+      // password to relay. This is Supabase Auth's own recovery email, sent over the SMTP
+      // configured in the dashboard (Resend, from marariverresearch.org). If sending fails
+      // (SMTP misconfigured, rate limit, redirect URL not allow-listed) the generated password
+      // is returned as before so the PI is never stuck.
+      //
+      // redirectTo comes from the client (its own origin + path) and must be listed under
+      // Authentication -> URL Configuration -> Redirect URLs, the same as the forgot-password
+      // flow in Auth.tsx. Only a same-site value is accepted here so the function cannot be
+      // used to mail people links to somewhere else.
+      let emailSent = false
+      let emailError: string | undefined
+      const allowedRedirect =
+        typeof redirectTo === 'string' &&
+        /^https:\/\/ufduttonlab\.github\.io\/lab-scheduler\/?$/.test(redirectTo)
+      if (allowedRedirect) {
+        const { error: mailError } = await supabaseAdmin.auth.resetPasswordForEmail(email, { redirectTo })
+        if (mailError) {
+          console.error('Set-password email failed:', mailError.message)
+          emailError = mailError.message
+        } else {
+          emailSent = true
+        }
+      } else {
+        emailError = 'redirectTo missing or not the deployed site'
+      }
+
+      console.log('User created successfully:', newUser.user.id, emailSent ? '(email sent)' : '(password returned)')
+      return new Response(
+        JSON.stringify({
+          success: true,
+          user: newUser.user,
+          emailSent,
+          emailError,
+          // Only reveal the password when the email could not be sent.
+          password: emailSent ? undefined : generatedPassword,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     if (action === 'updateRole') {

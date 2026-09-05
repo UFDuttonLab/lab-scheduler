@@ -567,7 +567,10 @@ const Settings = () => {
         email,
         fullName,
         role,
-        spiritAnimal
+        spiritAnimal,
+        // Where the set-your-password email should land them. Must be an allow-listed
+        // redirect URL in Supabase, same as the forgot-password flow.
+        redirectTo: `${window.location.origin}${window.location.pathname}`,
       }
     });
 
@@ -583,12 +586,18 @@ const Settings = () => {
     }
 
     const password = data?.password;
-    toast.success(
-      password 
-        ? `User created! Password: ${password}` 
-        : "User created successfully",
-      { duration: 10000 }
-    );
+    if (data?.emailSent) {
+      toast.success(`Account created. ${email} has been emailed a link to set their password.`, { duration: 8000 });
+    } else if (password) {
+      // Email could not be sent (see manage-users); fall back to the relayed password.
+      toast.success(
+        `Account created, but the set-password email could not be sent` +
+        `${data?.emailError ? ` (${data.emailError})` : ""}. Temporary password: ${password}`,
+        { duration: 20000 }
+      );
+    } else {
+      toast.success("User created successfully");
+    }
     
     setIsAddUserDialogOpen(false);
     fetchUsers();

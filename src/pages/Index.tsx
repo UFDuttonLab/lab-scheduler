@@ -323,8 +323,6 @@ const Index = () => {
           </p>
         </div>
 
-        <DadJokeCard className="mb-6 sm:mb-8" />
-
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
           <StatsCard
             title="Available Equipment"
@@ -401,7 +399,11 @@ const Index = () => {
           </div>
         </div>
         
-        <LabFatePredictor className="mb-6 sm:mb-8" />
+        {/* The two fun cards share one row so the dashboard's working content sits higher. */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8 items-stretch">
+          <DadJokeCard className="h-full" />
+          <LabFatePredictor className="h-full" />
+        </div>
       </main>
       <Footer />
     </div>

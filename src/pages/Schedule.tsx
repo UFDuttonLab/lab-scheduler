@@ -21,6 +21,7 @@ import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { HandHelping } from "lucide-react";
+import { LabCalendarFeed } from "@/components/LabCalendarFeed";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
@@ -1218,11 +1219,14 @@ const Schedule = () => {
       <Navigation />
       
       <main className="container mx-auto px-6 py-8">
-        <div className="mb-8 animate-fade-in">
-          <h1 className="text-4xl font-bold mb-2">Equipment Schedule</h1>
-          <p className="text-muted-foreground">
-            View the unified calendar and book equipment - First come, first served
-          </p>
+        <div className="mb-8 animate-fade-in flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div>
+            <h1 className="text-4xl font-bold mb-2">Equipment Schedule</h1>
+            <p className="text-muted-foreground">
+              View the unified calendar and book equipment - First come, first served
+            </p>
+          </div>
+          <LabCalendarFeed />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

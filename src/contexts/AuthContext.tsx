@@ -118,11 +118,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setSession(session);
         setUser(session?.user ?? null);
         
-        // Log authentication events
+        // Log authentication events.
+        //
+        // supabase-js fires SIGNED_IN not only when someone types a password but also every
+        // time it re-reads a stored session: a page reload, a token refresh, and each time a
+        // backgrounded tab is brought back to the front. The PI saw 19 "logins" in 80 minutes
+        // of using the site. `last_sign_in_at` only changes on a real sign-in, so remember
+        // which one has been logged and skip the rest.
         if (event === 'SIGNED_IN' && session?.user) {
-          setTimeout(() => {
-            logAuthActivity('login', session.user.id);
-          }, 0);
+          const marker = `authLogged:${session.user.id}:${session.user.last_sign_in_at ?? ''}`;
+          let alreadyLogged = false;
+          try {
+            alreadyLogged = localStorage.getItem(marker) === '1';
+            if (!alreadyLogged) localStorage.setItem(marker, '1');
+          } catch {
+            // Storage unavailable (private mode, etc.): fall through and log once per load.
+          }
+          if (!alreadyLogged) {
+            setTimeout(() => {
+              logAuthActivity('login', session.user.id);
+            }, 0);
+          }
         } else if (event === 'SIGNED_OUT') {
           // Use the ref to get the last authenticated user ID
           const userIdToLog = lastUserIdRef.current;
@@ -131,8 +147,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               logAuthActivity('logout', userIdToLog);
             }, 0);
           }
-          // Clear the ref after logging
+          // Clear the ref after logging, and the login markers so the next real sign-in logs.
           lastUserIdRef.current = null;
+          try {
+            Object.keys(localStorage)
+              .filter((k) => k.startsWith(`authLogged:${userIdToLog ?? ''}:`))
+              .forEach((k) => localStorage.removeItem(k));
+          } catch {
+            // ignore
+          }
         }
         
         // Check user role

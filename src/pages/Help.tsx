@@ -114,6 +114,11 @@ const Help = () => {
                 Bookings can be dated in the past. If you used equipment without booking it, log the
                 session the same way afterwards.
               </p>
+              <p className="font-medium text-foreground mt-3">Keeping bookings on your own calendar:</p>
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>On any booking card, click the calendar icon to add that one booking to Google, Outlook, or Apple Calendar</li>
+                <li>On the Schedule page, click <strong>Subscribe to lab calendar</strong> to add the whole lab schedule (all bookings, plus who has signed up to help) as a calendar that updates itself</li>
+              </ul>
               <div className="bg-muted p-3 rounded-lg mt-3">
                 <p className="text-sm"><strong>Tip:</strong> You can also click "View all" on the Dashboard's Upcoming Bookings section to access the Schedule page.</p>
               </div>

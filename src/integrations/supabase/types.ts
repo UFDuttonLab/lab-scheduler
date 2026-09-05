@@ -201,6 +201,30 @@ export type Database = {
           },
         ]
       }
+      calendar_feed_settings: {
+        Row: {
+          enabled: boolean
+          feed_key: string
+          id: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          enabled?: boolean
+          feed_key: string
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          enabled?: boolean
+          feed_key?: string
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       equipment: {
         Row: {
           created_at: string
@@ -1507,6 +1531,8 @@ export type Database = {
     }
     Functions: {
       can_grant_trainer: { Args: { _signer: string }; Returns: boolean }
+      lab_calendar_ics: { Args: { key?: string }; Returns: string }
+      rotate_calendar_feed_key: { Args: never; Returns: string }
       can_see_skills_module: { Args: { _user: string }; Returns: boolean }
       can_sign_off_skill: {
         Args: { _signer: string; _skill_id: string }
