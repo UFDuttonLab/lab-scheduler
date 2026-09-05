@@ -7,6 +7,7 @@ import { SkillDetailDialog } from "@/components/SkillDetailDialog";
 import { SkillQuizDialog } from "@/components/SkillQuizDialog";
 import { SkillQuizEditorDialog } from "@/components/SkillQuizEditorDialog";
 import { SkillEditorDialog } from "@/components/SkillEditorDialog";
+import { SkillTracker } from "@/components/SkillTracker";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -115,6 +116,9 @@ const Skills = () => {
   const [quizEditSkill, setQuizEditSkill] = useState<Skill | null>(null);
   const [quizCounts, setQuizCounts] = useState<Record<string, number>>({});
   const [myQuizStatus, setMyQuizStatus] = useState<Record<string, QuizStatus>>({});
+  // Every status row the viewer may read. RLS hands pi/manager all of them; everyone else
+  // only their own, so for a trainee this is the same data as myQuizStatus.
+  const [allQuizStatus, setAllQuizStatus] = useState<QuizStatus[]>([]);
 
   // Sign-off dialog state
   const [signOffOpen, setSignOffOpen] = useState(false);
@@ -168,17 +172,21 @@ const Skills = () => {
     }
     if (!st.error) {
       const byId: Record<string, QuizStatus> = {};
+      const all: QuizStatus[] = [];
       for (const r of st.data ?? []) {
-        if (r.user_id !== user?.id || !r.skill_id) continue;
-        byId[r.skill_id] = {
+        if (!r.user_id || !r.skill_id) continue;
+        const row: QuizStatus = {
           userId: r.user_id,
           skillId: r.skill_id,
           attempts: r.attempts ?? 0,
           bestPct: r.best_pct === null || r.best_pct === undefined ? null : Number(r.best_pct),
           passed: !!r.passed,
         };
+        all.push(row);
+        if (r.user_id === user?.id) byId[r.skill_id] = row;
       }
       setMyQuizStatus(byId);
+      setAllQuizStatus(all);
     }
   };
 
@@ -756,6 +764,7 @@ const Skills = () => {
             <TabsTrigger value="mine">My Training</TabsTrigger>
             <TabsTrigger value="catalog">Catalog</TabsTrigger>
             <TabsTrigger value="matrix">Who Can Do What</TabsTrigger>
+            {permissions.canManageUsers && <TabsTrigger value="tracker">Tracker</TabsTrigger>}
             {permissions.canManageSkillCatalog && (
               <TabsTrigger value="manage">
                 <Settings2 className="w-4 h-4 mr-1.5" />
@@ -971,6 +980,22 @@ const Skills = () => {
           </TabsContent>
 
           {/* ------------------------------------------------ Manage (catalog editor) */}
+          {/* Master tracker: pi and manager only (canManageUsers mirrors that pair). The data it
+              shows is what RLS already lets those roles read; nothing extra is fetched. */}
+          {permissions.canManageUsers && (
+            <TabsContent value="tracker">
+              <SkillTracker
+                skills={skills}
+                categories={categories}
+                profiles={profiles}
+                userSkills={userSkills}
+                signoffs={signoffs}
+                quizStatus={allQuizStatus}
+                quizCounts={quizCounts}
+              />
+            </TabsContent>
+          )}
+
           {permissions.canManageSkillCatalog && (
             <TabsContent value="manage" className="space-y-4">
               <div className="flex flex-col sm:flex-row gap-3 sm:items-center">

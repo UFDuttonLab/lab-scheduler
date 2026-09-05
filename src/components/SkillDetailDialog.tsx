@@ -30,7 +30,6 @@ import {
   STAGE_LABELS,
   STAGE_CLASSES,
   RISK_CLASSES,
-  REF_KIND_LABELS,
   renderSkillMarkdown,
   recertLabel,
   isLapsed,
@@ -170,12 +169,7 @@ export const SkillDetailDialog = ({
                                 kind === "video" ? "text-rose-600 dark:text-rose-400" : ""
                               }`}
                             />
-                            <span>
-                              {r.label}
-                              <span className="ml-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
-                                {REF_KIND_LABELS[kind]}
-                              </span>
-                            </span>
+                            <span>{r.label}</span>
                           </a>
                         </li>
                       );
