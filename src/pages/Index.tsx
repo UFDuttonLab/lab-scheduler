@@ -129,6 +129,8 @@ const Index = () => {
           gpuCount: booking.gpu_count ?? undefined,
           collaborators: (booking.collaborators as string[]) || [],
           projectSamples: enrichedProjectSamples,
+          helpersWanted: booking.helpers_wanted ?? false,
+          helpersNote: booking.helpers_note || undefined,
           source: 'booking' as const,
         };
       });

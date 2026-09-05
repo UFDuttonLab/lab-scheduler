@@ -1,0 +1,28 @@
+-- booking_helpers RLS probe: the case list and the role-switching pattern used on 2026-09-05.
+-- The full DO block was executed inline through the Lovable connector inside
+-- BEGIN ... ROLLBACK with a temp results table; rebuild it from this pattern to re-run.
+-- Expected: every row has pass = true. Last run 2026-09-05: 15/15.
+-- IDs below are live profile ids (Cameron Teal owner; Susan Newstreet / Pooja Khalil
+-- undergrads; Christopher Dutton PI). Swap them if those accounts change.
+-- Pattern for each case:
+--   PERFORM set_config('request.jwt.claims', json_build_object('sub',<uid>,'role','authenticated')::text, true);
+--   EXECUTE 'SET LOCAL ROLE authenticated';
+--   <statement>; GET DIAGNOSTICS n = ROW_COUNT;
+--   EXECUTE 'RESET ROLE';
+-- wrapped in BEGIN ... EXCEPTION WHEN OTHERS THEN EXECUTE 'RESET ROLE'; ... END;
+-- Cases run on 2026-09-05 (fixtures inserted as admin, 400 days out, rolled back):
+--  1 undergrad signs self up on flagged future booking      -> ok
+--  2 undergrad inserts another user                          -> RLS denied
+--  3 undergrad on unflagged booking                          -> RLS denied
+--  4 owner signs up on own booking                           -> RLS denied
+--  5 undergrad on cancelled flagged booking                  -> RLS denied
+--  6 undergrad on past flagged booking                       -> RLS denied
+--  7 undergrad deletes another helper's row                  -> 0 rows
+--  8 undergrad UPDATE                                        -> permission denied (no grant)
+--  9 anon SELECT                                             -> permission denied (no grant)
+-- 10 other undergrad SELECT sees both rows                   -> 2
+-- 11 owner removes a helper                                  -> 1 row
+-- 12 PI (not owner) removes a helper                         -> 1 row
+-- 13 helper withdraws self                                   -> 1 row
+-- 14 owner sets helpers_wanted/helpers_note on own booking   -> 1 row
+-- 15 helpers_note of 501 chars                               -> check constraint

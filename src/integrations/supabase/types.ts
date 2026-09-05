@@ -93,6 +93,39 @@ export type Database = {
           },
         ]
       }
+      booking_helpers: {
+        Row: {
+          booking_id: string
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          booking_id: string
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          booking_id?: string
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_helpers_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_helpers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bookings: {
         Row: {
           booking_group_id: string | null
@@ -102,6 +135,8 @@ export type Database = {
           end_time: string
           equipment_id: string
           gpu_count: number | null
+          helpers_note: string | null
+          helpers_wanted: boolean
           id: string
           project_id: string | null
           project_samples: Json | null
@@ -119,6 +154,8 @@ export type Database = {
           end_time: string
           equipment_id: string
           gpu_count?: number | null
+          helpers_note?: string | null
+          helpers_wanted?: boolean
           id?: string
           project_id?: string | null
           project_samples?: Json | null
@@ -136,6 +173,8 @@ export type Database = {
           end_time?: string
           equipment_id?: string
           gpu_count?: number | null
+          helpers_note?: string | null
+          helpers_wanted?: boolean
           id?: string
           project_id?: string | null
           project_samples?: Json | null

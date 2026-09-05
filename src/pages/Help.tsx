@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { 
   BookOpen, 
   Calendar, 
-  Clock, 
+  HandHelping, 
   Settings, 
   AlertCircle, 
   Mail,
@@ -84,7 +84,7 @@ const Help = () => {
                 <ul className="list-disc list-inside space-y-1 ml-2">
                   <li>View available equipment and their status in real-time</li>
                   <li>Schedule equipment bookings in advance</li>
-                  <li>Log walk-in usage sessions with Quick Add</li>
+                                    <li>Sign up to help on sessions listed under Help Wanted</li>
                   <li>View your booking history and usage statistics</li>
                   <li>Manage your profile and spirit animal</li>
                 </ul>
@@ -110,39 +110,40 @@ const Help = () => {
                 <li>For HiPerGator bookings, specify CPU/GPU requirements</li>
                 <li>Click "Create Booking" to confirm</li>
               </ol>
+              <p>
+                Bookings can be dated in the past. If you used equipment without booking it, log the
+                session the same way afterwards.
+              </p>
               <div className="bg-muted p-3 rounded-lg mt-3">
                 <p className="text-sm"><strong>Tip:</strong> You can also click "View all" on the Dashboard's Upcoming Bookings section to access the Schedule page.</p>
               </div>
             </AccordionContent>
           </AccordionItem>
 
-          <AccordionItem value="quick-add" className="border rounded-lg px-4 bg-card">
+          <AccordionItem value="help-wanted" className="border rounded-lg px-4 bg-card">
             <AccordionTrigger className="hover:no-underline">
               <div className="flex items-center gap-3">
-                <Clock className="w-5 h-5 text-primary" />
-                <span className="font-semibold">Quick Add Usage</span>
+                <HandHelping className="w-5 h-5 text-primary" />
+                <span className="font-semibold">Help Wanted</span>
               </div>
             </AccordionTrigger>
             <AccordionContent className="text-muted-foreground space-y-3 pt-2">
-              <p>
-                Quick Add allows you to log equipment usage for walk-in sessions or immediate use 
-                without prior booking.
-              </p>
-              <p className="font-medium text-foreground">When to use Quick Add:</p>
-              <ul className="list-disc list-inside space-y-1 ml-2">
-                <li>You're using equipment right now without a booking</li>
-                <li>You forgot to book equipment in advance</li>
-                <li>You need to log a short, unplanned session</li>
-              </ul>
-              <p className="font-medium text-foreground mt-3">How to use it:</p>
+              <p className="font-medium text-foreground">Asking for help:</p>
               <ol className="list-decimal list-inside space-y-2 ml-2">
-                <li>Go to the <strong>Quick Add</strong> page</li>
-                <li>Select the equipment you're using</li>
-                <li>Enter start and end times</li>
-                <li>Choose your project and add notes if needed</li>
-                <li>For quantification equipment, log samples processed</li>
-                <li>Click "Log Usage" to record your session</li>
+                <li>When booking (or editing) a session, tick <strong>Looking for helpers</strong></li>
+                <li>Say what helpers will be doing in the note</li>
+                <li>The session appears on the <strong>Help Wanted</strong> page until it ends</li>
               </ol>
+              <p className="font-medium text-foreground mt-3">Helping:</p>
+              <ol className="list-decimal list-inside space-y-2 ml-2">
+                <li>Open the <strong>Help Wanted</strong> page (check it Monday morning)</li>
+                <li>Click <strong>Sign up to help</strong> on any session you can make</li>
+                <li>Click <strong>Withdraw</strong> if your plans change</li>
+              </ol>
+              <p>
+                The person who made the booking can remove a helper, and sees who has signed up on
+                their booking card and on the Schedule.
+              </p>
             </AccordionContent>
           </AccordionItem>
 

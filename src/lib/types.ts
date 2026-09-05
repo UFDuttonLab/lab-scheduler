@@ -64,6 +64,9 @@ export interface Booking {
   gpuCount?: number; // For HiPerGator bookings
   samplesProcessed?: number; // Number of samples (1-300)
   collaborators?: string[]; // Array of user IDs
+  /** Owner is asking lab members to sign up and help (rows live in booking_helpers). */
+  helpersWanted?: boolean;
+  helpersNote?: string;
   userId?: string; // Owner of the booking
   source?: 'booking' | 'usage_record'; // Source table for proper deletion
   projectSamples?: ProjectSample[];

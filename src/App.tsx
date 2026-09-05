@@ -14,8 +14,8 @@ import Equipment from "./pages/Equipment";
 import Analytics from "./pages/Analytics";
 import History from "./pages/History";
 import Settings from "./pages/Settings";
-import QuickAdd from "./pages/QuickAdd";
 import ActivityLog from "./pages/ActivityLog";
+import HelpWanted from "./pages/HelpWanted";
 import Auth from "./pages/Auth";
 import ResetPasswordVerify from "./pages/ResetPasswordVerify";
 import Help from "./pages/Help";
@@ -76,7 +76,7 @@ const App = () => (
             <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
             <Route path="/schedule" element={<ProtectedRoute><Schedule /></ProtectedRoute>} />
             <Route path="/equipment" element={<ProtectedRoute requirePermission="canManageEquipment"><Equipment /></ProtectedRoute>} />
-            <Route path="/quick-add" element={<ProtectedRoute><QuickAdd /></ProtectedRoute>} />
+            <Route path="/help-wanted" element={<ProtectedRoute><HelpWanted /></ProtectedRoute>} />
             <Route path="/analytics" element={<ProtectedRoute requirePermission="canViewAnalytics"><Analytics /></ProtectedRoute>} />
             <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
             <Route path="/activity-log" element={<ProtectedRoute><ActivityLog /></ProtectedRoute>} />

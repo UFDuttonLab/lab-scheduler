@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Calendar, Settings, History, Wrench, BarChart3, LogOut, Clock, FileText, HelpCircle, GraduationCap, ClipboardList, Inbox } from "lucide-react";
+import { Home, Calendar, Settings, History, Wrench, BarChart3, LogOut, FileText, HelpCircle, HandHelping, GraduationCap, ClipboardList, Inbox } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -30,10 +30,10 @@ export const Navigation = () => {
   const navItems = [
     { path: "/", label: "Dashboard", icon: Home },
     { path: "/schedule", label: "Schedule", icon: Calendar },
-    { path: "/quick-add", label: "Quick Add", icon: Clock },
     { path: "/equipment", label: "Equipment", icon: Wrench, requirePermission: 'canManageEquipment' },
     { path: "/analytics", label: "Analytics", icon: BarChart3, requirePermission: 'canViewAnalytics' },
     { path: "/history", label: "History", icon: History },
+    { path: "/help-wanted", label: "Help Wanted", icon: HandHelping },
     { path: "/activity-log", label: "Activity Log", icon: FileText },
     ...(canSeeSkills ? [{ path: "/skills", label: "Skills", icon: GraduationCap }] : []),
     { path: "/positions", label: "Positions", icon: ClipboardList, requirePermission: 'canReviewApplications' },

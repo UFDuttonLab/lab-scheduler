@@ -139,6 +139,8 @@ const History = () => {
         samplesProcessed: booking.samples_processed || undefined,
         collaborators: booking.collaborators || undefined,
         userId: booking.user_id,
+        helpersWanted: booking.helpers_wanted ?? false,
+        helpersNote: booking.helpers_note || undefined,
         source: 'booking' as const,
         projectSamples: enrichedProjectSamples,
         bookingGroupId: booking.booking_group_id || undefined
@@ -176,7 +178,7 @@ const History = () => {
         // the sample count - silently wiped the note the student had written.
         purpose: usage.notes || undefined,
         // Derive from the clock rather than assuming a usage record is always in the past.
-        // Nothing enforces that: QuickAdd's guard can be bypassed by editing, and Schedule and
+        // Nothing enforces that: the old Quick Add guard could be bypassed by editing, and Schedule and
         // Index both compute this from the times - History alone hard-coded 'completed', so a
         // record covering right now was mislabelled and landed in the wrong History tab.
         status: (new Date(usage.end_time) < new Date()

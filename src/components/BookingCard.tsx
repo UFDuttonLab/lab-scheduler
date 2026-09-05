@@ -7,6 +7,7 @@ import { format, isSameDay } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { settleWrite } from "@/lib/dbWrite";
+import { HelperSignup } from "@/components/HelperSignup";
 import { toast } from "sonner";
 import { useState, useEffect, useMemo } from "react";
 import {
@@ -398,6 +399,8 @@ export const BookingCard = ({ booking, onDelete, onEdit }: BookingCardProps) => 
             </div>
           </div>
         )}
+
+        {booking.helpersWanted && <HelperSignup booking={booking} />}
       </div>
 
       {booking.purpose && (

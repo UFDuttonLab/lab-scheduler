@@ -19,6 +19,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { HandHelping } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
@@ -129,6 +131,8 @@ const Schedule = () => {
   const [gpuCount, setGpuCount] = useState<number>(0);
   const [collaboratorSearch, setCollaboratorSearch] = useState<string>("");
   const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
+  const [helpersWanted, setHelpersWanted] = useState(false);
+  const [helpersNote, setHelpersNote] = useState<string>("");
   const [availableUsers, setAvailableUsers] = useState<UserProfile[]>([]);
   // fetchUsers() is async, so availableUsers is [] on the first renders. Without this flag the
   // collaborator chips would label every real collaborator a former lab member for a moment
@@ -358,6 +362,8 @@ const Schedule = () => {
           gpuCount: booking.gpu_count || undefined,
           samplesProcessed: booking.samples_processed || undefined,
           collaborators: (booking.collaborators as string[]) || [],
+          helpersWanted: booking.helpers_wanted ?? false,
+          helpersNote: booking.helpers_note || undefined,
           userId: booking.user_id,
           source: 'booking',
           projectSamples: enrichedProjectSamples,
@@ -457,6 +463,8 @@ const Schedule = () => {
     setGpuCount(0);
     setSelectedCollaborators([]);
     setCollaboratorSearch("");
+    setHelpersWanted(false);
+    setHelpersNote("");
   };
 
   /**
@@ -542,11 +550,9 @@ const Schedule = () => {
     startTime.setHours(hours, minutes, 0, 0);
     const endTime = addMinutes(startTime, parseInt(duration));
     
-    // Allow past start times if the booking extends into the future
-    if (endTime < new Date()) {
-      toast.error("Cannot create a booking that ends in the past. Use Quick Add for past usage.");
-      return;
-    }
+    // Bookings may be created in the past: this is how already-completed sessions are logged
+    // now that the separate Quick Add page is gone. The conflict trigger still applies, so a
+    // past booking that overlaps another booking on the same instrument is rejected.
 
     // Validate duration (max 7 days)
     const durationMinutes = parseInt(duration);
@@ -653,6 +659,8 @@ const Schedule = () => {
           samples_processed: total_samples,
           project_samples: project_samples,
           collaborators: selectedCollaborators,
+          helpers_wanted: helpersWanted,
+          helpers_note: helpersWanted && helpersNote.trim() ? helpersNote.trim() : null,
           booking_group_id: selectedEquipment.length > 1 ? bookingGroupId : null
         };
 
@@ -747,15 +755,14 @@ const Schedule = () => {
 
       // A usage record logs work that ALREADY happened, so it must not be pushed into the
       // future: the conflict trigger only guards `bookings`, so a future-dated usage record
-      // appears on the schedule as a reservation that reserves nothing. QuickAdd enforces this
-      // on create; the edit path did not.
+      // appears on the schedule as a reservation that reserves nothing. The (now removed)
+      // Quick Add page enforced this on create; the edit path did not.
       //
-      // There is deliberately NO matching "must not end in the past" guard for bookings here,
-      // even though the CREATE path has one. Creating a booking in the past is meaningless, but
-      // EDITING one in the past is the normal case: every one of this lab's 160 bookings has
-      // already finished, and correcting a sample count or a project on last week's session is
-      // exactly what the Edit dialog is for. An earlier version of this guard rejected any
-      // booking ending before now, which made all 160 of them unsavable.
+      // There is deliberately NO "must not end in the past" guard for bookings, on create or
+      // edit. Past bookings are how completed sessions get logged, and correcting a sample
+      // count or a project on last week's session is exactly what the Edit dialog is for. An
+      // earlier version of this guard rejected any booking ending before now, which made all
+      // 160 of the lab's bookings unsavable.
       if (editingUsageRecord && endTime.getTime() > Date.now()) {
         toast.error("A usage record logs work that already happened, so it cannot end in the future. Use Schedule to book upcoming time.");
         setLoading(false);
@@ -823,6 +830,12 @@ const Schedule = () => {
         project_samples: project_samples,
         collaborators: selectedCollaborators
       };
+
+      // usage_records has no helper columns; writing them there would fail the whole update.
+      if (selectedBooking.source !== 'usage_record') {
+        bookingData.helpers_wanted = helpersWanted;
+        bookingData.helpers_note = helpersWanted && helpersNote.trim() ? helpersNote.trim() : null;
+      }
 
       if (isHiPerGator) {
         bookingData.cpu_count = cpuCount;
@@ -996,8 +1009,8 @@ const Schedule = () => {
    * booking whose start or duration is not on the standard grid opened the Edit dialog with
    * BLANK Start Time and Duration fields - the real values were still in state and were
    * saved correctly, but the form looked broken and there was no way to see what the current
-   * duration was. QuickAdd offers 15-minute sessions and can log any minute value, so this is
-   * routine for usage records. Injecting the live value keeps every existing booking editable
+   * duration was. The former Quick Add page offered 15-minute sessions and could log any minute
+   * value, so this is routine for existing usage records. Injecting the live value keeps every existing booking editable
    * and honestly displayed without widening what can be picked for a NEW booking.
    */
   const timeSlots = useMemo(() => {
@@ -1307,6 +1320,8 @@ const Schedule = () => {
                               setCpuCount(booking.cpuCount || 1);
                               setGpuCount(booking.gpuCount || 0);
                               setSelectedCollaborators(booking.collaborators || []);
+                              setHelpersWanted(booking.helpersWanted ?? false);
+                              setHelpersNote(booking.helpersNote || "");
                             }}
                           />
                         ))}
@@ -1507,6 +1522,12 @@ const Schedule = () => {
                                                      <div className="flex items-center gap-1">
                                                        <Users className="w-3 h-3" />
                                                        <span>+{booking.collaborators.length}</span>
+                                                     </div>
+                                                   )}
+                                                   {booking.helpersWanted && (
+                                                     <div className="flex items-center gap-1" title="Looking for helpers">
+                                                       <HandHelping className="w-3 h-3" />
+                                                       <span>helpers</span>
                                                      </div>
                                                    )}
                                                 </div>
@@ -1772,6 +1793,33 @@ const Schedule = () => {
                 </div>
               </div>
 
+              {/* Helpers wanted */}
+              <div className="space-y-2 rounded-lg border p-3">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="helpers-wanted"
+                    checked={helpersWanted}
+                    onCheckedChange={(v) => setHelpersWanted(v === true)}
+                  />
+                  <Label htmlFor="helpers-wanted" className="flex items-center gap-2 cursor-pointer">
+                    <HandHelping className="w-4 h-4" />
+                    Looking for helpers
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Lists this session on the Help Wanted page so lab members can sign up to assist.
+                </p>
+                {helpersWanted && (
+                  <Textarea
+                    placeholder="What will helpers be doing? e.g. plate setup and labelling, 2 people ideal"
+                    rows={2}
+                    maxLength={500}
+                    value={helpersNote}
+                    onChange={(e) => setHelpersNote(e.target.value)}
+                  />
+                )}
+              </div>
+
               {/* HiPerGator Resource Allocation */}
               {isHiPerGator && (
                 <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
@@ -1906,6 +1954,8 @@ const Schedule = () => {
                   setCpuCount(booking.cpuCount || 1);
                   setGpuCount(booking.gpuCount || 0);
                   setSelectedCollaborators(booking.collaborators || []);
+                  setHelpersWanted(booking.helpersWanted ?? false);
+                  setHelpersNote(booking.helpersNote || "");
                 }}
               />
             )}
@@ -2097,6 +2147,35 @@ const Schedule = () => {
                   )}
                 </div>
               </div>
+
+              {/* Helpers wanted (bookings only; usage_records has no such columns) */}
+              {selectedBooking?.source !== 'usage_record' && (
+              <div className="space-y-2 rounded-lg border p-3">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="helpers-wanted-edit"
+                    checked={helpersWanted}
+                    onCheckedChange={(v) => setHelpersWanted(v === true)}
+                  />
+                  <Label htmlFor="helpers-wanted-edit" className="flex items-center gap-2 cursor-pointer">
+                    <HandHelping className="w-4 h-4" />
+                    Looking for helpers
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Lists this session on the Help Wanted page so lab members can sign up to assist.
+                </p>
+                {helpersWanted && (
+                  <Textarea
+                    placeholder="What will helpers be doing? e.g. plate setup and labelling, 2 people ideal"
+                    rows={2}
+                    maxLength={500}
+                    value={helpersNote}
+                    onChange={(e) => setHelpersNote(e.target.value)}
+                  />
+                )}
+              </div>
+              )}
 
               {isHiPerGator && (
                 <div className="space-y-4 p-4 border rounded-lg bg-muted/50">

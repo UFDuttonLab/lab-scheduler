@@ -20,8 +20,8 @@ import { Booking } from "@/lib/types";
  * This list must cover EVERY column the group-wide UPDATE writes, or the drift warning lies by
  * omission: an earlier version compared only times and sample count, so a group whose rows
  * differed in purpose, project or collaborators was silently unified with no warning at all.
- * The write sets start_time, end_time, project_id, project_samples, samples_processed, purpose
- * and collaborators - so all of them are compared here.
+ * The write sets start_time, end_time, project_id, project_samples, samples_processed, purpose,
+ * collaborators, helpers_wanted and helpers_note - so all of them are compared here.
  */
 export interface GroupSharedFields {
   startMs: number;
@@ -33,6 +33,8 @@ export interface GroupSharedFields {
   collaborators: string;
   /** Canonical form of the per-project sample breakdown. */
   projectSamples: string;
+  helpersWanted: boolean;
+  helpersNote: string;
 }
 
 export const sharedFieldsOf = (b: Booking): GroupSharedFields => ({
@@ -50,6 +52,8 @@ export const sharedFieldsOf = (b: Booking): GroupSharedFields => ({
         .sort()
         .join(",")
     : "",
+  helpersWanted: b.helpersWanted ?? false,
+  helpersNote: b.helpersNote ?? "",
 });
 
 /**
@@ -93,6 +97,7 @@ export const describeGroupDrift = (
     if (theirs.projectId !== mine.projectId) differing.add("project");
     if (theirs.collaborators !== mine.collaborators) differing.add("collaborators");
     if (theirs.projectSamples !== mine.projectSamples) differing.add("sample breakdown");
+    if (theirs.helpersWanted !== mine.helpersWanted || theirs.helpersNote !== mine.helpersNote) differing.add("helpers wanted");
   }
 
   if (differing.size === 0) return null;

@@ -829,7 +829,7 @@ const Analytics = () => {
                               )}
                               {eq.quickAddCount > 0 && (
                                 <Badge variant="secondary" className="text-xs">
-                                  Quick Add: {eq.quickAddCount}
+                                  Usage records: {eq.quickAddCount}
                                 </Badge>
                               )}
                             </div>
