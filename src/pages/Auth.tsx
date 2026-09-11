@@ -12,11 +12,12 @@ import { Footer } from "@/components/Footer";
 /**
  * Whether to offer self-service password reset on the sign-in form.
  *
- * Flip to true once Supabase Auth has working custom SMTP. Everything behind it - the
- * resetPasswordForEmail call, the /reset-password route and the PKCE recovery handling in
- * App.tsx - is already in place and does not need touching.
+ * On since 2026-09-11. It was off because outbound mail was believed to be unconfigured;
+ * auth mail in fact goes out through Lovable Cloud, and a recovery link was delivered and
+ * clicked end to end that day. Set to false again only if mail delivery actually stops,
+ * since a visible button that sends nothing is worse than no button.
  */
-const SHOW_FORGOT_PASSWORD = false;
+const SHOW_FORGOT_PASSWORD = true;
 
 const Auth = () => {
   const [email, setEmail] = useState("");
@@ -138,15 +139,6 @@ const Auth = () => {
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Signing in..." : "Sign In"}
                 </Button>
-                {/* Self-service password reset is HIDDEN, not deleted.
-                    It depends on outbound email, and there is currently no mail provider
-                    configured, so the link would send people into a flow that silently never
-                    delivers. Meanwhile a PI can set a new password directly from Lab
-                    Configuration -> Users (the key icon), which needs no email at all.
-                    To restore this: set SHOW_FORGOT_PASSWORD back to true once custom SMTP is
-                    configured in Supabase (Authentication -> Emails -> SMTP Settings). The
-                    handler, the route and ResetPasswordVerify are all still wired up and use
-                    Supabase's native recovery flow, so nothing else needs changing. */}
                 {SHOW_FORGOT_PASSWORD && (
                   <Button
                     type="button"
@@ -158,7 +150,7 @@ const Auth = () => {
                   </Button>
                 )}
                 <p className="text-center text-xs text-muted-foreground">
-                  Forgotten your password? Ask Chris to set a new one for you.
+                  Still stuck? Ask Chris to set a new password for you.
                 </p>
               </form>
             ) : (
