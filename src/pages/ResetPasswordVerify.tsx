@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { takeAuthLinkError, takeRecoverySession } from "@/lib/authCallback";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,25 +16,90 @@ const ResetPasswordVerify = () => {
   const [verifying, setVerifying] = useState(true);
   const [tokenValid, setTokenValid] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
 
-  // A recovery session, not a hand-rolled token.
-  //
-  // Supabase's PKCE recovery link lands on the site root as "?code=...". supabase-js
-  // exchanges it during client init and fires PASSWORD_RECOVERY, which AuthContext routes
-  // here. By the time this page renders there is a real, short-lived session on the account,
-  // and updateUser() is authorised by it. The old ?token= query param, the
+  // A recovery session, not a hand-rolled token. The old ?token= query param, the
   // password_reset_tokens table and the update-password function are all gone.
+  //
+  // Four ways a person can arrive here, tried in order:
+  //   1. A dead link. GoTrue puts the reason in the fragment ("#error=access_denied&
+  //      error_code=otp_expired&..."); consumeAuthCallback() in main.tsx lifts it out.
+  //   2. "#/reset-password?token_hash=...&type=recovery" - the email-template form of the
+  //      link. The token is spent by the verifyOtp call below and nowhere else, so a mail
+  //      scanner that pre-fetches the URL no longer burns it before the student clicks.
+  //   3. Implicit-flow tokens in the fragment ("#access_token=...&refresh_token=..."), which
+  //      is what a server-generated resetPasswordForEmail link produces. consumeAuthCallback()
+  //      lifts those out too and they are exchanged for a session here.
+  //   4. PKCE ("?code=..."), used by the browser-side Forgot Password flow in Auth.tsx.
+  //      supabase-js exchanges it during client init and fires PASSWORD_RECOVERY, which the
+  //      RecoveryRedirect in App.tsx routes here, so the session already exists.
+  // In every case updateUser() below is authorised by a real, short-lived session.
   useEffect(() => {
     let cancelled = false;
+    let subscription: { unsubscribe: () => void } | null = null;
+
+    const fail = (description: string) => {
+      if (cancelled) return;
+      setVerifying(false);
+      toast({ title: "Invalid or expired link", description, variant: "destructive" });
+      setTimeout(() => navigate("/auth"), 3000);
+    };
+
+    const succeed = () => {
+      if (cancelled) return;
+      setTokenValid(true);
+      setVerifying(false);
+    };
+
+    const deadLink =
+      'This link is no longer valid. Ask the lab PI to send a new one, or use "Forgot password" on the sign-in page.';
 
     const check = async () => {
+      // 1. Dead link.
+      const linkError = takeAuthLinkError();
+      if (linkError) {
+        fail(`${linkError}. ${deadLink}`);
+        return;
+      }
+
+      // 2. token_hash link.
+      const tokenHash = searchParams.get("token_hash");
+      if (tokenHash) {
+        const { error } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: "recovery",
+        });
+        if (cancelled) return;
+        // Drop the token from the URL either way, so a refresh cannot retry a spent one.
+        navigate("/reset-password", { replace: true });
+        if (error) {
+          fail(deadLink);
+          return;
+        }
+        succeed();
+        return;
+      }
+
+      // 3. Implicit-flow tokens.
+      const recovery = takeRecoverySession();
+      if (recovery) {
+        const { error } = await supabase.auth.setSession(recovery);
+        if (cancelled) return;
+        if (error) {
+          fail(deadLink);
+          return;
+        }
+        succeed();
+        return;
+      }
+
+      // 4. PKCE, or a session that is already open.
       const { data } = await supabase.auth.getSession();
       if (cancelled) return;
 
       if (data.session) {
-        setTokenValid(true);
-        setVerifying(false);
+        succeed();
         return;
       }
 
@@ -41,9 +107,9 @@ const ResetPasswordVerify = () => {
       // declaring the link dead.
       const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
         if (cancelled || !session) return;
-        setTokenValid(true);
-        setVerifying(false);
+        succeed();
       });
+      subscription = sub.subscription;
 
       setTimeout(() => {
         if (cancelled) return;
@@ -51,19 +117,20 @@ const ResetPasswordVerify = () => {
           if (!prev) return prev;
           toast({
             title: "Invalid or expired link",
-            description: "This password reset link is no longer valid. Please request a new one.",
+            description: deadLink,
             variant: "destructive",
           });
-          setTimeout(() => navigate("/auth"), 2000);
+          setTimeout(() => navigate("/auth"), 3000);
           return false;
         });
       }, 4000);
-
-      return () => sub.subscription.unsubscribe();
     };
 
     check();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      subscription?.unsubscribe();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -156,8 +223,8 @@ const ResetPasswordVerify = () => {
       <div className="flex-1 flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Reset Your Password</CardTitle>
-            <CardDescription>Enter your new password below</CardDescription>
+            <CardTitle className="text-2xl">Set Your Password</CardTitle>
+            <CardDescription>Enter a new password for your account</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleResetPassword} className="space-y-4">
