@@ -126,7 +126,14 @@ const ResetPasswordVerify = () => {
       }, 4000);
     };
 
-    check();
+    // setSession() and verifyOtp() REJECT rather than resolve on some inputs (a malformed
+    // token, a transport failure). Without this catch the page sits on "Verifying reset
+    // link..." forever instead of telling the person the link is dead.
+    check().catch((error) => {
+      console.error("Could not verify reset link:", error);
+      fail(deadLink);
+    });
+
     return () => {
       cancelled = true;
       subscription?.unsubscribe();
