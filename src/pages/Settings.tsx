@@ -194,6 +194,11 @@ const Settings = () => {
   // to a manager who would only get a 403.
   const canResetPasswords = userRole === "pi";
   const [resetResult, setResetResult] = useState<{ name: string; password: string } | null>(null);
+  // Shown after creating an account. Holds the set-password link and the fallback password;
+  // a toast is the wrong container for either, because closing it loses the only copy.
+  const [inviteResult, setInviteResult] = useState<
+    { name: string; email: string; url?: string; password: string; linkError?: string; emailSent?: boolean } | null
+  >(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [versions, setVersions] = useState<AppVersion[]>([]);
@@ -568,9 +573,8 @@ const Settings = () => {
         fullName,
         role,
         spiritAnimal,
-        // Where the set-your-password email should land them. Must be an allow-listed
-        // redirect URL in Supabase, same as the forgot-password flow.
-        redirectTo: `${window.location.origin}${window.location.pathname}`,
+        // No redirectTo: manage-users no longer sends mail on create. It returns a
+        // set-password link for the PI to pass on, which is what defeats link scanners.
       }
     });
 
@@ -585,19 +589,16 @@ const Settings = () => {
       return;
     }
 
-    const password = data?.password;
-    if (data?.emailSent) {
-      toast.success(`Account created. ${email} has been emailed a link to set their password.`, { duration: 8000 });
-    } else if (password) {
-      // Email could not be sent (see manage-users); fall back to the relayed password.
-      toast.success(
-        `Account created, but the set-password email could not be sent` +
-        `${data?.emailError ? ` (${data.emailError})` : ""}. Temporary password: ${password}`,
-        { duration: 20000 }
-      );
-    } else {
-      toast.success("User created successfully");
-    }
+    // Nothing was emailed. Put the link in front of the PI in a dialog they have to dismiss,
+    // never a toast - a toast that times out takes the only copy of the link with it.
+    setInviteResult({
+      name: fullName || email,
+      email,
+      url: data?.setPasswordUrl,
+      password: data?.password,
+      linkError: data?.linkError,
+      emailSent: data?.emailSent,
+    });
     
     setIsAddUserDialogOpen(false);
     fetchUsers();
@@ -1452,6 +1453,76 @@ const Settings = () => {
       </main>
       {/* Shown once, in a dialog rather than a toast: this string is the only copy of the
           new password, and a toast that scrolls away leaves an account nobody can get into. */}
+      <Dialog open={!!inviteResult} onOpenChange={(open) => { if (!open) setInviteResult(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Account created for {inviteResult?.name}</DialogTitle>
+            <DialogDescription>
+              {inviteResult?.emailSent
+                ? `A set-password email has gone to ${inviteResult?.email} from noreply@marariverresearch.org. The same link is below in case it does not arrive.`
+                : `No email was sent. Pass the link below to ${inviteResult?.email} yourself.`}
+              {" "}It expires in one hour and can only be used once.
+            </DialogDescription>
+          </DialogHeader>
+
+          {inviteResult?.url ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Set-password link</p>
+              <div className="rounded-md border bg-muted p-3 font-mono text-xs break-all select-all">
+                {inviteResult.url}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+              No link could be generated{inviteResult?.linkError ? ` (${inviteResult.linkError})` : ""}.
+              Use the password below instead.
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Fallback password</p>
+            <div className="rounded-md border bg-muted p-3 font-mono text-sm break-all select-all">
+              {inviteResult?.password}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Use this if the link expires before they get to it. It does not expire. They can
+              change it from Settings once signed in.
+            </p>
+          </div>
+
+          <DialogFooter>
+            {inviteResult?.url && (
+              <Button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(inviteResult.url ?? "");
+                    toast.success("Link copied");
+                  } catch {
+                    toast.error("Could not copy automatically - select the text and copy it.");
+                  }
+                }}
+              >
+                Copy link
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(inviteResult?.password ?? "");
+                  toast.success("Password copied");
+                } catch {
+                  toast.error("Could not copy automatically - select the text and copy it.");
+                }
+              }}
+            >
+              Copy password
+            </Button>
+            <Button variant="outline" onClick={() => setInviteResult(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!resetResult} onOpenChange={(open) => { if (!open) setResetResult(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>

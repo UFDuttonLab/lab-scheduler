@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Footer } from "@/components/Footer";
+import { TurnstileWidget } from "@/components/recruiting/TurnstileWidget";
 
 /**
  * Whether to offer self-service password reset on the sign-in form.
@@ -24,6 +25,10 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  // send-recovery-email is a public endpoint (no JWT - the user has forgotten their
+  // password), so Turnstile is its bot gate. The widget renders nothing and reports no
+  // token when VITE_TURNSTILE_SITE_KEY is unset; the function then refuses, fail-closed.
+  const [turnstileToken, setTurnstileToken] = useState("");
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -69,30 +74,40 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      // Supabase Auth sends this itself, over whatever SMTP is configured in the dashboard.
-      // It replaces a hand-rolled flow that generated its own token, stored it in a
-      // password_reset_tokens table and mailed it via Resend. Supabase generates, expires and
-      // single-uses the token, so none of that is ours to get wrong any more.
+      // NOT supabase.auth.resetPasswordForEmail(). That makes Supabase mail a link resolving to
+      // ${SUPABASE_URL}/auth/v1/verify?token=..., and FETCHING that URL is what redeems the
+      // one-time token. Corporate mail filters pre-fetch every link in a message, so the token
+      // was being spent seconds after sending and people got "invalid or expired link". Measured
+      // on this system: a scanner login 26 s after send, for Opentrons and for UF alike.
       //
-      // redirectTo must be listed under Authentication -> URL Configuration -> Redirect URLs
-      // or Supabase refuses to honour it and sends the user to the Site URL instead.
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}${window.location.pathname}`,
+      // send-recovery-email mints the token without sending, mails a link to THIS app carrying
+      // token_hash, and sends it from noreply@marariverresearch.org via Resend. The token is then
+      // spent only by the verifyOtp call on the reset page, which a scanner will not run.
+      const { data, error } = await supabase.functions.invoke('send-recovery-email', {
+        body: { email, turnstileToken },
       });
 
-      if (error) {
-        // Deliberately generic: this page is reachable while logged out, so echoing the
-        // server's message could confirm whether an account exists.
-        console.error("Password reset request failed:", error.message);
-        throw new Error("Could not send the reset email right now. Please try again shortly.");
+      if (error || data?.error) {
+        // A non-2xx from an edge function gives data:null and error:FunctionsHttpError, so the
+        // real message is in the body. Show the server's text here - the function is written to
+        // return only messages that are safe for a logged-out stranger to see, and it answers
+        // identically for known and unknown addresses.
+        const message = error
+          ? await readFunctionError(error, "Could not send the reset email right now. Please try again shortly.")
+          : String(data.error);
+        console.error("Password reset request failed:", error ?? data?.error);
+        throw new Error(message);
       }
 
       toast({
         title: "Check your email",
-        description: "If an account exists with that email, we've sent you a password reset link.",
+        description:
+          "If an account exists with that email, we've sent a link to set a new password. " +
+          "It expires in an hour.",
       });
       setShowForgotPassword(false);
       setEmail("");
+      setTurnstileToken("");
     } catch (error: any) {
       toast({
         title: "Error",
@@ -166,6 +181,7 @@ const Auth = () => {
                     required
                   />
                 </div>
+                <TurnstileWidget onToken={setTurnstileToken} />
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Sending..." : "Send Reset Link"}
                 </Button>

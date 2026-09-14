@@ -28,3 +28,17 @@ project_id = "ypaobygipbnkvnismhyy"
 # privileged endpoint becomes a public one. This function was written to be public.
 [functions.submit-application]
 verify_jwt = false
+
+# send-recovery-email is the self-service "Forgot password" endpoint and MUST be public: someone
+# who has forgotten their password has no JWT to present, so the gateway cannot demand one.
+#
+# Everything the gateway would otherwise establish is re-established inside the function, and it
+# is written to be public: Cloudflare Turnstile (FAIL CLOSED - no TURNSTILE_SECRET means every
+# request is refused), a per-address cooldown in public.recovery_email_requests, a hardcoded
+# destination URL and message body so no caller-supplied content reaches the mail, and identical
+# answers for known and unknown addresses so it cannot be used to enumerate accounts.
+#
+# This is the same reasoning as submit-application above, and the same warning applies in reverse:
+# do not add a verify_jwt = false line to a function that assumes an authenticated caller.
+[functions.send-recovery-email]
+verify_jwt = false

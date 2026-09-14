@@ -3,6 +3,7 @@ import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { Clock, TrendingUp, Users, FolderKanban, Loader2, Wrench, Beaker } from "lucide-react";
@@ -14,6 +15,10 @@ import { getProjectColor } from "@/lib/projectColors";
 const Analytics = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
+  // A failed load used to toast and then render every empty state on the page, so a broken
+  // query was indistinguishable from an idle lab - and the toast disappeared, taking the only
+  // evidence with it. The page now refuses to draw zeroes it does not believe.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [bookings, setBookings] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -26,6 +31,7 @@ const Analytics = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
 
       // Fetch all data separately
       const [bookingsRes, usageRecordsRes, equipmentRes, projectsRes, profilesRes] = await Promise.all([
@@ -118,28 +124,59 @@ const Analytics = () => {
         return { ...record, end_time: new Date(now).toISOString() };
       });
 
-      // A multi-equipment session writes the FULL sample payload onto EVERY equipment row
-      // (see QuickAdd/Schedule), so a 100-sample run on 3 machines used to report 300
-      // samples. booking_group_id links those rows. Keep every row's time - all three
-      // machines really were occupied - but attribute the samples to only the first row
-      // of each group.
-      // Sort first so "the first row of each group" is stable. Without this the query has
-      // no ORDER BY, so which machine got credited with a multi-equipment session's samples
-      // changed between page loads.
+      // Each record's sample count, resolved ONCE so every aggregate below reads the same
+      // number. The old code branched "use projectSamples if present, else samples_processed"
+      // separately in five places and two of them disagreed: the Equipment table summed only the
+      // legacy samples_processed column while the project and student charts preferred
+      // project_samples. Those fields do not always match - on the live data they differ on 2 of
+      // 173 rows, 7300 against 7346 - so one session was reported with two different sample
+      // counts on two tabs of the same page.
+      //
+      // An EMPTY project_samples array must fall through to samples_processed. Array.isArray([])
+      // is true, so the old checks treated [] as authoritative and silently reported 0 samples
+      // for a record shaped that way. No live row is shaped that way today; this is the guard
+      // that stops it becoming silent data loss when one is.
+      const resolveSamples = (r: { projectSamples?: unknown; samples_processed?: unknown }): number => {
+        const ps = r.projectSamples;
+        if (Array.isArray(ps) && ps.length > 0) {
+          return ps.reduce((sum: number, p: any) => sum + (Number(p?.samples) || 0), 0);
+        }
+        return Number(r.samples_processed) || 0;
+      };
+
+      // Sort first so attribution is stable. Without an explicit order the query has none, so
+      // which machine got credited with a multi-equipment session's samples changed between
+      // page loads.
       const ordered = [...realUsage].sort((a, b) => {
         const t = new Date(a.start_time).getTime() - new Date(b.start_time).getTime();
         return t !== 0 ? t : String(a.id).localeCompare(String(b.id));
       });
 
-      const seenSampleGroups = new Set<string>();
+      // A multi-equipment session writes the SAME sample payload onto EVERY equipment row, so a
+      // 100-sample run booked on 3 machines reported 300 samples. booking_group_id links those
+      // rows. Keep every row's TIME - all three machines really were occupied - but count the
+      // samples once.
+      //
+      // Deduplicate on (group, payload), NOT on group alone. The previous version credited the
+      // group to whichever row sorted first and zeroed the rest, assuming every row in a group
+      // carries an identical payload. On the live data 2 of 20 groups violate that: one holds
+      // 1 and 24, another 2 and 4, and both have rows with DIFFERENT start times, so they are
+      // separate pieces of work rather than one simultaneous run. First-row-wins threw the other
+      // row's samples away. Keying on the payload collapses true duplicates and keeps genuinely
+      // different counts. Lab-wide this moves the total from 12,117 to 12,145.
+      const seenGroupPayloads = new Set<string>();
       const deduped = ordered.map(record => {
+        const withSamples = { ...record, effectiveSamples: resolveSamples(record) };
         const groupId = record.booking_group_id;
-        if (!groupId) return record;
-        if (seenSampleGroups.has(groupId)) {
-          return { ...record, samples_processed: 0, projectSamples: undefined };
+        if (!groupId) return withSamples;
+
+        const payloadKey = `${groupId}|${JSON.stringify(record.projectSamples ?? null)}|${record.samples_processed ?? 0}`;
+        if (seenGroupPayloads.has(payloadKey)) {
+          // Already counted on a sibling row of the same session. Zero the samples, keep the time.
+          return { ...withSamples, effectiveSamples: 0, samples_processed: 0, projectSamples: undefined };
         }
-        seenSampleGroups.add(groupId);
-        return record;
+        seenGroupPayloads.add(payloadKey);
+        return withSamples;
       });
 
       setBookings(deduped);
@@ -147,6 +184,7 @@ const Analytics = () => {
       setUsers(profilesRes.data || []);
       setEquipment(equipmentRes.data || []);
     } catch (error: any) {
+      setLoadError(error?.message ?? "Unknown error");
       toast({
         title: "Error fetching analytics data",
         description: error.message,
@@ -157,225 +195,208 @@ const Analytics = () => {
     }
   };
 
-  // Calculate time per project
+  // ---------------------------------------------------------------------------------------
+  // Derived data. One rule throughout: a figure that describes the LAB is per session, and a
+  // figure that describes a MACHINE is per machine-row. A multi-equipment booking is several
+  // rows sharing a booking_group_id, and conflating the two is what made this page disagree
+  // with itself.
+  // ---------------------------------------------------------------------------------------
+
+  /** One logical session. Rows of a multi-equipment booking share a booking_group_id. */
+  const sessionKey = (r: any): string => String(r.booking_group_id ?? r.id);
+
+  /**
+   * Sessions, not rows. On the live data 263 rows are only 238 sessions, so anything counting
+   * rows overstated by 25: "Total Bookings" reported a three-machine extraction run as three
+   * bookings, and "Avg Booking Duration" divided total machine-minutes by that inflated count.
+   *
+   * A session's duration is max(end) - min(start) across its rows, NOT the sum of them. Summing
+   * would report a 2-hour run on three machines as a 6-hour booking.
+   */
+  const sessions = (() => {
+    const byKey = new Map<string, { start: number; end: number }>();
+    bookings.forEach(r => {
+      const k = sessionKey(r);
+      const start = new Date(r.start_time).getTime();
+      const end = new Date(r.end_time).getTime();
+      const cur = byKey.get(k);
+      if (!cur) byKey.set(k, { start, end });
+      else byKey.set(k, { start: Math.min(cur.start, start), end: Math.max(cur.end, end) });
+    });
+    return [...byKey.values()];
+  })();
+
+  const totalSessions = sessions.length;
+  const sessionMinutes = sessions.reduce((sum, s) => sum + (s.end - s.start) / 60000, 0);
+  const avgSessionMinutes = totalSessions > 0 ? Math.round(sessionMinutes / totalSessions) : 0;
+
+  /** Machine-minutes: every row counted, because every machine really was occupied. */
+  const machineMinutes = (records: any[]) =>
+    records.reduce((sum, r) => {
+      const start = new Date(r.start_time).getTime();
+      const end = new Date(r.end_time).getTime();
+      return sum + (end - start) / 60000;
+    }, 0);
+
+  const countSessions = (records: any[]) => new Set(records.map(sessionKey)).size;
+
+  /** Round to 0.1 h. Always from exact minutes - never from an already-rounded value. */
+  const toHours = (minutes: number) => Math.round((minutes / 60) * 10) / 10;
+
+  // Time per project
   const projectTimeData = projects.map(project => {
     const projectBookings = bookings.filter(b => b.project_id === project.id);
-    const totalMinutes = projectBookings.reduce((sum, booking) => {
-      const start = new Date(booking.start_time);
-      const end = new Date(booking.end_time);
-      return sum + (end.getTime() - start.getTime()) / (1000 * 60);
-    }, 0);
-    const totalHours = Math.round(totalMinutes / 60 * 10) / 10;
-    
+    const totalMinutes = machineMinutes(projectBookings);
     return {
       id: project.id,
       name: project.name,
-      hours: totalHours,
-      bookings: projectBookings.length,
-      // keep exact minutes so "avg duration" isn't derived from an already-rounded value
+      hours: toHours(totalMinutes),
+      sessions: countSessions(projectBookings),
       totalMinutes,
       color: getProjectColor(project.id, projects),
     };
   }).filter(p => p.hours > 0);
 
-  // Calculate time per student (including collaborators)
+  // Time per student (owner or named collaborator)
+  const userRecordsFor = (userId: string) =>
+    bookings.filter(b =>
+      b.user_id === userId ||
+      (Array.isArray(b.collaborators) && b.collaborators.includes(userId))
+    );
+
   const studentTimeData = users.map(user => {
-    // Find bookings/usage records where user is either primary user or collaborator
-    const userRecords = bookings.filter(b => {
-      const isOwner = b.user_id === user.id;
-      const isCollaborator = Array.isArray(b.collaborators) && b.collaborators.includes(user.id);
-      return isOwner || isCollaborator;
-    });
-    
-    const totalMinutes = userRecords.reduce((sum, record) => {
-      const start = new Date(record.start_time);
-      const end = new Date(record.end_time);
-      return sum + (end.getTime() - start.getTime()) / (1000 * 60);
-    }, 0);
-    const totalHours = Math.round(totalMinutes / 60 * 10) / 10;
-    
+    const userRecords = userRecordsFor(user.id);
+    const totalMinutes = machineMinutes(userRecords);
     return {
       id: user.id,
       name: user.full_name || user.email,
-      hours: totalHours,
-      bookings: userRecords.length,
+      hours: toHours(totalMinutes),
+      sessions: countSessions(userRecords),
       totalMinutes,
     };
   }).filter(s => s.hours > 0).sort((a, b) => b.hours - a.hours);
 
-  // Calculate samples per project
+  // Samples per project. project_samples splits one session across projects; a record without
+  // that breakdown is attributed whole to its project_id.
   const projectSampleData = projects.map(project => {
     let totalSamples = 0;
-    const projectRecords: any[] = [];
-    
+    let sessionIds = new Set<string>();
+
     bookings.forEach(record => {
-      // Check new format first
-      if (record.projectSamples && Array.isArray(record.projectSamples)) {
-        const projectEntry = record.projectSamples.find((ps: any) => ps.projectId === project.id);
-        if (projectEntry) {
-          totalSamples += projectEntry.samples;
-          projectRecords.push(record);
+      const ps = record.projectSamples;
+      if (Array.isArray(ps) && ps.length > 0) {
+        const entry = ps.find((p: any) => p.projectId === project.id);
+        if (entry && (Number(entry.samples) || 0) > 0) {
+          totalSamples += Number(entry.samples) || 0;
+          sessionIds.add(sessionKey(record));
         }
-      } else if (record.project_id === project.id) {
-        // Fallback to old format
-        totalSamples += (record.samples_processed || 0);
-        projectRecords.push(record);
+        return;
+      }
+      if (record.project_id === project.id && record.effectiveSamples > 0) {
+        totalSamples += record.effectiveSamples;
+        sessionIds.add(sessionKey(record));
       }
     });
-    
+
     return {
       id: project.id,
       name: project.name,
       samples: totalSamples,
-      sessions: projectRecords.length,
+      sessions: sessionIds.size,
       color: getProjectColor(project.id, projects),
     };
   }).filter(p => p.samples > 0);
 
-  // Calculate samples per student (including collaborators)
+  // Samples per student
   const studentSampleData = users.map(user => {
-    const userRecords = bookings.filter(b => {
-      const isOwner = b.user_id === user.id;
-      const isCollaborator = Array.isArray(b.collaborators) && 
-                            b.collaborators.includes(user.id);
-      return isOwner || isCollaborator;
-    });
-    
-    const totalSamples = userRecords.reduce((sum, record) => {
-      // Use new format if available
-      if (record.projectSamples && Array.isArray(record.projectSamples)) {
-        return sum + record.projectSamples.reduce((pSum: number, ps: any) => pSum + ps.samples, 0);
-      }
-      // Fallback to old format
-      return sum + (record.samples_processed || 0);
-    }, 0);
-    
+    const userRecords = userRecordsFor(user.id);
+    const totalSamples = userRecords.reduce((sum, r) => sum + r.effectiveSamples, 0);
     return {
       id: user.id,
       name: user.full_name || user.email,
       samples: totalSamples,
-      sessions: userRecords.length,
+      sessions: countSessions(userRecords.filter(r => r.effectiveSamples > 0)),
     };
   }).filter(s => s.samples > 0).sort((a, b) => b.samples - a.samples);
 
   // Summary stats
-  const totalBookings = bookings.length;
-  const totalMinutes = bookings.reduce((sum, booking) => {
-    const start = new Date(booking.start_time);
-    const end = new Date(booking.end_time);
-    return sum + (end.getTime() - start.getTime()) / (1000 * 60);
-  }, 0);
-  const totalHours = Math.round(totalMinutes / 60 * 10) / 10;
-  // Count unique students including collaborators
+  const totalMinutes = machineMinutes(bookings);
+  const totalHours = toHours(totalMinutes);
+
   const uniqueStudents = new Set<string>();
   bookings.forEach(b => {
     uniqueStudents.add(b.user_id);
     if (Array.isArray(b.collaborators)) {
-      b.collaborators.forEach(collaboratorId => uniqueStudents.add(collaboratorId));
+      b.collaborators.forEach((collaboratorId: string) => uniqueStudents.add(collaboratorId));
     }
   });
   const activeStudents = uniqueStudents.size;
-  const avgBookingDuration = totalBookings > 0 ? Math.round(totalMinutes / totalBookings) : 0;
-  
-  // Calculate total samples
-  const totalSamples = bookings.reduce((sum, record) => {
-    // Use new format if available
-    if (record.projectSamples && Array.isArray(record.projectSamples)) {
-      return sum + record.projectSamples.reduce((pSum: number, ps: any) => pSum + ps.samples, 0);
-    }
-    // Fallback to old format
-    return sum + (record.samples_processed || 0);
-  }, 0);
-  const sessionsWithSamples = bookings.filter(r => {
-    // Check if record has samples in new format
-    if (r.projectSamples && Array.isArray(r.projectSamples) && r.projectSamples.length > 0) {
-      return r.projectSamples.some((ps: any) => ps.samples > 0);
-    }
-    // Fallback to old format
-    return r.samples_processed && r.samples_processed > 0;
-  }).length;
 
-  // Calculate equipment analytics
+  const totalSamples = bookings.reduce((sum, r) => sum + r.effectiveSamples, 0);
+  const sessionsWithSamples = countSessions(bookings.filter(r => r.effectiveSamples > 0));
+
+  // Equipment. Per machine, so rows are the right unit here - a machine booked as part of a
+  // three-machine session was genuinely occupied for that whole window.
+  //
+  // Machines with ZERO hours are kept. Filtering them out hid exactly the thing a utilization
+  // page exists to show: which instruments nobody is using. The charts still drop them (a bar
+  // of height 0 is noise); the table lists them.
   const equipmentTimeData = equipment.map(eq => {
     const equipmentRecords = bookings.filter(b => b.equipment_id === eq.id);
-    const totalMinutes = equipmentRecords.reduce((sum, record) => {
-      const start = new Date(record.start_time);
-      const end = new Date(record.end_time);
-      return sum + (end.getTime() - start.getTime()) / (1000 * 60);
-    }, 0);
-    const totalHours = Math.round(totalMinutes / 60 * 10) / 10;
-    
-    // Calculate CPU/GPU stats for HiPerGator
+    const totalMinutes = machineMinutes(equipmentRecords);
+
+    // usage_records has no cpu_count/gpu_count column, so those rows added 0 to the numerator
+    // while still inflating the denominator - two real 16-CPU bookings plus eight usage records
+    // reported 3.2 CPUs/session instead of 16. Average over the sessions that can carry an
+    // allocation at all.
     const cpuSessions = equipmentRecords.filter(r => r.cpu_count !== null && r.cpu_count !== undefined);
     const gpuSessions = equipmentRecords.filter(r => r.gpu_count !== null && r.gpu_count !== undefined);
     const cpuUsage = cpuSessions.reduce((sum, r) => sum + (r.cpu_count || 0), 0);
     const gpuUsage = gpuSessions.reduce((sum, r) => sum + (r.gpu_count || 0), 0);
-    const samplesProcessed = equipmentRecords.reduce((sum, r) => sum + (r.samples_processed || 0), 0);
-    
-    // Calculate source breakdown
-    const scheduledCount = equipmentRecords.filter(r => r.source === 'booking').length;
-    const quickAddCount = equipmentRecords.filter(r => r.source === 'usage_record').length;
-    
+
     return {
       id: eq.id,
       name: eq.name,
-      type: eq.type,
-      location: eq.location,
+      type: eq.type ?? "Unspecified",
+      location: eq.location ?? "Unspecified",
+      status: eq.status,
       icon: eq.icon,
-      hours: totalHours,
+      hours: toHours(totalMinutes),
+      totalMinutes,
       bookings: equipmentRecords.length,
-      scheduledCount,
-      quickAddCount,
-      cpuUsage: cpuUsage,
-      gpuUsage: gpuUsage,
-      // Average over the sessions that can actually carry a CPU/GPU allocation.
-      // usage_records has no cpu_count/gpu_count column, so those rows added 0 to the
-      // numerator while still inflating the denominator - two real 16-CPU bookings plus
-      // eight Quick Adds reported 3.2 CPUs/session instead of 16.
-      avgCpuPerSession: cpuSessions.length > 0 ? Math.round(cpuUsage / cpuSessions.length * 10) / 10 : 0,
-      avgGpuPerSession: gpuSessions.length > 0 ? Math.round(gpuUsage / gpuSessions.length * 10) / 10 : 0,
-      samplesProcessed: samplesProcessed,
+      scheduledCount: equipmentRecords.filter(r => r.source === 'booking').length,
+      quickAddCount: equipmentRecords.filter(r => r.source === 'usage_record').length,
+      cpuUsage,
+      gpuUsage,
+      avgCpuPerSession: cpuSessions.length > 0 ? Math.round((cpuUsage / cpuSessions.length) * 10) / 10 : 0,
+      avgGpuPerSession: gpuSessions.length > 0 ? Math.round((gpuUsage / gpuSessions.length) * 10) / 10 : 0,
+      // Same resolved figure every other sample number on this page uses. This used to read the
+      // legacy samples_processed column alone and disagreed with the project and student charts.
+      samplesProcessed: equipmentRecords.reduce((sum, r) => sum + r.effectiveSamples, 0),
     };
-  }).filter(e => e.hours > 0).sort((a, b) => b.hours - a.hours);
+  }).sort((a, b) => b.hours - a.hours);
 
-  // Equipment type distribution
-  const typeDistribution = equipment.reduce((acc, eq) => {
-    const records = bookings.filter(b => b.equipment_id === eq.id);
-    const minutes = records.reduce((sum, record) => {
-      const start = new Date(record.start_time);
-      const end = new Date(record.end_time);
-      return sum + (end.getTime() - start.getTime()) / (1000 * 60);
-    }, 0);
-    // Accumulate raw minutes and round once at the end. Summing values that were already
-    // rounded to 0.1 produced float artifacts like "PCR: 0.30000000000000004h" in labels.
-    acc[eq.type] = (acc[eq.type] || 0) + minutes;
-    return acc;
-  }, {} as Record<string, number>);
+  /** Machines with recorded use. Charts and rankings only. */
+  const equipmentChartData = equipmentTimeData.filter(e => e.hours > 0);
+  const idleEquipment = equipmentTimeData.filter(e => e.hours === 0);
 
-  const typeDistributionData = Object.entries(typeDistribution)
-    .map(([type, minutes]) => ({ name: type, hours: Math.round((minutes as number) / 60 * 10) / 10 }))
-    .filter(d => d.hours > 0)
-    .sort((a, b) => b.hours - a.hours);
+  // Accumulate raw minutes and round once at the end. Summing values already rounded to 0.1
+  // produced float artifacts like "PCR: 0.30000000000000004h" in chart labels.
+  const sumBy = (key: 'type' | 'location') =>
+    Object.entries(
+      equipmentTimeData.reduce((acc, eq) => {
+        acc[eq[key]] = (acc[eq[key]] || 0) + eq.totalMinutes;
+        return acc;
+      }, {} as Record<string, number>)
+    )
+      .map(([name, minutes]) => ({ name, hours: toHours(minutes as number) }))
+      .filter(d => d.hours > 0)
+      .sort((a, b) => b.hours - a.hours);
 
-  // Location distribution
-  const locationDistribution = equipment.reduce((acc, eq) => {
-    const records = bookings.filter(b => b.equipment_id === eq.id);
-    const minutes = records.reduce((sum, record) => {
-      const start = new Date(record.start_time);
-      const end = new Date(record.end_time);
-      return sum + (end.getTime() - start.getTime()) / (1000 * 60);
-    }, 0);
-    // Accumulate raw minutes and round once at the end, same reason as typeDistribution.
-    acc[eq.location] = (acc[eq.location] || 0) + minutes;
-    return acc;
-  }, {} as Record<string, number>);
+  const typeDistributionData = sumBy('type');
+  const locationDistributionData = sumBy('location');
 
-  const locationDistributionData = Object.entries(locationDistribution)
-    .map(([location, minutes]) => ({ name: location, hours: Math.round((minutes as number) / 60 * 10) / 10 }))
-    .filter(d => d.hours > 0)
-    .sort((a, b) => b.hours - a.hours);
-
-  const mostUsedEquipment = equipmentTimeData.length > 0 ? equipmentTimeData[0].name : "N/A";
+  const mostUsedEquipment = equipmentChartData.length > 0 ? equipmentChartData[0].name : "N/A";
   const totalEquipmentPieces = equipment.length;
 
   if (loading) {
@@ -385,6 +406,26 @@ const Analytics = () => {
         <div className="container mx-auto p-6 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navigation />
+        <main className="container mx-auto px-6 py-8">
+          <Card className="p-6 border-destructive">
+            <h1 className="text-2xl font-bold mb-2">Analytics could not be loaded</h1>
+            <p className="text-muted-foreground mb-4">
+              No figures are shown because at least one query failed. Any numbers drawn now would
+              be wrong rather than empty.
+            </p>
+            <p className="font-mono text-sm break-all mb-6">{loadError}</p>
+            <Button onClick={fetchData}>Try again</Button>
+          </Card>
+        </main>
+        <Footer />
       </div>
     );
   }
@@ -403,10 +444,10 @@ const Analytics = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
           <StatsCard
-            title="Total Bookings"
-            value={totalBookings}
+            title="Sessions"
+            value={totalSessions}
             icon={FolderKanban}
-            trend={`${totalHours} hours total`}
+            trend={`${totalHours} machine-hours`}
           />
           <StatsCard
             title="Total Usage Time"
@@ -418,7 +459,7 @@ const Analytics = () => {
             title="Total Samples"
             value={totalSamples}
             icon={Beaker}
-            trend={`${sessionsWithSamples} sessions`}
+            trend={`across ${sessionsWithSamples} sessions`}
           />
           <StatsCard
             title="Active Students"
@@ -427,10 +468,10 @@ const Analytics = () => {
             trend={`${users.length} registered`}
           />
           <StatsCard
-            title="Avg Booking Duration"
-            value={`${avgBookingDuration}m`}
+            title="Avg Session Length"
+            value={`${avgSessionMinutes}m`}
             icon={TrendingUp}
-            trend="Per session"
+            trend="Per session, wall clock"
           />
         </div>
 
@@ -525,7 +566,7 @@ const Analytics = () => {
                       <tr className="border-b">
                         <th className="text-left py-3 px-4">Project</th>
                         <th className="text-right py-3 px-4">Total Hours</th>
-                        <th className="text-right py-3 px-4">Bookings</th>
+                        <th className="text-right py-3 px-4">Sessions</th>
                         <th className="text-right py-3 px-4">Total Samples</th>
                         <th className="text-right py-3 px-4">Avg Duration</th>
                       </tr>
@@ -546,13 +587,13 @@ const Analytics = () => {
                                 </div>
                               </td>
                               <td className="text-right py-3 px-4">{project.hours}h</td>
-                              <td className="text-right py-3 px-4">{project.bookings}</td>
+                              <td className="text-right py-3 px-4">{project.sessions}</td>
                               <td className="text-right py-3 px-4">
                                 {sampleData ? sampleData.samples : 0}
                               </td>
                               <td className="text-right py-3 px-4">
-                                {project.bookings > 0 
-                                  ? Math.round(project.totalMinutes / project.bookings) + 'm'
+                                {project.sessions > 0 
+                                  ? Math.round(project.totalMinutes / project.sessions) + 'm'
                                   : '-'
                                 }
                               </td>
@@ -606,7 +647,7 @@ const Analytics = () => {
                           </div>
                           <div>
                             <p className="font-medium">{student.name}</p>
-                            <p className="text-sm text-muted-foreground">{student.bookings} bookings</p>
+                            <p className="text-sm text-muted-foreground">{student.sessions} sessions</p>
                           </div>
                         </div>
                         <div className="text-right">
@@ -649,7 +690,7 @@ const Analytics = () => {
                       <tr className="border-b">
                         <th className="text-left py-3 px-4">Student</th>
                         <th className="text-right py-3 px-4">Total Hours</th>
-                        <th className="text-right py-3 px-4">Bookings</th>
+                        <th className="text-right py-3 px-4">Sessions</th>
                         <th className="text-right py-3 px-4">Total Samples</th>
                         <th className="text-right py-3 px-4">Avg Duration</th>
                       </tr>
@@ -662,13 +703,13 @@ const Analytics = () => {
                             <tr key={student.id} className="border-b hover:bg-muted/50">
                               <td className="py-3 px-4">{student.name}</td>
                               <td className="text-right py-3 px-4">{student.hours}h</td>
-                              <td className="text-right py-3 px-4">{student.bookings}</td>
+                              <td className="text-right py-3 px-4">{student.sessions}</td>
                               <td className="text-right py-3 px-4">
                                 {sampleData ? sampleData.samples : 0}
                               </td>
                               <td className="text-right py-3 px-4">
-                                {student.bookings > 0 
-                                  ? Math.round(student.totalMinutes / student.bookings) + 'm'
+                                {student.sessions > 0 
+                                  ? Math.round(student.totalMinutes / student.sessions) + 'm'
                                   : '-'
                                 }
                               </td>
@@ -693,9 +734,9 @@ const Analytics = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               <Card className="p-6">
                 <h3 className="font-semibold text-xl mb-4">Usage Hours by Equipment</h3>
-                {equipmentTimeData.length > 0 ? (
+                {equipmentChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={equipmentTimeData}>
+                    <BarChart data={equipmentChartData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
                       <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} />
@@ -759,9 +800,9 @@ const Analytics = () => {
 
               <Card className="p-6">
                 <h3 className="font-semibold text-xl mb-4">Top Equipment</h3>
-                {equipmentTimeData.length > 0 ? (
+                {equipmentChartData.length > 0 ? (
                   <div className="space-y-3">
-                    {equipmentTimeData.slice(0, 5).map((eq, index) => (
+                    {equipmentChartData.slice(0, 5).map((eq, index) => (
                       <div key={eq.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-accent text-accent-foreground flex items-center justify-center font-bold">
@@ -838,7 +879,7 @@ const Analytics = () => {
                           <td className="text-right py-3 px-4">{eq.bookings}</td>
                           <td className="text-right py-3 px-4">
                             {eq.bookings > 0 
-                              ? Math.round(eq.hours / eq.bookings * 60) + 'm'
+                              ? Math.round(eq.totalMinutes / eq.bookings) + 'm'
                               : '-'
                             }
                           </td>
@@ -857,6 +898,12 @@ const Analytics = () => {
                   </tbody>
                 </table>
               </div>
+              {idleEquipment.length > 0 && (
+                <p className="text-sm text-muted-foreground mt-4">
+                  {idleEquipment.length} of {totalEquipmentPieces} instruments have no recorded
+                  use in this data: {idleEquipment.map(e => e.name).join(', ')}.
+                </p>
+              )}
             </Card>
 
             {equipmentTimeData.some(eq => eq.type === 'HiPerGator' && (eq.cpuUsage > 0 || eq.gpuUsage > 0)) && (

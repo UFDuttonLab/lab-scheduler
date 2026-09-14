@@ -75,7 +75,10 @@ Deno.serve(async (req) => {
     // 'pi' outranks 'manager' wherever the two differ.
     const callerIsPi = roleRows.some((r: { role: string }) => r.role === 'pi')
 
-    const { action, email, fullName, role, spiritAnimal, userId, redirectTo } = await req.json()
+    // `redirectTo` used to be read here and passed to resetPasswordForEmail. The create path
+    // no longer sends mail (see the comment in the 'create' branch), so it is deliberately not
+    // destructured - an unused allow-list check reads as a live guard when it is not one.
+    const { action, email, fullName, role, spiritAnimal, userId } = await req.json()
 
     if (action === 'delete') {
       // Same lockout guard as updateRole.
@@ -208,42 +211,72 @@ Deno.serve(async (req) => {
         metadata: { email, role, action: 'create_user' }
       })
 
-      // Email the new person a set-your-password link instead of handing the PI a random
-      // password to relay. This is Supabase Auth's own recovery email, sent over the SMTP
-      // configured in the dashboard (Resend, from marariverresearch.org). If sending fails
-      // (SMTP misconfigured, rate limit, redirect URL not allow-listed) the generated password
-      // is returned as before so the PI is never stuck.
+      // Hand the PI a set-password LINK rather than mailing one.
       //
-      // redirectTo comes from the client (its own origin + path) and must be listed under
-      // Authentication -> URL Configuration -> Redirect URLs, the same as the forgot-password
-      // flow in Auth.tsx. Only a same-site value is accepted here so the function cannot be
-      // used to mail people links to somewhere else.
+      // Until 2026-09-14 this called resetPasswordForEmail() and let Supabase mail the link.
+      // That link pointed at GoTrue's /auth/v1/verify endpoint, which spends its one-time
+      // token on whoever fetches it FIRST - and corporate mail filters pre-fetch every link in
+      // a message. shea.granger@opentrons.com was created 19:56:49, the mail went out
+      // 19:56:50, and auth.audit_log_entries recorded a `login` at 19:57:16: the scanner, 26 s
+      // later, with no password ever set. By the time he clicked, the token was spent and he
+      // got "invalid or expired link". sydneytu@ufl.edu shows the same 26 s signature, so UF's
+      // Microsoft 365 filter does it too - this is not one vendor's quirk.
+      //
+      // generateLink() mints the recovery token WITHOUT sending anything and returns its
+      // hashed_token. We build an app URL from that and return it to the PI to pass on by
+      // whatever channel they choose. The token is then redeemed only by the
+      // verifyOtp({ token_hash, type: 'recovery' }) call in src/pages/ResetPasswordVerify.tsx,
+      // which no scanner runs because fetching a URL does not execute the page's JavaScript.
+      //
+      // The `#` must NOT be percent-encoded: the app uses HashRouter and this has to arrive as
+      // a fragment.
+      //
+      // WARNING: generateLink() and resetPasswordForEmail() each mint a recovery token, and the
+      // later call invalidates the earlier one. Do not reintroduce a resetPasswordForEmail call
+      // alongside this, or whichever link the PI sends will already be dead on arrival.
+      const resendKey = Deno.env.get('RESEND_API_KEY')
+      let setPasswordUrl_: string | undefined
+      let linkError: string | undefined
       let emailSent = false
-      let emailError: string | undefined
-      const allowedRedirect =
-        typeof redirectTo === 'string' &&
-        /^https:\/\/ufduttonlab\.github\.io\/lab-scheduler\/?$/.test(redirectTo)
-      if (allowedRedirect) {
-        const { error: mailError } = await supabaseAdmin.auth.resetPasswordForEmail(email, { redirectTo })
-        if (mailError) {
-          console.error('Set-password email failed:', mailError.message)
-          emailError = mailError.message
+
+      const { data: linkData, error: genError } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'recovery',
+        email,
+      })
+      if (genError) {
+        console.error('Set-password link generation failed:', genError.message)
+        linkError = genError.message
+      } else if (linkData?.properties?.hashed_token) {
+        setPasswordUrl_ = setPasswordUrl(linkData.properties.hashed_token)
+        // Mail it from the lab's own domain via Resend. If that fails the PI still has the link
+        // and the password in the response, so account creation is never blocked by mail.
+        if (resendKey) {
+          const sendError = await sendRecoveryEmail(resendKey, email, setPasswordUrl_)
+          if (sendError) console.error('Set-password email failed:', sendError)
+          else emailSent = true
         } else {
-          emailSent = true
+          console.error('RESEND_API_KEY is not set; returning the link without mailing it.')
         }
       } else {
-        emailError = 'redirectTo missing or not the deployed site'
+        linkError = 'Supabase returned no hashed_token'
       }
 
-      console.log('User created successfully:', newUser.user.id, emailSent ? '(email sent)' : '(password returned)')
+      console.log(
+        'User created successfully:',
+        newUser.user.id,
+        emailSent ? '(emailed)' : setPasswordUrl_ ? '(link generated, not emailed)' : '(link failed)'
+      )
       return new Response(
         JSON.stringify({
           success: true,
           user: newUser.user,
+          setPasswordUrl: setPasswordUrl_,
           emailSent,
-          emailError,
-          // Only reveal the password when the email could not be sent.
-          password: emailSent ? undefined : generatedPassword,
+          linkError,
+          // Always returned now, not only on failure. The link is the primary route, but a
+          // recovery token expires (1 hour by default) while this password does not, so the
+          // PI keeps a second way in without another round trip.
+          password: generatedPassword,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
