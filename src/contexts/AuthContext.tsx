@@ -55,13 +55,45 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (profileError) throw profileError;
 
-      // Either no visible profile row, or the row says inactive: the account is not
-      // usable, so sign out rather than leaving a half-working session open.
-      if (!profile || !profile.active) {
+      // A row that SAYS inactive is a deactivated account: sign out rather than leave a
+      // half-working session open.
+      if (profile && profile.active === false) {
         toast.error("Your account has been deactivated. Contact the lab PI if this is unexpected.");
         // Log against the id we were handed. checkUserRole is captured by the mount-only
         // effect from the first render, so the signOut it closes over always sees
         // user === null and its own pre-signout logging silently does nothing.
+        await logAuthActivity('logout', userId);
+        await signOut();
+        return;
+      }
+
+      // NO row is a different thing entirely, and treating it as deactivation was a bug.
+      //
+      // Both profiles SELECT policies are granted to `authenticated`. With no session the
+      // request arrives as `anon`, matches neither, and PostgREST returns zero rows with NO
+      // error - so maybeSingle() hands back {data: null, error: null}, indistinguishable from
+      // a genuinely missing profile.
+      //
+      // That is exactly what happens on a password change. updateUser() fires an auth event,
+      // the listener schedules checkUserRole() on a setTimeout(0), and ResetPasswordVerify
+      // then signs out on purpose. The deferred query lands after the sign-out, reads zero
+      // rows, and told the user their account had been deactivated. Observed 2026-09-14 on
+      // cldutton+tester@gmail.com: user_updated_password at 20:48:43.343, logout at
+      // 20:48:43.504, an account that was active the whole time and never banned.
+      //
+      // So: re-check the session before drawing any conclusion from an empty result.
+      if (!profile) {
+        const { data: { session: current } } = await supabase.auth.getSession();
+        if (!current) {
+          // Signed out from under us - expected after a password change. Say nothing.
+          setUserRole(null);
+          setPermissions(getRolePermissions(null));
+          setIsManager(false);
+          return;
+        }
+        // Session is live and the profile still is not readable. That IS a broken account,
+        // but it is not deactivation, and saying so sends the user to the wrong question.
+        toast.error("Your profile could not be loaded. Contact the lab PI.");
         await logAuthActivity('logout', userId);
         await signOut();
         return;
