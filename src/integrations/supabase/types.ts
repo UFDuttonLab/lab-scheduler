@@ -430,6 +430,21 @@ export type Database = {
         }
         Relationships: []
       }
+      recovery_email_requests: {
+        Row: {
+          email: string
+          last_sent_at: string
+        }
+        Insert: {
+          email: string
+          last_sent_at?: string
+        }
+        Update: {
+          email?: string
+          last_sent_at?: string
+        }
+        Relationships: []
+      }
       recruiting_application_positions: {
         Row: {
           application_id: string
