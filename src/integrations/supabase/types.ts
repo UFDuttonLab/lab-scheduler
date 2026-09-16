@@ -97,16 +97,19 @@ export type Database = {
         Row: {
           booking_id: string
           created_at: string
+          note: string | null
           user_id: string
         }
         Insert: {
           booking_id: string
           created_at?: string
+          note?: string | null
           user_id: string
         }
         Update: {
           booking_id?: string
           created_at?: string
+          note?: string | null
           user_id?: string
         }
         Relationships: [

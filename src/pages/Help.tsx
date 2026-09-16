@@ -143,6 +143,7 @@ const Help = () => {
               <ol className="list-decimal list-inside space-y-2 ml-2">
                 <li>Open the <strong>Help Wanted</strong> page (check it Monday morning)</li>
                 <li>Click <strong>Sign up to help</strong> on any session you can make</li>
+                <li>If you can only come for part of it, type that in the note box before signing up (for example, &quot;leaving at 11:00&quot;). Use <strong>Edit my note</strong> to change it later</li>
                 <li>Click <strong>Withdraw</strong> if your plans change</li>
               </ol>
               <p>

@@ -1,0 +1,29 @@
+-- booking_helpers.note probe (20260916100000). Run 2026-09-16 through the Lovable connector: 18/18.
+-- Pattern: one DO block; fixtures inserted as admin (bookings 400/401 days out and 400 days
+-- ago, owner Cameron Teal); each case is a BEGIN ... EXCEPTION sub-block that does
+--   PERFORM set_config('request.jwt.claims', json_build_object('sub',<uid>,'role','authenticated')::text, true);
+--   EXECUTE 'SET LOCAL ROLE authenticated';  <statement>;  GET DIAGNOSTICS n = ROW_COUNT;  EXECUTE 'RESET ROLE';
+-- and appends the result to a text buffer. The block ends with RAISE EXCEPTION carrying the
+-- buffer, which returns the results and rolls back every fixture.
+-- IDs: Cameron Teal fee3764b-d5a4-4cf4-8e9d-25ca161df181 (owner, grad_student);
+--      Susan Newstreet 38736ce9-3c28-49c2-bc3f-e91bdf2c3f50, Pooja Khalil 2cdd226f-5f71-42fb-881f-370042057bcb (undergrads);
+--      Christopher Dutton 2307b8ac-dc39-4514-9459-8f35f21c54bc (pi).
+-- Cases and results on 2026-09-16:
+--  1 undergrad inserts own row with a note                   -> 1
+--  2 undergrad inserts own row without a note                -> 1
+--  3 undergrad edits own note                                -> 1, new text stored
+--  4 undergrad edits another helper's note                   -> 0 rows
+--  5 booking owner edits a helper's note                     -> 0 rows
+--  6 PI edits a helper's note                                -> 0 rows
+--  7 undergrad UPDATE user_id                                -> 42501 (no column grant)
+--  8 undergrad UPDATE created_at                             -> 42501
+--  9 undergrad UPDATE booking_id                             -> 42501
+-- 10 UPDATE note to 201 chars                                -> 23514
+-- 11 INSERT with 201-char note                               -> 23514
+-- 12 UPDATE note to 200 chars                                -> 1
+-- 13 edit own note on a finished booking                     -> 42501 (WITH CHECK)
+-- 14 other undergrad SELECTs the note                        -> visible, 200 chars
+-- 15 anon UPDATE                                             -> 42501
+-- 16 edit own note after the booking is cancelled            -> 42501
+-- 17 edit own note after the owner unflags the booking       -> 42501
+-- 18 undergrad withdraws (DELETE unchanged)                  -> 1
